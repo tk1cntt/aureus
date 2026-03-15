@@ -1,0 +1,82 @@
+{
+    "XAUUSD": {
+        "description": "Gold vs US Dollar",
+        "digits": 2,
+        "point": 0.01,
+        "pivots": {
+            "ext_period": 5,
+            "min_amplitude": 20,
+            "min_motion": 1
+        }
+    },
+    "EURUSD": {
+        "description": "Euro vs US Dollar",
+        "digits": 5,
+        "point": 0.00001,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 5,
+            "min_motion": 0
+        }
+    },
+    "GBPUSD": {
+        "description": "British Pound vs US Dollar",
+        "digits": 5,
+        "point": 0.00001,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 5,
+            "min_motion": 0
+        }
+    },
+    "USDJPY": {
+        "description": "US Dollar vs Japanese Yen",
+        "digits": 3,
+        "point": 0.001,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 5,
+            "min_motion": 0
+        }
+    },
+    "USTEC": {
+        "description": "Nasdaq 100 Index",
+        "digits": 2,
+        "point": 0.01,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 20,
+            "min_motion": 0
+        }
+    },
+    "AUDUSD": {
+        "description": "Australian Dollar vs US Dollar",
+        "digits": 5,
+        "point": 0.00001,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 5,
+            "min_motion": 0
+        }
+    },
+    "BTCUSD": {
+        "description": "Bitcoin vs US Dollar",
+        "digits": 2,
+        "point": 0.01,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 100,
+            "min_motion": 0
+        }
+    },
+    "ETHUSD": {
+        "description": "Ethereum vs US Dollar",
+        "digits": 2,
+        "point": 0.01,
+        "pivots": {
+            "ext_period": 3,
+            "min_amplitude": 10,
+            "min_motion": 0
+        }
+    }
+}

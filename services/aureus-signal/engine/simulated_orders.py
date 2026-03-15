@@ -1,0 +1,271 @@
+import logging
+import json
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+logger = logging.getLogger("aureus-backtest-v5.simulated-orders")
+
+class SimulatedTradeManager:
+    """
+    Manages simulated trade lifecycle for Backtest Engine V5.
+    Completely isolated from live trading systems (no engine.orders dependencies).
+    """
+    
+    def __init__(self, r=None, run_id: str = None):
+        self.r = r
+        self.run_id = run_id
+        self.active_orders: List[Dict[str, Any]] = []
+        self.closed_orders: List[Dict[str, Any]] = []
+        self.last_tick_events: List[str] = [] # Track events in the current candle
+        logger.info("SimulatedTradeManager V2 initialized (Isolated-Mode with Advanced Logic).")
+
+    async def process_triggers(self, symbol: str, triggers: List[Dict[str, Any]], state_obj: Any) -> int:
+        """
+        Processes strategy triggers, checks TraceID via Redis to avoid duplicates,
+        calculates advanced SL/TP, and generates simulated orders.
+        Returns the number of new orders opened.
+        """
+        if not self.r or not self.run_id:
+            logger.error("SimulatedTradeManager requires Redis client and run_id to process triggers.")
+            return 0
+
+        new_orders_count = 0
+        
+        # Use imported or local get_redis_key logic
+        clean_base = "orders:history"
+        history_key = f"aureus:backtest:{self.run_id}:{symbol}:{clean_base}"
+
+        for t in triggers:
+            strat_id = t.get('strategy_id', 0)
+            origin_t = t.get('origin_timestamp')
+            
+            if not origin_t:
+                logger.warning(f"Trigger {t['strategy']} missing origin_timestamp, skipping order.")
+                continue
+
+            # 1. Independent Order Tracking (TraceID)
+            trace_id = f"{symbol}:{strat_id}:{origin_t}"
+            
+            # 2. Duplicate Avoidance (SISMEMBER)
+            if await self.r.sismember(history_key, trace_id):
+                continue # Already processed this setup
+
+            logger.info(f"🚀 NEW Simulated Trade Setup Detected: {trace_id}")
+            
+            # 3. Advanced SL/TP Logic
+            exit_config = t.get('exit_config', {})
+            if not exit_config:
+                logger.warning(f"⚠️ Strategy '{t.get('strategy')}' trigger has no exit_config — using FIXED_PIPS 300 default for {trace_id}")
+            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
+            
+            if sl is None or tp is None:
+                logger.warning(f"Failed to calculate SL/TP for {trace_id}, skipping.")
+                continue
+                
+            # 4. Determine Side
+            side = t.get('side')
+            if not side:
+                name = t['strategy'].lower()
+                if 'up' in name or 'bull' in name: side = 'BUY'
+                elif 'down' in name or 'bear' in name: side = 'SELL'
+                else: side = 'BUY'
+
+            # 5. Create Order Object
+            order = {
+                "trace_id": trace_id,
+                "symbol": symbol,
+                "strategy_id": strat_id,
+                "strategy_name": t['strategy'],
+                "side": side.upper(),
+                "entry_price": float(state_obj.last_candle['c']),
+                "sl": float(sl),
+                "tp": float(tp),
+                "volume": 0.01, # Default fixed volume for backtest
+                "status": "ACTIVE",
+                # The order was definitively opened on THIS candle timestamp.
+                # Must track this to prevent time-travel bias during update_orders.
+                "open_time": int(state_obj.last_candle['t']),
+                "close_time": None,
+                "exit_price": None,
+                "pnl": 0.0,
+                "reason": None
+            }
+            
+            # 6. Save to Memory and Mark in Redis
+            self.active_orders.append(order)
+            await self.r.sadd(history_key, trace_id)
+            new_orders_count += 1
+            self.last_tick_events.append("ORDER_OPENED") # Signal for sparse storage
+            logger.info(f"✅ Simulated Order OPENED: {trace_id} ({side} at {order['entry_price']}) SL:{sl} TP:{tp}")
+
+        return new_orders_count
+
+    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
+        """
+        Calculates prices for SL and TP based on strategy config (Ported from Live Engine).
+        """
+        entry = float(state_obj.last_candle['c'])
+        sl = None
+        tp = None
+        
+        sl_cfg = config.get('sl', {})
+        tp_cfg = config.get('tp', {})
+        
+        # 1. Stop Loss Logic
+        sl_mode = sl_cfg.get('mode', 'FIXED_PIPS')
+        if sl_mode == 'FIXED_PIPS':
+            pips = sl_cfg.get('value', 300) / 10000.0 # Default 30 pips for FX
+            if 'JPY' in trigger.get('strategy', '') or state_obj.symbol.endswith('JPY'):
+                 pips = sl_cfg.get('value', 300) / 100.0
+                 
+            sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+            
+        elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
+            target_tag = sl_cfg.get('tag')
+            buffer = sl_cfg.get('buffer', 0) / 10000.0
+            
+            # Priority 1: Check if the trigger itself has an 'ob' field (standard for Structure signals)
+            ob = trigger.get('ob')
+            if ob and isinstance(ob, dict):
+                if sl_mode == 'SIGNAL_LOW':
+                    sl = float(ob.get('bottom', entry)) - buffer
+                else:
+                    sl = float(ob.get('top', entry)) + buffer
+            
+            # Priority 2: Find the specific signal in progress history and match with swing points
+            if sl is None:
+                progress = trigger.get('progress')
+                if isinstance(progress, str):
+                    try:
+                        progress = json.loads(progress)
+                    except:
+                        progress = {}
+                
+                if isinstance(progress, dict):
+                    found_time = None
+                    for step in progress.get('sequence', []):
+                        if step['tag'] == target_tag:
+                            found_time = step['time']
+                            break
+                    
+                    if found_time:
+                        for sp in state_obj.swing_points:
+                            if sp['t'] == found_time:
+                                sl = sp['price'] + (buffer if sl_mode == 'SIGNAL_HIGH' else -buffer)
+                                break
+            
+            # Fallback to fixed distance if signal point not found
+            if sl is None: 
+                pips = 300 / 10000.0
+                if state_obj.symbol.endswith('JPY'): pips = 300 / 100.0
+                sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+
+        # 2. Take Profit Logic
+        tp_mode = tp_cfg.get('mode', 'RR')
+        if tp_mode == 'RR':
+            ratio = tp_cfg.get('value', 1.5)
+            risk = abs(entry - sl) if sl else (entry * 0.001)
+            tp = entry + (risk * ratio) if 'BUY' in trigger.get('side', 'BUY') else entry - (risk * ratio)
+        elif tp_mode == 'FIXED_PIPS':
+             pips = tp_cfg.get('value', 500) / 10000.0
+             if state_obj.symbol.endswith('JPY'): pips = tp_cfg.get('value', 500) / 100.0
+             tp = (entry + pips) if 'BUY' in trigger.get('side', 'BUY') else (entry - pips)
+
+        return sl, tp
+
+    def check_sl_tp(self, order: Dict[str, Any], candle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Conservative check: evaluates SL before TP if both hit in same M1 candle.
+        """
+        high = float(candle['h'])
+        low = float(candle['l'])
+        
+        if order['side'] == 'BUY':
+            if low <= order['sl']:
+                return {"hit": "SL", "price": order['sl']}
+            if high >= order['tp']:
+                return {"hit": "TP", "price": order['tp']}
+        else: # SELL
+            if high >= order['sl']:
+                return {"hit": "SL", "price": order['sl']}
+            if low <= order['tp']:
+                return {"hit": "TP", "price": order['tp']}
+        
+        return None
+
+    def update_orders(self, symbol: str, candle: Dict[str, Any], state_obj: Any) -> List[Dict[str, Any]]:
+        """
+        Process a new candle to check for SL/TP hits on active orders.
+        """
+        time_int = int(candle.get('t'))
+        
+        # Event lifecycle managed by engine (clears last_tick_events after snapshot check)
+        # Both process_triggers and update_orders contribute events to the same tick
+        
+        closed_this_tick = []
+        remaining_orders = []
+        
+        for order in self.active_orders:
+            if order['symbol'] != symbol:
+                remaining_orders.append(order)
+                continue
+
+            # REVIEW FIX 1: Prevent Look-Ahead (Time-Travel) Bias
+            # The candle that opens the order cannot simultaneously close it.
+            # SL/TP evaluation must start from the *next* candle.
+            if order.get('open_time') == time_int:
+                remaining_orders.append(order)
+                continue
+            
+            result = self.check_sl_tp(order, candle)
+            
+            if result:
+                reason = "SL HIT" if result['hit'] == "SL" else "TP HIT"
+                # Add to tick events for sparse storage trigger
+                self.last_tick_events.append("SL_HIT" if result['hit'] == "SL" else "TP_HIT")
+                
+                self._close_order_internal(order, result['price'], time_int, reason)
+                closed_this_tick.append(order)
+            else:
+                remaining_orders.append(order)
+        
+        self.active_orders = remaining_orders
+        return closed_this_tick
+
+    def _close_order_internal(self, order: Dict[str, Any], exit_price: float, time: Any, reason: str):
+        """
+        Updates order fields for closure and moves to history.
+        """
+        order['status'] = 'CLOSED'
+        order['close_time'] = time
+        order['exit_price'] = float(exit_price)
+        order['reason'] = reason
+        
+        if order['side'] == 'BUY':
+            order['pnl'] = order['exit_price'] - order['entry_price']
+        else:
+            order['pnl'] = order['entry_price'] - order['exit_price']
+            
+        self.closed_orders.append(order)
+        logger.info(f"✅ Simulated {order['side']} CLOSED: {order['trace_id']} | Reason: {reason} | PnL: {order['pnl']:.5f}")
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Returns basic performance stats for the session.
+        """
+        total = len(self.closed_orders)
+        if total == 0:
+            return {"total": 0, "winrate": 0, "net_pnl": 0}
+            
+        wins = len([o for o in self.closed_orders if o['pnl'] > 0])
+        net_pnl = sum([o['pnl'] for o in self.closed_orders])
+        
+        return {
+            "total_trades": total,
+            "wins": wins,
+            "losses": total - wins,
+            "winrate": (wins / total) * 100,
+            "net_pnl": net_pnl,
+            "active_count": len(self.active_orders)
+        }
+

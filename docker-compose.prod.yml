@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: aureus_redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    restart: unless-stopped
+    networks:
+      - aureus_net
+
+  aureus-gateway:
+    build:
+      context: ../../prod/aureus/workspace/aureus/services/aureus-gateway
+    container_name: aureus-gateway
+    ports:
+      - "5555:5555"
+      - "5556:5556"
+    depends_on:
+      - redis
+    networks:
+      - aureus_net
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TCP_PORT=5556
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: aureus_timescaledb
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_USER=aureus
+      - POSTGRES_DB=aureus
+    ports:
+      - "${DB_PORT}:5432"
+    restart: unless-stopped
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    networks:
+      - aureus_net
+
+  aureus-db-writer:
+    build:
+      context: ../../prod/aureus/workspace/aureus/services/aureus-db-writer
+    container_name: aureus-db-writer
+    depends_on:
+      - redis
+      - timescaledb
+    networks:
+      - aureus_net
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=timescaledb
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=aureus
+      - POSTGRES_USER=aureus
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - BATCH_SIZE=50
+      - BATCH_TIMEOUT_MS=1000
+
+  aureus-signal:
+    build:
+      context: ../../prod/aureus/workspace/aureus/services/aureus-signal
+    container_name: aureus-signal
+    depends_on:
+      - redis
+      - timescaledb
+    networks:
+      - aureus_net
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=postgresql://aureus:${DB_PASSWORD:-aureus_password}@timescaledb:5432/aureus
+      - LOG_LEVEL=INFO
+      - SYMBOLS=XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD
+      - LLM_BASE_URL=http://host.docker.internal:8005/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../../prod/aureus/workspace/aureus/services/aureus-signal/brain:/app/brain
+
+  aureus-dashboard-api:
+    build:
+      context: ../../prod/aureus/workspace/aureus/services/aureus-dashboard/api
+    container_name: aureus-dashboard-api
+    depends_on:
+      - redis
+      - timescaledb
+    networks:
+      - aureus_net
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=postgresql://aureus:${DB_PASSWORD:-aureus_password}@timescaledb:5432/aureus
+      - LLM_BASE_URL=http://host.docker.internal:8005/v1
+      - CORS_ORIGINS=http://localhost:${WEB_PORT:-12321},http://127.0.0.1:${WEB_PORT:-12321}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${API_PORT:-8001}:8001"
+    volumes:
+      - ../../prod/aureus/workspace/aureus/services/aureus-signal/symbols.json:/app/symbols.json
+
+
+
+networks:
+  aureus_net:
+    driver: bridge
+
+volumes:
+  timescaledb_data:

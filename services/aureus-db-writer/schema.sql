@@ -1,0 +1,149 @@
+-- Enable TimescaleDB extension (usually done in DB init, but good to have)
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+
+-- Candles Table
+CREATE TABLE IF NOT EXISTS aureus_candles (
+    time        TIMESTAMPTZ       NOT NULL,
+    symbol      TEXT              NOT NULL,
+    timeframe   TEXT              NOT NULL,
+    open        DOUBLE PRECISION  NOT NULL,
+    high        DOUBLE PRECISION  NOT NULL,
+    low         DOUBLE PRECISION  NOT NULL,
+    close       DOUBLE PRECISION  NOT NULL,
+    volume      DOUBLE PRECISION  NOT NULL,
+    UNIQUE (time, symbol, timeframe)
+);
+
+-- Convert to Hypertable
+SELECT create_hypertable('aureus_candles', 'time', if_not_exists => TRUE);
+
+-- Ticks Table
+CREATE TABLE IF NOT EXISTS aureus_ticks (
+    time        TIMESTAMPTZ       NOT NULL,
+    symbol      TEXT              NOT NULL,
+    bid         DOUBLE PRECISION  NOT NULL,
+    ask         DOUBLE PRECISION  NOT NULL,
+    volume      DOUBLE PRECISION  NOT NULL
+);
+
+-- Convert to Hypertable
+SELECT create_hypertable('aureus_ticks', 'time', if_not_exists => TRUE);
+
+-- Swing Points Table
+CREATE TABLE IF NOT EXISTS aureus_swing_points (
+    time        TIMESTAMPTZ       NOT NULL,
+    symbol      TEXT              NOT NULL,
+    timeframe   TEXT              NOT NULL,
+    price       DOUBLE PRECISION  NOT NULL,
+    is_high     BOOLEAN           NOT NULL,
+    type        TEXT              NOT NULL,
+    UNIQUE (time, symbol, timeframe, is_high)
+);
+
+-- Convert to Hypertable
+-- AI Analysis Table
+CREATE TABLE IF NOT EXISTS aureus_ai_analysis (
+    time               TIMESTAMPTZ       NOT NULL,
+    symbol             TEXT              NOT NULL,
+    aci                INTEGER           NOT NULL,
+    sentiment          TEXT,
+    narrative          TEXT,
+    debate_log         JSONB             NOT NULL,
+    analysis_type      TEXT              NOT NULL DEFAULT 'PULSE', -- 'PULSE' or 'AUDIT'
+    decision           TEXT,             -- 'ACTIVE', 'REDUCED_RISK', 'REJECTED' (for AUDIT)
+    key_insight        TEXT,             -- One-sentence summary (for AUDIT)
+    trigger_id         TEXT,             -- Link to trace_id or order_id
+    prompt_tokens      INTEGER,
+    completion_tokens  INTEGER,
+    llm_latency_ms     INTEGER,
+    total_latency_ms   INTEGER,
+    request_payload    TEXT
+);
+
+
+-- Signal Snapshots Table (Core)
+CREATE TABLE IF NOT EXISTS aureus_signal_snapshots (
+    time TIMESTAMPTZ NOT NULL,
+    symbol TEXT NOT NULL,
+    atr DOUBLE PRECISION,
+    ema_21 DOUBLE PRECISION,
+    ema_34 DOUBLE PRECISION,
+    ema_55 DOUBLE PRECISION,
+    ema_89 DOUBLE PRECISION,
+    ema_100 DOUBLE PRECISION,
+    ema_200 DOUBLE PRECISION,
+    vol_sma_20 DOUBLE PRECISION,
+    htf_trend TEXT,
+    market_regime TEXT,
+    session TEXT,
+    events JSONB,
+    active_obs JSONB,
+    swing_label TEXT,
+    -- Phase 7 / Backtest fields
+    aci INTEGER DEFAULT 0,
+    sentiment TEXT DEFAULT 'NEUTRAL',
+    narrative TEXT,
+    obs_full JSONB,
+    swing_points_snapshot JSONB,
+    strategy_progress JSONB,
+    PRIMARY KEY (time, symbol)
+);
+
+SELECT create_hypertable('aureus_signal_snapshots', 'time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_signal_snapshots_symbol ON aureus_signal_snapshots (symbol, time DESC);
+
+-- ── BACKTEST ISOLATION TABLES ──
+
+-- Backtest Candles (Isolated from Live)
+CREATE TABLE IF NOT EXISTS aureus_backtest_candles (
+    time TIMESTAMPTZ NOT NULL,
+    symbol TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    open DOUBLE PRECISION NOT NULL,
+    high DOUBLE PRECISION NOT NULL,
+    low DOUBLE PRECISION NOT NULL,
+    close DOUBLE PRECISION NOT NULL,
+    volume DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (time, symbol, timeframe)
+);
+
+SELECT create_hypertable('aureus_backtest_candles', 'time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_backtest_candles_symbol ON aureus_backtest_candles (symbol, timeframe, time DESC);
+
+-- Backtest Snapshots (Isolated from Live)
+CREATE TABLE IF NOT EXISTS aureus_backtest_snapshots (
+    time TIMESTAMPTZ NOT NULL,
+    symbol TEXT NOT NULL,
+    atr DOUBLE PRECISION,
+    ema_21 DOUBLE PRECISION,
+    ema_34 DOUBLE PRECISION,
+    ema_55 DOUBLE PRECISION,
+    ema_89 DOUBLE PRECISION,
+    ema_100 DOUBLE PRECISION,
+    ema_200 DOUBLE PRECISION,
+    vol_sma_20 DOUBLE PRECISION,
+    htf_trend TEXT,
+    market_regime TEXT,
+    session TEXT,
+    events JSONB,
+    active_obs JSONB,
+    swing_label TEXT,
+    aci INTEGER DEFAULT 0,
+    sentiment TEXT DEFAULT 'NEUTRAL',
+    narrative TEXT,
+    obs_full JSONB,
+    swing_points_snapshot JSONB,
+    strategy_progress JSONB,
+    PRIMARY KEY (time, symbol)
+);
+
+SELECT create_hypertable('aureus_backtest_snapshots', 'time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_backtest_snapshots_symbol ON aureus_backtest_snapshots (symbol, time DESC);
+
+-- Migration Safety (Ensure columns exist for existing tables)
+ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS analysis_type TEXT NOT NULL DEFAULT 'PULSE';
+ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS decision TEXT;
+ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS key_insight TEXT;
+ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS trigger_id TEXT;
+ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
+ALTER TABLE aureus_ai_analysis ALTER COLUMN narrative DROP NOT NULL;
