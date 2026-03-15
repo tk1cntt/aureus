@@ -24,7 +24,7 @@ logging.basicConfig(
     format=log_format,
     handlers=handlers
 )
-logger = logging.getLogger("aureus-gateway")
+logger = logging.getLogger("aureus-gateway.main")
 
 # ── Global Connection Registry ────────────────────────────────────────────────
 # Maps symbol -> [writer1, writer2, ...]
@@ -85,15 +85,15 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
         elif msg_type == 'CANDLE':
             valid_msg = CandleMessage(**data)
         else:
-            logger.warning(f"[{source}] Unknown message type: {msg_type}")
+            logger.warning(f"[{source}] [process_message] Error: Unknown message type: {msg_type}")
             return False
     except ValidationError as e:
-        logger.warning(f"[{source}] Validation error: {e}")
+        logger.warning(f"[{source}] [process_message] Error: Validation error: {e}")
         return False
 
     symbol, incoming_ts = valid_msg.symbol, valid_msg.t
     if msg_type == 'CANDLE':
-        logger.info(f"====>1. Receive from Gateway {symbol} t={incoming_ts} o={valid_msg.o} h={valid_msg.h} l={valid_msg.l} c={valid_msg.c} v={valid_msg.v}")
+        logger.info(f"[{symbol}] [process_message] 1... Receive from Gateway {symbol} t={incoming_ts} o={valid_msg.o} h={valid_msg.h} l={valid_msg.l} c={valid_msg.c} v={valid_msg.v}")
 
     latest_key = f"aureus:latest:{symbol}:{msg_type.lower()}"
     stream_key = f"aureus:stream:{symbol}:{msg_type.lower()}"
@@ -101,7 +101,7 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
     # Dedup: reject any message with timestamp <= stored
     prev_t = await r.hget(latest_key, "t")
     if prev_t and incoming_ts <= int(prev_t):
-        logger.debug(f"[{source}] Rejecting DUP/OLD {msg_type}: {incoming_ts} <= {prev_t}")
+        logger.debug(f"[{symbol if msg_type in ('TICK', 'CANDLE') else 'GLOBAL'}] [process_message] Rejecting DUP/OLD {msg_type}: {incoming_ts} <= {prev_t}")
         return False
 
     update_data = valid_msg.model_dump()
@@ -113,9 +113,9 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
     await r.xadd(stream_key, hash_update, maxlen=5000, approximate=True)
     
     if msg_type == 'CANDLE':
-        logger.info(f"====>1. Receive from Gateway {hash_update}")
+        logger.info(f"[{symbol}] [process_message] 2... Receive from Gateway {hash_update}")
     else:
-        logger.info(f"[{source}] Processed {msg_type} {symbol} TS:{incoming_ts}")
+        logger.info(f"[{symbol}] [process_message] 3... Processed {msg_type} {symbol} TS:{incoming_ts}")
 
     # Register connection for this symbol if TCP
     if source == "TCP" and "writer" in data:
@@ -142,7 +142,7 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
     # ── Signal downstream to RECALCULATE ──
     # [DEPRECATED] Signal Engine now monitors its own integrity and triggers its own recalc.
     # await r.xadd(stream_key, {"type": "COMMAND", "cmd": "RECALCULATE", "symbol": symbol})
-    # logger.info(f"[{source}] BACKFILL {symbol}: Sent RECALCULATE command to stream")
+    # logger.info(f"[{symbol}] [process_backfill] 1... BACKFILL {symbol}: Sent RECALCULATE command to stream")
 
     processed = 0
     processed = 0
@@ -154,7 +154,7 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
         # Detailed logging for audit (human readable TS)
         from datetime import datetime
         dt_str = datetime.fromtimestamp(candle.t / 1000).strftime('%Y-%m-%d %H:%M:%S')
-        logger.debug(f"[{source}] BACKFILL candle {i+1}: {dt_str} @ {candle.c}")
+        logger.debug(f"[{symbol}] [process_backfill] 1... BACKFILL candle {i+1}: {dt_str} @ {candle.c}")
 
         # Add to stream (DB writer handles dedup via ON CONFLICT)
         await r.xadd(stream_key, hash_update, maxlen=5000, approximate=True)
@@ -175,7 +175,7 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
         if not prev_t or latest.t > int(prev_t):
             await r.hset(latest_key, mapping=latest_hash)
 
-    logger.info(f"[{source}] BACKFILL {symbol}: {processed} candles in chunk. Total so far: {cumulative_backfill_counters[symbol]}")
+    logger.info(f"[{symbol}] [process_backfill] 2... BACKFILL {symbol}: {processed} candles in chunk. Total so far: {cumulative_backfill_counters[symbol]}")
     return True
 
 # ── ZMQ Listener ──────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ async def run_zmq_listener(r: redis.Redis):
     sock.setsockopt(zmq.LINGER, 0)
     bind_addr = "tcp://0.0.0.0:5555"
     sock.bind(bind_addr)
-    logger.info(f"ZMQ PULL socket bound to {bind_addr}")
+    logger.info(f"[GLOBAL] [run_zmq_listener] 1... ZMQ PULL socket bound to {bind_addr}")
 
     while True:
         try:
@@ -195,7 +195,7 @@ async def run_zmq_listener(r: redis.Redis):
             data = json.loads(msg_bytes.decode('utf-8'))
             await process_message(r, data, source="ZMQ")
         except Exception as e:
-            logger.error(f"ZMQ Error: {e}")
+            logger.error(f"[GLOBAL] [run_zmq_listener] Error: ZMQ Error: {e}")
             await asyncio.sleep(0.1)
 
 # ── TCP Listener ──────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                              r: redis.Redis):
     """Handle a single TCP client — reads newline-delimited JSON."""
     addr = writer.get_extra_info('peername')
-    logger.info(f"[TCP] Client connected: {addr}")
+    logger.info(f"[GLOBAL] [handle_tcp_client] 1... TCP Client connected: {addr}")
     msg_count = 0
     client_symbols = set()
 
@@ -232,9 +232,9 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                 if await process_message(r, data, source="TCP"):
                     msg_count += 1
             except json.JSONDecodeError as e:
-                logger.warning(f"[TCP] Invalid JSON from {addr}: {e}")
+                logger.warning(f"[GLOBAL] [handle_tcp_client] Error: Invalid JSON from {addr}: {e}")
             except Exception as e:
-                logger.error(f"[TCP] Processing error from {addr}: {e}")
+                logger.error(f"[GLOBAL] [handle_tcp_client] Error: Processing error from {addr}: {e}")
     except asyncio.IncompleteReadError:
         pass
     except ConnectionResetError:
@@ -252,10 +252,12 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
             await writer.wait_closed()
         except Exception:
             pass
-        logger.info(f"[TCP] Client disconnected: {addr} (Total cumulative messages: {msg_count})")
+        except Exception:
+            pass
+        logger.info(f"[GLOBAL] [handle_tcp_client] 2... Client disconnected: {addr} (Total cumulative messages: {msg_count})")
         # Log backfill state if any
-        if symbol in cumulative_backfill_counters:
-            logger.info(f"[TCP] Final backfill count for {symbol}: {cumulative_backfill_counters[symbol]}")
+        if 'symbol' in locals() and symbol in cumulative_backfill_counters:
+            logger.info(f"[{symbol}] [handle_tcp_client] 3... Final backfill count: {cumulative_backfill_counters[symbol]}")
 
 
 async def run_tcp_listener(r: redis.Redis):
@@ -266,7 +268,7 @@ async def run_tcp_listener(r: redis.Redis):
         await handle_tcp_client(reader, writer, r)
 
     server = await asyncio.start_server(client_handler, "0.0.0.0", tcp_port)
-    logger.info(f"TCP listener started on 0.0.0.0:{tcp_port}")
+    logger.info(f"[GLOBAL] [run_tcp_listener] 1... TCP listener started on 0.0.0.0:{tcp_port}")
 
     async with server:
         await server.serve_forever()
@@ -277,7 +279,7 @@ async def run_command_subscriber(r: redis.Redis):
     """Listen for commands from Signal Engine and forward to EA via TCP."""
     pubsub = r.pubsub()
     await pubsub.subscribe("aureus:mt5:commands")
-    logger.info("Subscribed to Redis channel: aureus:mt5:commands")
+    logger.info("[GLOBAL] [run_command_subscriber] 1... Subscribed to Redis channel: aureus:mt5:commands")
 
     async for message in pubsub.listen():
         if message['type'] != 'message':
@@ -297,7 +299,7 @@ async def run_command_subscriber(r: redis.Redis):
                     try:
                         writer.write(payload.encode('utf-8'))
                         await writer.drain()
-                        logger.info(f"Forwarded command to EA for {symbol}: {cmd_data}")
+                        logger.info(f"[{symbol}] [run_command_subscriber] 2... Forwarded command to EA for {symbol}: {cmd_data}")
                     except Exception as e:
                         logger.error(f"Failed to send command to EA for {symbol}: {e}")
                         dead_writers.append(writer)
@@ -305,16 +307,16 @@ async def run_command_subscriber(r: redis.Redis):
                 for dw in dead_writers:
                     active_connections[symbol].remove(dw)
             else:
-                logger.warning(f"Received command for {symbol} but no active EA connection found.")
+                logger.warning(f"[GLOBAL] [run_command_subscriber] Error: Received command for {symbol} but no active EA connection found.")
         except Exception as e:
-            logger.error(f"Command subscriber error: {e}")
+            logger.error(f"[GLOBAL] [run_command_subscriber] Error: Command subscriber error: {e}")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def run_gateway():
     redis_host = os.environ.get("REDIS_HOST", "aureus-redis")
     redis_port = int(os.environ.get("REDIS_PORT", 6379))
-    logger.info(f"Connecting to Redis at {redis_host}:{redis_port}...")
+    logger.info(f"[GLOBAL] [run_gateway] 1... Connecting to Redis at {redis_host}:{redis_port}...")
     r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
 
     # Run all listeners concurrently

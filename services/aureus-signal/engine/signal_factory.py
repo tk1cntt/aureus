@@ -16,7 +16,7 @@ from engine.signals.sweep_bull import SweepBullSignal
 from engine.signals.sweep_bear import SweepBearSignal
 from engine.signals.ema import EMASignal
 
-logger = logging.getLogger("aureus-signal")
+logger = logging.getLogger("aureus-signal.signal-factory")
 
 
 def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
@@ -30,6 +30,7 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
     Returns:
         Dict[str, BaseSignal] — tag -> signal calculator instance
     """
+    logger.info(f"[{symbol}] [create_signal_set] 1... Creating signal set")
     cfg = symbol_config or {}
     
     # PivotSignal needs symbol-specific params

@@ -22,7 +22,7 @@ logging.basicConfig(
     format=log_format,
     handlers=handlers
 )
-logger = logging.getLogger("aureus-db-writer")
+logger = logging.getLogger("aureus-db-writer.main")
 
 # Configuration
 REDIS_HOST = os.getenv("REDIS_HOST", "aureus-redis")
@@ -56,10 +56,10 @@ class DBWriter:
             try:
                 self.redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
                 await self.redis.ping()
-                logger.info(f"Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+                logger.info(f"[GLOBAL] [connect_redis] 1... Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
                 break
             except Exception as e:
-                logger.error(f"Waiting for Redis... {e}")
+                logger.error(f"[GLOBAL] [connect_redis] Error: Waiting for Redis... {e}")
                 await asyncio.sleep(2)
 
     async def connect_postgres(self):
@@ -72,24 +72,24 @@ class DBWriter:
                     password=POSTGRES_PASSWORD,
                     database=POSTGRES_DB
                 )
-                logger.info(f"Connected to TimescaleDB at {POSTGRES_HOST}:{POSTGRES_PORT}")
+                logger.info(f"[GLOBAL] [connect_postgres] 1... Connected to TimescaleDB at {POSTGRES_HOST}:{POSTGRES_PORT}")
                 async with self.pg_pool.acquire() as conn:
                      with open("schema.sql", "r") as f:
                         schema_sql = f.read()
                         await conn.execute(schema_sql)
-                logger.info("Database schema verified.")
+                logger.info("[GLOBAL] [connect_postgres] 2... Database schema verified.")
                 break
             except Exception as e:
-                logger.error(f"Waiting for Postgres... {e}")
+                logger.error(f"[GLOBAL] [connect_postgres] Error: Waiting for Postgres... {e}")
                 await asyncio.sleep(2)
 
     async def ensure_consumer_group(self, stream_key):
         try:
             await self.redis.xgroup_create(stream_key, CONSUMER_GROUP, id="0", mkstream=True)
-            logger.info(f"Created group {CONSUMER_GROUP} for {stream_key}")
+            logger.info(f"[GLOBAL] [ensure_consumer_group] 1... Created group {CONSUMER_GROUP} for {stream_key}")
         except redis.ResponseError as e:
             if "BUSYGROUP" not in str(e):
-                logger.error(f"Group error for {stream_key}: {e}")
+                logger.error(f"[GLOBAL] [ensure_consumer_group] Error: Group error for {stream_key}: {e}")
 
     async def discover_streams(self):
         patterns = ["aureus:stream:*:tick", "aureus:stream:*:candle", "aureus:stream:*:swing_point"]
@@ -128,7 +128,7 @@ class DBWriter:
                         
                         row = (ts_val, payload.get('symbol', 'UNKNOWN'), float(payload.get('bid', 0.0)), float(payload.get('ask', 0.0)), float(payload.get('v', payload.get('vol', payload.get('volume', 0.0)))))
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
-                    except Exception as e: logger.error(f"Tick parse error: {e}")
+                    except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: Tick parse error: {e}")
                 if data_rows:
                     await conn.copy_records_to_table('aureus_ticks', records=data_rows, columns=['time', 'symbol', 'bid', 'ask', 'volume'])
                     
@@ -141,7 +141,7 @@ class DBWriter:
                     pipe = self.redis.pipeline()
                     for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
-                    logger.info(f"Inserted {len(data_rows)} ticks")
+                    logger.info(f"[GLOBAL] [process_batch] 1... Inserted {len(data_rows)} ticks")
 
             if self.candle_buffer:
                 candles_to_insert = self.candle_buffer[:]
@@ -158,13 +158,13 @@ class DBWriter:
                         elif isinstance(ts_val, (int, float)):
                             ts_val = datetime.fromtimestamp(ts_val / (1000.0 if ts_val > 1e11 else 1.0))
                         if not ts_val:
-                            logger.warning(f"Skipping candle with null timestamp: {payload}")
+                            logger.warning(f"[GLOBAL] [process_batch] Error: Skipping candle with null timestamp: {payload}")
                             continue
                         
                         # Fix for Candle mapping: test script sends 'tf' but might send 'timeframe'
                         row = (ts_val, payload.get('symbol', 'UNKNOWN'), payload.get('tf', payload.get('timeframe', 'UNKNOWN')), float(payload.get('o', payload.get('open', 0.0))), float(payload.get('h', payload.get('high', 0.0))), float(payload.get('l', payload.get('low', 0.0))), float(payload.get('c', payload.get('close', 0.0))), float(payload.get('v', payload.get('volume', 0.0))))
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
-                    except Exception as e: logger.error(f"Candle parse error: {e}")
+                    except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: Candle parse error: {e}")
                 if data_rows:
                     query = """
                         INSERT INTO aureus_candles (time, symbol, timeframe, open, high, low, close, volume)
@@ -183,7 +183,7 @@ class DBWriter:
                     pipe = self.redis.pipeline()
                     for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
-                    logger.info(f"Inserted/Updated {len(data_rows)} candles")
+                    logger.info(f"[GLOBAL] [process_batch] 2... Inserted/Updated {len(data_rows)} candles")
 
             if self.swing_point_buffer:
                 sp_to_insert = self.swing_point_buffer[:]
@@ -202,7 +202,7 @@ class DBWriter:
 
                         row = (ts_val, payload.get('symbol', 'UNKNOWN'), 'M1', float(payload.get('price', 0.0)), payload.get('is_high', 'false').lower() == 'true' if isinstance(payload.get('is_high'), str) else bool(payload.get('is_high', False)), payload.get('type', 'UNKNOWN'))
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
-                    except Exception as e: logger.error(f"SwingPoint parse error: {e}")
+                    except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: SwingPoint parse error: {e}")
                 if data_rows:
                     query = """
                         INSERT INTO aureus_swing_points (time, symbol, timeframe, price, is_high, type)
@@ -219,12 +219,12 @@ class DBWriter:
                     pipe = self.redis.pipeline()
                     for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
-                    logger.info(f"Inserted {len(data_rows)} swing points")
+                    logger.info(f"[GLOBAL] [process_batch] 3... Inserted {len(data_rows)} swing points")
 
     async def run(self):
         await self.connect_redis()
         await self.connect_postgres()
-        logger.info("Worker started...")
+        logger.info("[GLOBAL] [run] 1... Worker started...")
         while self.running:
             await self.discover_streams()
             if not self.known_streams:
@@ -239,7 +239,7 @@ class DBWriter:
                             elif ":candle" in stream_name: self.candle_buffer.append((stream_name, msg_id, payload))
                             elif ":swing_point" in stream_name: self.swing_point_buffer.append((stream_name, msg_id, payload))
             except Exception as e:
-                logger.error(f"Read error: {e}"); await asyncio.sleep(1)
+                logger.error(f"[GLOBAL] [run] Error: Read error: {e}"); await asyncio.sleep(1)
             
             buffer_size = len(self.tick_buffer) + len(self.candle_buffer) + len(self.swing_point_buffer)
             if buffer_size >= BATCH_SIZE or (buffer_size > 0 and (time.time() - self.last_flush_time) * 1000 >= BATCH_TIMEOUT_MS):

@@ -2,7 +2,7 @@ import logging
 import json
 from typing import Dict, List, Any
 
-logger = logging.getLogger("aureus-signal")
+logger = logging.getLogger("aureus-signal.orders")
 
 class SimulatedTradeManager:
     """Manages creation, monitoring and closure of simulated trades."""
@@ -18,7 +18,7 @@ class SimulatedTradeManager:
             origin_t = t.get('origin_timestamp')
             
             if not origin_t:
-                logger.warning(f"Trigger {t['strategy']} missing origin_timestamp, skipping order.")
+                logger.warning(f"[{symbol}] [process_triggers] Error: Trigger {t['strategy']} missing origin_timestamp, skipping order.")
                 continue
 
             trace_id = f"{symbol}:{strat_id}:{origin_t}"
@@ -29,14 +29,14 @@ class SimulatedTradeManager:
                 continue # Already processed this setup
 
             # It's a NEW trade!
-            logger.info(f"🚀 NEW Simulated Trade Triggered: {trace_id}")
+            logger.info(f"[{symbol}] [process_triggers] 1... NEW Simulated Trade Triggered: {trace_id}")
             
             # 1. Calculate SL/TP
             exit_config = t.get('exit_config', {})
             sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
             
             if sl is None or tp is None:
-                logger.warning(f"Failed to calculate SL/TP for {trace_id}, skipping.")
+                logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
                 continue
                 
             # 2. Determine Side
@@ -101,7 +101,7 @@ class SimulatedTradeManager:
         
         if decision in ("ACTIVE", "REDUCED_RISK"):
             order['status'] = "ACTIVE"
-            logger.info(f"✅ AI APPROVED {trace_id}: {audit_result.get('key_insight')}")
+            logger.info(f"[{symbol}] [handle_ai_decision] 1... AI APPROVED {trace_id}: {audit_result.get('key_insight')}")
             
             # If REDUCED_RISK, we might adjust position size here (conceptual for simulated)
             
@@ -111,7 +111,7 @@ class SimulatedTradeManager:
             })
         else:
             order['status'] = "REJECTED"
-            logger.info(f"❌ AI REJECTED {trace_id}: {audit_result.get('key_insight')}")
+            logger.info(f"[{symbol}] [handle_ai_decision] 1... AI REJECTED {trace_id}: {audit_result.get('key_insight')}")
             
             await self.r.xadd(f"aureus:stream:{symbol}:orders", {
                 "type": "ORDER_REJECTED",
@@ -166,7 +166,7 @@ class SimulatedTradeManager:
                 else:
                     self.last_tick_events.append("TP_HIT")
                 
-                logger.info(f"Trade CLOSED: {order['trace_id']} | PnL: {order['pnl']:.5f}")
+                logger.info(f"[{symbol}] [update_orders] 1... Trade CLOSED: {order['trace_id']} | PnL: {order['pnl']:.5f}")
                 updated = True
                 
                 # Notify

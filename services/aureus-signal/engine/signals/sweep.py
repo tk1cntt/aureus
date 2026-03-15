@@ -28,11 +28,11 @@ class SweepSignal(BaseSignal):
         c_t = int(candle['t'])
         ts_c_t = pd.to_datetime(c_t, unit='s')
 
-        logger.debug(f"[{state_obj.symbol}][{ts_c_t}]🎯 SWEEP Signal Start")
+        logger.debug(f"[t={c_t}] [{state_obj.symbol}] [calculate] 1... SWEEP Signal Start")
         
         regime = getattr(state_obj, 'market_regime', 'SIDEWAYS')
         active_targets = state_obj.sweep_targets
-        logger.debug(f"[{state_obj.symbol}][{ts_c_t}]🎯 SWEEP Signal Active Targets: {active_targets}")
+        logger.debug(f"[t={c_t}] [{state_obj.symbol}] [calculate] 2... SWEEP Signal Active Targets: {active_targets}")
         triggered_sweep = None
         
         updated_targets = []
@@ -68,7 +68,7 @@ class SweepSignal(BaseSignal):
                     s.get('tag') == tag and s.get('price_swept') == target['price'] and s.get('t') == c_t
                     for s in getattr(state_obj, 'signal_history', [])
                 )
-                logger.info(f"[{state_obj.symbol}][{c_t}]🎯 SWEEP Signal Already Swept: {already_swept}")
+                logger.info(f"[t={c_t}] [{state_obj.symbol}] [calculate] 3... SWEEP Signal Already Swept: {already_swept}")
                 
                 if not already_swept:
                     triggered_sweep = {
@@ -80,7 +80,7 @@ class SweepSignal(BaseSignal):
                         "fidelity": target.get('fidelity', 0.5), # Pass fidelity to Judge
                         "market_regime": regime
                     }
-                    logger.info(f"[{state_obj.symbol}] 🎯 SWEEP DETECTED (Candle Close): {tag} @ {target['price']} ({target['type']})")
+                    logger.info(f"[t={c_t}] [{state_obj.symbol}] [calculate] 4... SWEEP DETECTED (Candle Close): {tag} @ {target['price']} ({target['type']})")
                     
                     # Register in transient signals for consumers
                     state_obj.transient_signals[tag] = triggered_sweep

@@ -75,7 +75,7 @@ class SessionSignal(BaseSignal):
             session = "LUNCH_TIME" # 17h-19h is gap per user
             
         if session != state_obj.current_session:
-            logger.info(f"[{state_obj.symbol}] 🕒 Session Shift: {state_obj.current_session} -> {session}")
+            logger.info(f"[{state_obj.symbol}] [calculate] 1... Session Shift: {state_obj.current_session} -> {session}")
             # Reset session H/L tracking
             state_obj.tracking_vars['session_hlo'] = {
                 "session": session,

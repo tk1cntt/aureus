@@ -16,7 +16,7 @@ from .logic.judges.liquidity import LiquidityJudge
 from .logic.judges.momentum import MomentumJudge
 from .logic.judges.patterns import MultiPatternJudge
 
-logger = logging.getLogger("aureus-ai-validator")
+logger = logging.getLogger("aureus-signal.ai-validator")
 
 class ContextBuilder:
     """Synthesizes technical data into a descriptive narrative for AI Agents."""
@@ -225,7 +225,7 @@ class AIValidator:
             
             # If Algo REJECTS, we don't even waste vLLM tokens
             if algo_res['decision'] == "REJECT":
-                logger.info(f"Algo REJECTED {symbol} setup: {algo_res['reason']}")
+                logger.info(f"[t={trigger.get('t')}] [{symbol}] [validate_trigger] 1... Algo REJECTED setup: {algo_res['reason']}")
                 return {
                     "aci": algo_res['aci'],
                     "decision": "REJECTED",
@@ -258,11 +258,11 @@ class AIValidator:
             audit_result['llm_latency_ms'] = llm_latency
             audit_result['audit_source'] = "HYBRID"
             
-            logger.info(f"Hybrid Audit Complete for {symbol}: ACI={audit_result.get('aci')}, Decision={audit_result.get('decision')} (Algo: {algo_res['aci']})")
+            logger.info(f"[{symbol}] [validate_trigger] 2... Hybrid Audit Complete: ACI={audit_result.get('aci')}, Decision={audit_result.get('decision')} (Algo: {algo_res['aci']})")
             return audit_result
             
         except Exception as e:
-            logger.error(f"Validation flow failed: {str(e)}")
+            logger.error(f"[{symbol}] [validate_trigger] Error: Validation flow failed: {e}")
             return {
                 "aci": 0,
                 "decision": "REJECTED",
@@ -290,7 +290,7 @@ class AIValidator:
             return analysis_result
             
         except Exception as e:
-            logger.error(f"Market analysis failed: {str(e)}")
+            logger.error(f"[{symbol}] [analyze_market] Error: Market analysis failed: {e}")
             return {
                 "aci": 50,
                 "sentiment": "NEUTRAL",
@@ -312,11 +312,11 @@ class AIBrainClient:
     def set_model(self, model_name: str):
         """Update the active model dynamically."""
         self.model = model_name
-        logger.info(f"🔄 AI Brain active model dynamically updated to: {self.model}")
+        logger.info(f"[GLOBAL] [set_model] 🔄 AI Brain active model updated to: {self.model}")
 
     async def debate(self, context: str) -> Dict[str, Any]:
         """Sends context to DeepSeek-R1 for multi-agent reasoning using Internal Monologue."""
-        logger.info("🧠 AI Debate starting via DeepSeek-R1...")
+        logger.info("[GLOBAL] [debate] 1... AI Debate starting...")
         
         system_prompt = """
 You are the Aureus Institutional Trading Brain. Your task is to perform a rigorous "Double-Lock" audit on a technical trade signal.
@@ -373,7 +373,7 @@ CRITICAL: Do NOT nest objects inside these keys. Use flat strings only.
             return result
             
         except Exception as e:
-            logger.error(f"AI Brain Error: {str(e)}")
+            logger.error(f"[GLOBAL] [debate] Error: AI Brain Error: {e}")
             return {
                 "aci": 0,
                 "decision": "REJECTED",
@@ -437,7 +437,7 @@ CRITICAL: Do NOT nest objects inside these keys. Use flat strings only.
             
             return result
         except Exception as e:
-            logger.error(f"Pulse Brain Error: {str(e)}")
+            logger.error(f"[GLOBAL] [generate_pulse] Error: Pulse Brain Error: {e}")
             return {
                 "narrative": "Unable to generate narrative.",
                 "sentiment": "NEUTRAL",

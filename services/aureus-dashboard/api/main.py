@@ -29,7 +29,7 @@ logging.basicConfig(
     format=log_format,
     handlers=handlers
 )
-logger = logging.getLogger("aureus-dashboard-api")
+logger = logging.getLogger("aureus-dashboard-api.main")
 
 app = FastAPI(title="Aureus Visualization API")
 
@@ -84,7 +84,7 @@ def load_symbols():
             with open(path, "r") as f:
                 return json.load(f)
     except Exception as e:
-        logger.error(f"Failed to load symbols config: {e}")
+        logger.error(f"[GLOBAL] [load_symbols] Error: Failed to load symbols config: {e}")
     return {}
 
 @app.get("/api/v1/symbols")
@@ -111,7 +111,7 @@ async def get_symbols():
                         redis_symbols.add(parts[2])
                 if cursor == 0: break
     except Exception as e:
-        logger.warning(f"Redis scan for symbols failed (non-critical): {e}")
+        logger.warning(f"[GLOBAL] [get_symbols] Error: Redis scan for symbols failed (non-critical): {e}")
     
     # Build result from config file (primary source — always has all symbols)
     result = []
@@ -154,7 +154,7 @@ async def get_symbol_state(symbol: str):
     
     parsed = json.loads(data)
     last_sp_t = parsed.get('swing_points', [])[-1].get('t') if parsed.get('swing_points') else None
-    logger.info(f"====>6. Dashboard API retrieved {symbol} state, swing_points_count={len(parsed.get('swing_points', []))} last_sp_t={last_sp_t}")
+    logger.info(f"[{symbol}] [get_symbol_state] 1... Dashboard API retrieved {symbol} state, swing_points_count={len(parsed.get('swing_points', []))} last_sp_t={last_sp_t}")
     return parsed
 
 @app.get("/api/v1/chart/{symbol}")
@@ -326,6 +326,7 @@ async def list_strategies():
             ORDER BY t.id ASC
         """
         rows = await conn.fetch(query)
+        logger.info("[GLOBAL] [list_strategies] 1... Listing all strategy templates")
         return [dict(r) for r in rows]
     finally:
         await conn.close()
@@ -350,6 +351,7 @@ async def create_strategy(strategy: StrategyCreate):
                         sym, strat_id
                     )
             
+            logger.info(f"[GLOBAL] [create_strategy] 1... Strategy {strat_id} ('{strategy.name}') created")
             return {"id": strat_id, "status": "created"}
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=400, detail="Strategy name already exists")
@@ -382,6 +384,7 @@ async def update_strategy(strategy_id: int, strategy: StrategyCreate):
                     )
                     
             await r.publish("aureus:cmd:refresh_strategies", "ALL")
+            logger.info(f"[GLOBAL] [update_strategy] 1... Strategy {strategy_id} updated, refresh published")
             return {"id": updated_id, "status": "updated"}
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=400, detail="Strategy name already exists")
@@ -402,6 +405,7 @@ async def delete_strategy(strategy_id: int):
             raise HTTPException(status_code=404, detail="Strategy not found")
             
         await r.publish("aureus:cmd:refresh_strategies", "ALL")
+        logger.info(f"[GLOBAL] [delete_strategy] 1... Strategy {strategy_id} deleted")
         return {"status": "deleted"}
     finally:
         await conn.close()
@@ -440,6 +444,7 @@ async def toggle_symbol_strategy(symbol: str, strategy_id: int):
         
         # Trigger a refresh notification for the signal engine via Redis
         await r.publish("aureus:cmd:refresh_strategies", symbol)
+        logger.info(f"[{symbol}] [toggle_symbol_strategy] 1... Toggled strategy {strategy_id} for {symbol}")
         
         return {"status": "ok"}
     finally:
@@ -455,8 +460,10 @@ async def force_symbol_recovery(symbol: str):
             "count": 60
         }
         await r.publish("aureus:mt5:commands", json.dumps(cmd))
+        logger.info(f"[{symbol}] [force_symbol_recovery] 1... Recovery requested (60 candles)")
         return {"status": "ok", "message": f"Recovery requested for {symbol} (60 candles)"}
     except Exception as e:
+        logger.error(f"[{symbol}] [force_symbol_recovery] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/ai/health")
@@ -494,8 +501,10 @@ async def set_ai_model(request: ModelUpdateRequest):
         await r.set("aureus:config:llm_model", request.model)
         # Push global command unified through Redis Stream instead of PubSub
         await r.xadd("aureus:sys:config", {"type": "LLM_MODEL_CHANGED", "model": request.model})
+        logger.info(f"[GLOBAL] [set_ai_model] 1... LLM model set to {request.model}")
         return {"status": "ok", "model": request.model}
     except Exception as e:
+        logger.error(f"[GLOBAL] [set_ai_model] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/ai/all_latest")
@@ -551,6 +560,7 @@ async def get_ai_history(symbol: str, limit: int = 10):
                 "algo_breakdown": json.loads(r['algo_breakdown']) if isinstance(r['algo_breakdown'], str) else r['algo_breakdown'],
                 "audit_source": r.get('audit_source', 'AI')
             })
+        logger.info(f"[{symbol}] [get_ai_history] 1... Found {len(results)} history entries")
         return results
     finally:
         await conn.close()

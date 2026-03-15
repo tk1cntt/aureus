@@ -89,7 +89,7 @@ class FVGSignal(BaseSignal):
                         "top": fvg['top'],
                         "bottom": fvg['bottom'],
                     }
-                    logger.info(f"[{state_obj.symbol}] Bullish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
+                    logger.info(f"[t={c_t}] [{state_obj.symbol}] [_check_mitigations] 1... Bullish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
             
             # Bearish FVG mitigated: price rises into or through the gap 
             elif not is_bullish and c_h >= fvg['bottom']:
@@ -102,5 +102,5 @@ class FVGSignal(BaseSignal):
                         "top": fvg['top'],
                         "bottom": fvg['bottom'],
                     }
-                    logger.info(f"[{state_obj.symbol}] Bearish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
+                    logger.info(f"[t={c_t}] [{state_obj.symbol}] [_check_mitigations] 2... Bearish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
 

@@ -110,7 +110,7 @@ class StructureSignal(BaseSignal):
                             }
                         })
 
-                        logger.info(f"[{state_obj.symbol}] Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
                             state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
                             # Story 3.5: Emit event for Event-Driven Sparse Storage
@@ -141,7 +141,7 @@ class StructureSignal(BaseSignal):
                             }
                         })
 
-                        logger.info(f"[{state_obj.symbol}] Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
                             state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
                             # Story 3.5: Emit event for Event-Driven Sparse Storage
@@ -237,7 +237,7 @@ class StructureSignal(BaseSignal):
                     # Determine if we already logged this to avoid spamming
                     already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
                     if not already_logged:
-                        logger.info(f"[{state_obj.symbol}] {tag} detected at {breakout_t} (Level: {pivot_price})")
+                        logger.info(f"[t={breakout_t}] [{state_obj.symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
                     
                     if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged:
                         state_obj.request_ai_update("CHOCH")
@@ -338,7 +338,7 @@ class StructureSignal(BaseSignal):
             existing_targets = existing_targets[-10:]
             
         state_obj.sweep_targets = existing_targets
-        logger.info(f"Updated Sweep Targets for {state_obj.symbol}. Active count: {len(state_obj.sweep_targets)}")
+        logger.info(f"[GLOBAL] [{state_obj.symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {state_obj.symbol}. Active count: {len(state_obj.sweep_targets)}")
 
     def _process_ob(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with the updated OB Logic: Find extreme candle between pivot and breakout."""
@@ -411,5 +411,5 @@ class StructureSignal(BaseSignal):
                 }
             }
         except Exception as e:
-            logger.error(f"Error processing OB: {e}")
+            logger.error(f"[GLOBAL] [structure] [_process_ob] Error: Error processing OB: {e}")
             return None

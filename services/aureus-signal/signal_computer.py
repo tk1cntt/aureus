@@ -32,7 +32,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("signal-computer")
+logger = logging.getLogger("aureus-signal.signal-computer")
 
 
 def load_symbols_config(path="symbols.json"):
@@ -62,14 +62,14 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
     
     # --- Connect ---
     db_pool = await asyncpg.create_pool(db_dsn)
-    logger.info(f"DB connected")
+    logger.info(f"[GLOBAL] [precompute_signals] 1... DB connected")
     
     r = None
     if redis_url:
         try:
             r = redis_lib.from_url(redis_url, decode_responses=True)
             await r.ping()
-            logger.info(f"Redis connected")
+            logger.info(f"[GLOBAL] [precompute_signals] 2... Redis connected")
         except Exception:
             r = None
             logger.warning("Redis not available, progress tracking disabled")
@@ -79,7 +79,7 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
     cfg = symbol_config.get(symbol, symbol_config.get("XAUUSD", {}))
     
     # --- Load Candles ---
-    logger.info(f"Loading candles for {symbol} from {start_dt} to {end_dt}...")
+    logger.info(f"[{symbol}] [precompute_signals] 3... Loading candles for {symbol} from {start_dt} to {end_dt}...")
     
     # Load extra lookback for warmup (200 bars for EMA200)
     lookback_start = start_dt - timedelta(hours=4)  # ~240 extra bars for warmup
@@ -97,7 +97,7 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
         return
     
     total_candles = len(rows)
-    logger.info(f"Loaded {total_candles} candles (includes warmup)")
+    logger.info(f"[{symbol}] [precompute_signals] 4... Loaded {total_candles} candles (includes warmup)")
     
     # --- Initialize Signal Engine ---
     window_manager = WindowManager()
@@ -163,7 +163,7 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
                 
                 # Log progress
                 pct = (processed / max(total_candles, 1)) * 100
-                logger.info(f"[{symbol}] Progress: {processed}/{total_candles} ({pct:.1f}%) | Events: {event_count}")
+                logger.info(f"[{symbol}] [precompute_signals] 5... Progress: {processed}/{total_candles} ({pct:.1f}%) | Events: {event_count}")
                 
                 # Update Redis progress
                 if r:
@@ -207,39 +207,13 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
                 "event_count": event_count,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }))
+            logger.info(f"[{symbol}] [precompute_signals] 6... Pre-computation COMPLETE for {symbol}")
         except Exception:
             pass
         await r.aclose()
     
     await db_pool.close()
     return {"processed": processed, "events": event_count, "duration": elapsed}
-
-
-async def main():
-    load_dotenv()
-    
-    parser = argparse.ArgumentParser(description="Aureus Signal Pre-computation")
-    parser.add_argument("--symbol", required=True, help="Symbol to compute (e.g. XAUUSD)")
-    parser.add_argument("--start", help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end", help="End date (YYYY-MM-DD)")
-    parser.add_argument("--months", type=int, help="Number of months back from now")
-    args = parser.parse_args()
-    
-    # Determine date range
-    if args.months:
-        end_dt = datetime.now(timezone.utc)
-        start_dt = end_dt - timedelta(days=args.months * 30)
-    elif args.start and args.end:
-        start_dt = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        end_dt = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    else:
-        parser.error("Either --months or both --start and --end required")
-        return
-    
-    db_dsn = os.getenv("DATABASE_URL", "postgresql://aureus:aureus_password@localhost:5432/aureus")
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    
-    logger.info(f"Starting pre-computation: {args.symbol} | {start_dt.date()} → {end_dt.date()}")
     
     await precompute_signals(args.symbol, start_dt, end_dt, db_dsn, redis_url)
 

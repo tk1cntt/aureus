@@ -48,9 +48,11 @@ class GapDetector:
         """
 
         try:
+            logger.info(f"[{symbol}] [find_gaps] 1... Starting gap detection for {timeframe} over {lookback_hours}h")
             async with self.pg_pool.acquire() as conn:
                 rows = await conn.fetch(query, symbol, timeframe, lookback_hours)
                 
+                logger.info(f"[{symbol}] [find_gaps] 2... Query completed, processing {len(rows)} gap groups")
                 results = []
                 for row in rows:
                     results.append({
@@ -58,7 +60,8 @@ class GapDetector:
                         "end": int(row['end_time'].timestamp() * 1000),
                         "count": row['missing_count']
                     })
+                logger.info(f"[{symbol}] [find_gaps] 3... Found {len(results)} gaps")
                 return results
         except Exception as e:
-            logger.error(f"Gap detection query failed for {symbol}: {e}")
+            logger.error(f"[{symbol}] [find_gaps] 4... Error: Gap detection query failed: {e}")
             return []

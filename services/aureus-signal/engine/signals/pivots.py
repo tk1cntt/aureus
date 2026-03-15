@@ -60,7 +60,7 @@ class PivotSignal(BaseSignal):
         if not df.empty:
             last_val = df.iloc[-1]['t']
             tail_vals = df['t'].tail(5).tolist()
-            logger.info(f"====>3. Entering PivotSignal.calculate {symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}")
+            logger.debug(f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate {symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}")
 
         # 1. Initialize engine in state if not present
         if not hasattr(state_obj, 'zigzag_engine') or state_obj.zigzag_engine is None:            
@@ -174,7 +174,7 @@ class PivotSignal(BaseSignal):
                 if stable_pivot['t'] > last_db_time:
                     # Sync to Writer via robust stream
                     stream_key = f"aureus:stream:{symbol}:swing_point"
-                    logger.info(f"====>5. PivotSignal sync stable pivot {symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}")
+                    logger.info(f"[t={stable_pivot['t']}] [{symbol}] [calculate] 2... PivotSignal sync stable pivot {symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}")
                     asyncio.create_task(redis_client.xadd(stream_key, {
                         "t": str(stable_pivot['t']),
                         "price": str(stable_pivot['price']),

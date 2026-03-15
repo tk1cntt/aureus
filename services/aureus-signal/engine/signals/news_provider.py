@@ -5,7 +5,7 @@ import requests
 import time
 from datetime import datetime, timedelta, timezone
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("aureus-signal.news-provider")
 
 class NewsProvider:
     """
@@ -25,14 +25,14 @@ class NewsProvider:
             try:
                 mtime = os.path.getmtime(cls.CACHE_PATH)
                 if time.time() - mtime < 21600: # 6 hours
-                    logger.info("📅 News calendar is fresh. Skipping fetch.")
+                    logger.info("[GLOBAL] [fetch_this_week] 1... News calendar is fresh. Skipping fetch.")
                     return cls.get_cached()
             except Exception as e:
-                logger.warning(f"Error checking cache age: {e}")
+                logger.warning(f"[GLOBAL] [fetch_this_week] Error: Checking cache age: {e}")
 
         # 2. Cooldown check
         if time.time() - cls._last_attempt < cls._cooldown:
-            logger.debug("📅 News fetch cooling down. Using cache.")
+            logger.debug("[GLOBAL] [fetch_this_week] 2... News fetch cooling down. Using cache.")
             return cls.get_cached()
 
         cls._last_attempt = time.time()
@@ -46,7 +46,7 @@ class NewsProvider:
         retries = 2
         for attempt in range(retries + 1):
             try:
-                logger.info(f"📡 Fetching Economic Calendar from FairEconomy (Attempt {attempt+1}/{retries+1})...")
+                logger.info(f"[GLOBAL] [fetch_this_week] 2... Fetching Economic Calendar from FairEconomy (Attempt {attempt+1}/{retries+1})...")
                 response = requests.get(cls.URL, headers=headers, timeout=25)
                 response.raise_for_status()
                 data = response.json()
@@ -58,15 +58,15 @@ class NewsProvider:
                 with open(cls.CACHE_PATH, 'w', encoding='utf-8') as f:
                     json.dump(processed, f, indent=2)
                 
-                logger.info(f"✅ News calendar successfully fetched and cached ({len(processed)} events).")
+                logger.info(f"[GLOBAL] [fetch_this_week] 3... News calendar successfully fetched and cached ({len(processed)} events).")
                 return processed
             except Exception as e:
                 if attempt < retries:
                     wait_time = (attempt + 1) * 5
-                    logger.warning(f"⚠️ Fetch attempt {attempt+1} failed ({e}). Retrying in {wait_time}s...")
+                    logger.warning(f"[GLOBAL] [fetch_this_week] Error: Fetch attempt {attempt+1} failed ({e}). Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"❌ All {retries+1} attempts to fetch news failed: {e}")
+                    logger.error(f"[GLOBAL] [fetch_this_week] Error: All {retries+1} attempts to fetch news failed: {e}")
         
         return cls.get_cached()
 
@@ -113,7 +113,7 @@ class NewsProvider:
                     "timestamp": int(dt_gmt7.timestamp())
                 })
             except Exception as e:
-                logger.warning(f"Error parsing date {date_str}: {e}")
+                logger.warning(f"[GLOBAL] [_process_events] Error: Error parsing date {date_str}: {e}")
                 
         # Sort by timestamp
         processed.sort(key=lambda x: x['timestamp'])

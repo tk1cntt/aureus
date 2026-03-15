@@ -20,4 +20,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(run_signal_engine())
     except KeyboardInterrupt:
-        logger.info("Signal engine stopped")
+        logger.info("[GLOBAL] [main] 1... Signal engine stopped")

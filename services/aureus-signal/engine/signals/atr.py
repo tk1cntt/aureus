@@ -1,6 +1,9 @@
+import logging
 import pandas as pd
 from .base import BaseSignal
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger("aureus-signal.atr")
 
 class ATRSignal(BaseSignal):
     """

@@ -29,7 +29,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("aureus-backtest-v5")
+logger = logging.getLogger("aureus-signal.snapshot-utils.backtest-engine")
 
 
 def load_symbols_config(path="symbols.json"):
@@ -39,7 +39,7 @@ def load_symbols_config(path="symbols.json"):
         with open(path, "r") as f:
             return json.load(f)
     except Exception as e:
-        logger.error(f"Failed to load {path}: {e}")
+        logger.warning(f"[GLOBAL] [load_symbols_config] Failed to load {path}: {e}")
         return {}
 
 def get_redis_key(run_id: str, symbol: str, base_key: str) -> str:
@@ -54,30 +54,30 @@ def get_redis_key(run_id: str, symbol: str, base_key: str) -> str:
 async def startup_reaper(r: redis.Redis, symbol: str, current_run_id: str):
     """Layer 0: Scans and removes orphaned keys for the specific symbol."""
     pattern = f"aureus:backtest:*:{symbol}:*"
-    logger.info(f"[BT-V5] [GC-L0] Scanning for orphaned keys with pattern: {pattern}")
+    logger.info(f"[{symbol}] [startup_reaper] 1... Scanning for orphaned keys with pattern: {pattern}")
     
     count = 0
     async for key in r.scan_iter(match=pattern):
         # Don't delete keys belonging to the current run
         if f":{current_run_id}:" not in key:
-            logger.info(f"[BT-V5] [GC-L0] Unlinking orphaned key: {key}")
+            logger.info(f"[{symbol}] [startup_reaper] 2... Unlinking orphaned key: {key}")
             await r.unlink(key)
             count += 1
             
     if count > 0:
-        logger.info(f"[BT-V5] [GC-L0] Cleaned up {count} orphaned keys for {symbol}")
+        logger.info(f"[{symbol}] [startup_reaper] 3... Cleaned up {count} orphaned keys")
 
 async def graceful_teardown(r: redis.Redis, run_id: str, symbol: str):
     """Layer 1: Explicitly removes all keys for the current run/symbol."""
     pattern = f"aureus:backtest:{run_id}:{symbol}:*"
-    logger.info(f"[BT-V5] [GC-L1] Tearing down run {run_id} for {symbol}...")
+    logger.info(f"[{symbol}] [graceful_teardown] 1... Tearing down run {run_id}...")
     
     count = 0
     async for key in r.scan_iter(match=pattern):
         await r.unlink(key)
         count += 1
         
-    logger.info(f"[BT-V5] [GC-L1] Removed {count} keys.")
+    logger.info(f"[{symbol}] [graceful_teardown] 2... Removed {count} keys.")
 
 async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_dt: datetime):
     """
@@ -93,10 +93,10 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
     redis_port = int(os.getenv("REDIS_PORT", 6379))
     db_dsn = os.getenv("DATABASE_URL", "postgresql://aureus:aureus_password@localhost:5432/aureus")
     
-    logger.info(f"🚀 Initializing Backtest Engine V5 for: {symbol} (RunID: {run_id})")
+    logger.info(f"[{symbol}] [run_backtest_engine] 1... Initializing for RunID: {run_id}")
 
     # --- Connect Redis ---
-    logger.info(f"[BT-V5] Connecting to Redis: {redis_host}:{redis_port}")
+    logger.info(f"[{symbol}] [run_backtest_engine] 2... Connecting to Redis: {redis_host}:{redis_port}")
     r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
 
     try:
@@ -104,9 +104,9 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
         await startup_reaper(r, symbol, run_id)
 
         # --- Connect TimescaleDB ---
-        logger.info(f"[BT-V5] Connecting to Database: {db_dsn.split('@')[-1]}") # Log host/db only
+        logger.info(f"[{symbol}] [run_backtest_engine] 3... Connecting to Database: {db_dsn.split('@')[-1]}") # Log host/db only
         db_pool = await asyncpg.create_pool(db_dsn, min_size=2, max_size=10) # Reduced pool for backtest
-        logger.info("[BT-V5] Database connection pool created.")
+        logger.info(f"[{symbol}] [run_backtest_engine] 4... Database connection pool created.")
 
         # --- Shared Components ---
         window_manager = WindowManager(max_window=2000)
@@ -141,7 +141,7 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
         producer = CSVMockProducer(db_pool, r, run_id, symbol, stream_key)
         
         # --- [Story 3.3]: Backtest Consumer Loop ---
-        logger.info(f"[BT-V5] Ready to start concurrent Producer & Consumer Loop on stream: {stream_key}")
+        logger.info(f"[{symbol}] [run_backtest_engine] 5... Ready to start Loop on stream: {stream_key}")
         
         state = window_manager.states[symbol] if symbol in window_manager.states else None
         
@@ -158,7 +158,7 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                     empty_reads += 1
                     # If we waited multiple times and producer is likely done, exit loop
                     if empty_reads > 2:
-                        logger.info(f"[BT-V5] Stream empty or timeout. Finished processing {processed_count} candles.")
+                        logger.info(f"[{symbol}] [consumer_task] 1... Stream empty. Finished processing {processed_count} candles.")
                         break
                     continue
                 
@@ -254,7 +254,7 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                             processed_count += 1
                             
                             if processed_count % 1000 == 0:
-                                logger.info(f"[BT-V5] Processed {processed_count} candles... Current Time: {ts_str}")
+                                logger.info(f"[{symbol}] [consumer_task] 2... Processed {processed_count} candles... Time: {ts_str}")
                                 
                         except Exception as e:
                             logger.error(f"Error processing candle {msg_id}: {e}")
@@ -270,8 +270,8 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
         
         _, (proc_count, stats) = await asyncio.gather(producer_task, consumer_task)
         
-        logger.info(f"🏁 Backtest complete for {symbol}. Total candles: {proc_count}")
-        logger.info(f"📊 Results: {json.dumps(stats)}")
+        logger.info(f"[{symbol}] [run_backtest_engine] 6... Backtest complete. Total: {proc_count}")
+        logger.info(f"[{symbol}] [run_backtest_engine] 7... Results: {json.dumps(stats)}")
         
         return proc_count, stats
 

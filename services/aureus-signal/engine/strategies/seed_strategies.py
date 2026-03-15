@@ -68,9 +68,9 @@ async def seed_system_strategies(pool):
                     json.dumps(strat['config']), 
                     strat['min_score']
                 )
-                logger.info(f"✅ Seeded/Updated strategy: {strat['name']}")
+                logger.info(f"[GLOBAL] [seed_system_strategies] 1... Seeded/Updated strategy: {strat['name']}")
             except Exception as e:
-                logger.error(f"❌ Failed to seed strategy {strat['name']}: {e}")
+                logger.error(f"[GLOBAL] [seed_system_strategies] Error: Failed to seed strategy {strat['name']}: {e}")
 
 if __name__ == "__main__":
     # For manual testing

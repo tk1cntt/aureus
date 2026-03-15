@@ -19,7 +19,7 @@ import pandas as pd
 from .physics import is_touching, has_closed_above
 from collections import OrderedDict
 import logging
-logger = logging.getLogger("aureus-signals")
+logger = logging.getLogger("aureus-signal.outside-bar")
 from typing import Dict, Optional
 from enum import IntEnum
 import calendar
@@ -191,7 +191,7 @@ class OutsideBarAnalyzer:
 
                 # Ensure sub_candles_by_tf is not None and contains the required small_tf
                 if sub_candles_by_tf is None or small_tf not in sub_candles_by_tf:
-                    logger.debug(f"No sub-candles available for {small_tf} for candle {candle_t}")
+                    logger.debug(f"[{symbol if 'symbol' in locals() else 'GLOBAL'}] [get_order_formation] 1... No sub-candles available for {small_tf} for candle {candle_t}")
                     continue # Skip this pass if data is missing
 
                 result = self.small_tf_logic(
@@ -265,7 +265,7 @@ class OutsideBarAnalyzer:
         required_cols = {'t', 'h', 'l'}
         if not required_cols.issubset(sub_df.columns):
             missing = required_cols - set(sub_df.columns)
-            logger.error(f"Missing required columns in sub_candles for {small_tf}: {missing}")
+            logger.error(f"[GLOBAL] [small_tf_logic] Error: Missing required columns in sub_candles for {small_tf}: {missing}")
             return OrderFormation.OFBError
 
         mask = (sub_df['t'] >= bar_start) & (sub_df['t'] <= bar_end)

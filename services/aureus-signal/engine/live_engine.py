@@ -48,7 +48,7 @@ logging.basicConfig(
     format=log_format,
     handlers=handlers
 )
-logger = logging.getLogger("aureus-signal")
+logger = logging.getLogger("aureus-signal.live-engine")
 
 
 def load_symbols_config(path="symbols.json"):
@@ -58,7 +58,7 @@ def load_symbols_config(path="symbols.json"):
         with open(path, "r") as f:
             return json.load(f)
     except Exception as e:
-        logger.error(f"Failed to load {path}: {e}")
+        logger.error(f"[GLOBAL] [load_symbols_config] Error: Failed to load {path}: {e}")
         return {}
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
@@ -71,7 +71,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     # --- Multi-Symbol Configuration ---
     symbols_env = os.getenv("SYMBOLS", "XAUUSD")
     symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]
-    logger.info(f"🚀 Initializing Signal Engine for: {symbols_list}")
+    logger.info(f"[GLOBAL] [run_signal_engine] 1... Initializing Signal Engine for: {symbols_list}")
 
     # Load symbol-specific parameters
     SYMBOL_CONFIG = load_symbols_config()
@@ -79,23 +79,23 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     # --- Connect Redis ---
     if redis_client:
         r = redis_client
-        logger.info("Using provided Redis client")
+        logger.info("[GLOBAL] [run_signal_engine] 2... Using provided Redis client")
     else:
-        logger.info(f"Connecting to Redis at {redis_host}:{redis_port}...")
+        logger.info(f"[GLOBAL] [run_signal_engine] 2... Connecting to Redis at {redis_host}:{redis_port}...")
         r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
         
     flags = FeatureFlags(r)
 
     # --- Connect TimescaleDB ---
     if db_pool:
-        logger.info("Using provided TimescaleDB pool")
+        logger.info("[GLOBAL] [run_signal_engine] 3... Using provided TimescaleDB pool")
     else:
-        logger.info(f"Connecting to TimescaleDB...")
+        logger.info(f"[GLOBAL] [run_signal_engine] 3... Connecting to TimescaleDB...")
         db_pool = await asyncpg.create_pool(db_dsn, min_size=10, max_size=50)
-        logger.info("TimescaleDB pool connected with max_size=50")
+        logger.info(f"[GLOBAL] [run_signal_engine] 4... TimescaleDB pool connected with max_size=50")
 
     # --- Seed System Strategies ---
-    logger.info("🌱 Seeding system strategies...")
+    logger.info("[GLOBAL] [run_signal_engine] 5... Seeding system strategies...")
     await seed_system_strategies(db_pool)
 
     # --- Shared Components ---
@@ -111,13 +111,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     ai_queue = asyncio.PriorityQueue()
     
     # --- News System Initialization (Non-blocking) ---
-    logger.info("📅 Initializing News System...")
+    logger.info("[GLOBAL] [run_signal_engine] 6... Initializing News System...")
     asyncio.create_task(asyncio.to_thread(NewsProvider.fetch_this_week)) 
     
     # Spawn Brain Workers
     for i in range(2):
         asyncio.create_task(brain_worker(ai_queue, r, db_pool, ai_validator, trade_manager))
-    logger.info("Brain Worker pool initialized (Size: 2)")
+    logger.info("[GLOBAL] [run_signal_engine] 7... Brain Worker pool initialized (Size: 2)")
     
     # --- Per-Symbol Registry ---
     symbol_signals = {}      # symbol -> {tag: signal_obj}
@@ -128,7 +128,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     for symbol in symbols_list:
         cfg = SYMBOL_CONFIG.get(symbol, SYMBOL_CONFIG.get("XAUUSD", {}))
         if not cfg:
-            logger.warning(f"No config found for {symbol}, using defaults.")
+            logger.warning(f"[{symbol}] [run_signal_engine] Error: No config found for {symbol}, using defaults.")
             cfg = {"digits": 2, "point": 0.01, "pivots": {"ext_period": 5, "min_amplitude": 100, "min_motion": 1}}
 
         # Instantiate signals with symbol-specific params (via shared factory)
@@ -151,10 +151,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         target_stream = f"aureus:stream:{symbol}:candle"
         try:
             await r.xgroup_create(target_stream, group_name, id="0", mkstream=True)
-            logger.info(f"Created consumer group for {symbol}: {group_name}")
+            logger.info(f"[{symbol}] [run_signal_engine] 8... Created consumer group {group_name}")
         except Exception as e:
             if "already exists" not in str(e):
-                logger.error(f"Group creation error for {symbol}: {e}")
+                logger.error(f"[{symbol}] [run_signal_engine] Error: Group creation error: {e}")
 
         # --- Load history and spawn tasks for each symbol ---
         try:
@@ -310,10 +310,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
             state_key = f"aureus:state:{symbol}"
             await r.set(state_key, json.dumps(state.to_dict()))
-
-            logger.info(f"[{symbol}] Engine ready. Last candle: {state.last_candle.get('t') if state.last_candle else 'None'}")
+            
+            logger.info(f"[{symbol}] [run_signal_engine] 9... Engine ready. Last candle: {state.last_candle.get('t') if state.last_candle else 'None'}")
         except Exception as e:
-            logger.warning(f"Could not load history for {symbol}: {e}")
+            logger.warning(f"[{symbol}] [run_signal_engine] Error: Could not load history for {symbol}: {e}")
 
         # --- Background Tasks ---
         # Restored DB-based integrity checking but optimized polling to reduce I/O
@@ -326,12 +326,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     async def listen_for_reload():
         pubsub = r.pubsub()
         await pubsub.subscribe("aureus:cmd:refresh_strategies")
-        logger.info("Subscribed to global strategy refresh channel")
+        logger.info("[GLOBAL] [listen_for_reload] 1... Subscribed to global strategy refresh channel")
         async for message in pubsub.listen():
             if message['type'] == 'message':
                 target_symbol = message['data']
                 if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
-                    logger.info(f"Strategy refresh requested for {target_symbol}")
+                    logger.info(f"[GLOBAL] [listen_for_reload] 2... Strategy refresh requested for {target_symbol}")
                     # Load for specific symbol or all
                     refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
                     for s in refresh_list:
@@ -350,7 +350,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         try: await r.xgroup_create(global_stream, global_group, id="0", mkstream=True)
         except Exception: pass
         
-        logger.info(f"📡 Subscribed to global command stream: {global_stream}")
+        logger.info(f"[GLOBAL] [global_command_stream_listener] 1... Subscribed to global command stream: {global_stream}")
         while True:
             try:
                 messages = await r.xreadgroup(global_group, global_consumer, {global_stream: ">"}, count=10)
@@ -362,10 +362,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 new_model = data.get('model')
                                 if new_model:
                                     ai_validator.set_model(new_model)
-                                    logger.info(f"🔄 Global event received via Stream: LLM model updated to {new_model}")
+                                    logger.info(f"[GLOBAL] [global_command_stream_listener] 2... LLM model updated to {new_model}")
                             await r.xack(global_stream, global_group, entry_id)
             except Exception as e:
-                logger.error(f"Error in global command stream listener: {e}")
+                logger.error(f"[GLOBAL] [global_command_stream_listener] Error: {e}")
             await asyncio.sleep(5)
 
     asyncio.create_task(global_command_stream_listener())
@@ -374,7 +374,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     async def news_refresh_loop():
         while True:
             await asyncio.sleep(86400) # 24 hours
-            logger.info("🔄 Refreshing weekly news calendar...")
+            logger.info("[GLOBAL] [news_refresh_loop] 1... Refreshing weekly news calendar...")
             NewsProvider.fetch_this_week()
             
     asyncio.create_task(news_refresh_loop())
@@ -429,7 +429,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             SET open=$3, high=$4, low=$5, close=$6, volume=$7
                         """, db_payload)
                     except Exception as e:
-                        logger.error(f"Batch DB insert error: {e}")
+                        logger.error(f"[GLOBAL] [run_signal_engine] Error: Batch DB insert error: {e}")
 
                 # 2. Process logic with per-symbol concurrency protection
                 async with symbol_locks[symbol]:
@@ -445,11 +445,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             if msg_type == 'CANDLE':
                                 eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                                logger.info(f"====>2. Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
+                                logger.info(f"[t={data.get('t')}] [{symbol}] [run_signal_engine] 10... Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
 
                             if msg_type == 'COMMAND':
                                 if data.get('cmd') == 'RECALCULATE':
-                                    logger.info(f"Received RECALCULATE for {symbol}.")
+                                    logger.info(f"[{symbol}] [run_signal_engine] 11... Received RECALCULATE for {symbol}.")
                                     asyncio.create_task(recalculate_all_signals(symbol, db_pool, r, window_manager, signals, symbol_strategies[symbol], symbol_locks[symbol]))
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
@@ -474,13 +474,14 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             for tag, signal_calc in signals.items():
                                 try:
+                                    logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 13... Calculating signal {tag}")
                                     res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                                     if res:
                                         tag = res.get('tag')
                                         if tag: state.log_signal(tag, ts_unix)
                                         if res.get('cross'): state.log_signal(res.get('cross'), ts_unix)
                                 except Exception as e:
-                                    logger.error(f"Signal {tag} calc error ({symbol}): {e}")
+                                    logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {tag} calc error: {e}")
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             await trade_manager.update_orders(symbol, data, state)
@@ -491,7 +492,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     await queue_ai_audit_task(ai_queue, ai_validator, symbol, df, state, pending_order)
                                 
                                 for res in strategy_results:
-                                    logger.info(f"[{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
+                                    logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
                                     state.log_signal(f"strat:{res['strategy']}", res['t'])
 
                             await r.xack(stream_key, group_name, entry_id)
@@ -503,7 +504,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             flags = FeatureFlags(r)
                             sync_mode = await flags.get("redis_sync_mode", "ALWAYS")
                             if sync_mode == "ALWAYS" or has_event or (candle_count % 5 == 0):
-                                logger.info(f"====> State Saved to Redis: aureus:state:{symbol} (reason: sync_mode={sync_mode}, event={has_event}, count={candle_count})")
+                                logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 12... State Saved to Redis (reason: sync_mode={sync_mode}, event={has_event}, count={candle_count})")
                                 await r.set(f"aureus:state:{symbol}", json.dumps(state.to_dict()))
 
                             # --- SPARSE STORAGE LOGIC ---
@@ -515,7 +516,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     snapshot = build_snapshot(state, data)
                                     asyncio.create_task(insert_single_snapshot(db_pool, snapshot))
                                 except Exception as e:
-                                    logger.debug(f"Snapshot write error ({symbol}): {e}")
+                                    logger.debug(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
                             
                             # Clean up trade events for the next tick
                             trade_manager.last_tick_events = []
@@ -528,11 +529,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 })
                                 await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
                             except Exception as e:
-                                logger.warning(f"Checkpoint write error ({symbol}): {e}")
+                                logger.warning(f"[{symbol}] [run_signal_engine] Error: Checkpoint write error: {e}")
 
                             candle_count += 1
                             if candle_count % 20 == 0:
-                                logger.info(f"Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
+                                logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
 
                             # Trigger Event-Driven AI Pulse Analysis (Aggregated for this candle)
                             if state.ai_update_pending:
@@ -543,7 +544,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 # Process only if FRESH and not in cooldown (60s)
                                 if is_fresh and (now_pulse - last_pulse >= 60):
                                     event_list = ", ".join(state.ai_trigger_events)
-                                    logger.info(f"[{symbol}] 🤖 Event-Driven AI Analysis triggered by: {event_list}")
+                                    logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 Event-Driven AI Analysis triggered by: {event_list}")
                                     
                                     await queue_periodic_ai_analysis(
                                         ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
@@ -556,11 +557,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                         except Exception as e:
                             eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                            logger.error(f"Error processing {symbol} entry {eid_str}: {e}\n{traceback.format_exc()}")
+                            logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {eid_str}: {e}")
                             await r.xack(stream_key, group_name, entry_id)
 
         except Exception as e:
-            logger.error(f"Engine loop error: {e}")
+            logger.error(f"[GLOBAL] [run_signal_engine] Error: Engine loop error: {e}")
             await asyncio.sleep(1)
 
 # --- AI Queue Logic ---
@@ -578,7 +579,7 @@ async def brain_worker(queue, r, db_pool, validator, manager):
                 
             queue.task_done()
         except Exception as e:
-            logger.error(f"Brain Worker Error: {e}")
+            logger.error(f"[GLOBAL] [brain_worker] Error: Brain Worker Error: {e}")
             await asyncio.sleep(1)
 
 async def queue_periodic_ai_analysis(queue, validator, symbol, df, state, start_time, trigger_events=None):
@@ -593,7 +594,7 @@ async def queue_periodic_ai_analysis(queue, validator, symbol, df, state, start_
             'start_time': start_time
         }))
     except Exception as e:
-        logger.error(f"Error queueing pulse for {symbol}: {e}")
+        logger.error(f"[{symbol}] [queue_periodic_ai_analysis] Error: Error queueing pulse for {symbol}: {e}")
 
 async def queue_ai_audit_task(ai_queue, validator, symbol, df, state, order):
     """Queues an institutional audit task with necessary market data."""
@@ -609,7 +610,7 @@ async def queue_ai_audit_task(ai_queue, validator, symbol, df, state, order):
             'start_time': time.time()
         }))
     except Exception as e:
-        logger.error(f"Error queueing audit for {symbol}: {e}")
+        logger.error(f"[{symbol}] [queue_ai_audit_task] Error: Error queueing audit: {e}")
 
 async def execute_pulse(payload, r, db_pool, validator):
     """Executes the LLM call and stores periodic narrative."""
@@ -649,9 +650,9 @@ async def execute_pulse(payload, r, db_pool, validator):
         llm_latency, total_latency, context, analysis.get('raw_response'), 'PULSE'
         )
         
-        logger.info(f"📊 [Queue] AI Pulse for {symbol}: {analysis['sentiment']} (ACI: {analysis['aci']}) | Latency: {llm_latency}ms / {total_latency}ms")
+        logger.info(f"[{symbol}] [execute_pulse] 1... AI Pulse Complete: {analysis['sentiment']} (ACI: {analysis['aci']}) | Latency: {llm_latency}ms / {total_latency}ms")
     except Exception as e:
-        logger.error(f"execute_pulse error for {symbol}: {e}")
+        logger.error(f"[{symbol}] [execute_pulse] Error: {e}")
 
 async def execute_audit(payload, r, db_pool, validator, manager):
     """Executes the Hybrid audit flow and processes trade decision."""
@@ -691,9 +692,9 @@ async def execute_audit(payload, r, db_pool, validator, manager):
         audit_result.get('audit_source', 'HYBRID')
         )
 
-        logger.info(f"⚖️ [Queue] Hybrid Audit for {symbol} Complete: Decision={audit_result.get('decision')} (Algo: {audit_result.get('algo_score')})")
+        logger.info(f"[{symbol}] [execute_audit] 1... Hybrid Audit Complete: Decision={audit_result.get('decision')} (Algo: {audit_result.get('algo_score')})")
     except Exception as e:
-        logger.error(f"execute_audit error for {symbol}: {e}")
+        logger.error(f"[{symbol}] [execute_audit] Error: {e}")
         import traceback
         logger.error(traceback.format_exc())
 
@@ -724,13 +725,13 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                 if ts_unix:
                     checkpoint_time = datetime.fromtimestamp(ts_unix, tz=timezone.utc)
             except Exception as e:
-                logger.error(f"Failed to parse checkpoint for {symbol}: {e}")
+                logger.error(f"[{symbol}] [recalculate_all_signals] Error: Failed to parse checkpoint: {e}")
 
         if last_snapshot_time:
             # Determine delta start time (checkpoint takes precedence)
             effective_start_time = checkpoint_time if checkpoint_time and checkpoint_time > last_snapshot_time else last_snapshot_time
             if checkpoint_time:
-                 logger.info(f"[{symbol}] Using Checkpoint Marker {checkpoint_time} for recalculation delta.")
+                 logger.info(f"[{symbol}] [recalculate_all_signals] 2... Using Checkpoint Marker {checkpoint_time} for recalculation delta.")
 
             # Incremental: Load candles after last snapshot (+ 1500 bar warm-up)
             warmup_rows = await db_pool.fetch("""
@@ -749,7 +750,7 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
             """, symbol, effective_start_time)
 
             if not new_rows:
-                logger.info(f"[Recalc] {symbol}: No new candles since last snapshot. Skipping.")
+                logger.info(f"[{symbol}] [recalculate_all_signals] 3... No new candles since last snapshot. Skipping.")
                 await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
                     "symbol": symbol, "status": "COMPLETED", "progress": 100,
                     "processed": 0, "total": 0, "message": "Already up to date"
@@ -762,10 +763,10 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
             warmup_count = len(warmup_list)
             total_new = len(new_rows)
 
-            logger.info(f"[Recalc] {symbol}: Incremental — {warmup_count} warm-up + {total_new} new candles")
+            logger.info(f"[{symbol}] [recalculate_all_signals] 4... Incremental — {warmup_count} warm-up + {total_new} new candles")
         else:
             # No snapshot at all (shouldn't really happen if init logic worked)
-            logger.warning(f"[Recalc] No history found in DB for {symbol}")
+            logger.warning(f"[{symbol}] [recalculate_all_signals] Error: No history found in DB")
             return
 
         window_manager.reset(symbol)
@@ -806,10 +807,10 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                                 state.log_signal(sig_tag, int(candle_data['t']))
                             cross_tag = res.get('cross')
                             if cross_tag:
-                                state.log_signal(cross_tag, int(candle_data['t']))
+                                 state.log_signal(cross_tag, int(candle_data['t']))
                     except Exception as e:
                         if i < 3:
-                            logger.error(f"[Recalc] Error ({tag}): {e}")
+                            logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")
                 
                 # Only save snapshots for NEW candles (skip warm-up)
                 if i >= warmup_count:
@@ -854,7 +855,7 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                     })
                     await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
                 except Exception as e:
-                    logger.warning(f"Checkpoint update error ({symbol}): {e}")
+                    logger.warning(f"[{symbol}] [recalculate_all_signals] Error: Checkpoint update error: {e}")
             
         # Publish completion status
         await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
@@ -879,7 +880,7 @@ async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals,
             gaps = await detector.find_gaps(symbol, lookback_hours=1)
 
             if gaps:
-                logger.info(f"[Integrity] Found {len(gaps)} gaps for {symbol}. Requesting recovery...")
+                logger.info(f"[{symbol}] [integrity_and_recalc_task] 1... Found {len(gaps)} gaps. Requesting recovery...")
                 for gap in gaps:
                     cmd = {"type": "REQUEST_BACKFILL", "symbol": symbol, "start": gap["start"], "end": gap["end"]}
                     await r.publish("aureus:mt5:commands", json.dumps(cmd))
@@ -887,7 +888,7 @@ async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals,
             else:
                 # No gaps! Trigger full recalculation once
                 if not recalc_triggered:
-                    logger.info(f"[Integrity] Gaps cleared for {symbol}. Preparing recalculation...")
+                    logger.info(f"[{symbol}] [integrity_and_recalc_task] 2... Gaps cleared. Preparing recalculation...")
                     await recalculate_all_signals(symbol, db_pool, r, window_manager, signals, strategy_registry, lock)
                     recalc_triggered = True
             
@@ -895,5 +896,5 @@ async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals,
             await asyncio.sleep(180)
             
         except Exception as e:
-            logger.error(f"[Integrity] Error in watcher: {e}")
+            logger.error(f"[{symbol}] [integrity_and_recalc_task] Error: {e}")
             await asyncio.sleep(60)

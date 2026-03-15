@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Any, Type
 from .base import BaseStrategy
 
-logger = logging.getLogger("aureus-signal")
+logger = logging.getLogger("aureus-signal.strategy-registry")
 
 class StrategyRegistry:
     """Registry for managing and executing trading strategies."""
@@ -17,7 +17,7 @@ class StrategyRegistry:
     def register(self, strategy: BaseStrategy):
         """Registers a strategy instance."""
         self._strategies[strategy.name] = strategy
-        logger.info(f"Strategy registered: {strategy.name}")
+        logger.info(f"[GLOBAL] [register] 1... Strategy registered: {strategy.name}")
 
     async def load_from_db(self, db, symbol: str):
         """
@@ -78,7 +78,7 @@ class StrategyRegistry:
             
             self.register(strat)
             
-        logger.info(f"Loaded {len(rows)} strategies for {symbol} (Target IDs: {strategy_ids})")
+        logger.info(f"[{symbol}] [load_by_ids] 1... Loaded {len(rows)} strategies (Target IDs: {strategy_ids})")
 
     def evaluate_all(self, df, signals, state_obj) -> List[Dict[str, Any]]:
         """Evaluates all registered strategies and returns signals for those that trigger."""
@@ -89,7 +89,7 @@ class StrategyRegistry:
                 if result:
                     triggered.append(result)
             except Exception as e:
-                logger.error(f"Error evaluating strategy {name}: {e}")
+                logger.error(f"[GLOBAL] [evaluate_all] Error: Evaluating strategy {name}: {e}")
         return triggered
 
     def get_strategy(self, name: str) -> BaseStrategy:

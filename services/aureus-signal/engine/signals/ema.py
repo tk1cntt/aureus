@@ -4,7 +4,7 @@ import traceback
 import pandas as pd
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-ema")
+logger = logging.getLogger("aureus-signal.ema")
 
 class EMASignal(BaseSignal):
     """
@@ -87,5 +87,5 @@ class EMASignal(BaseSignal):
                 
             return res
         except Exception as e:
-            logger.error(f"CRITICAL: EMASignal({self.period}) failed: {e}\n{traceback.format_exc()}")
+            logger.error(f"[GLOBAL] [ema] [calculate] Error: EMASignal({self.period}) failed: {e}\n{traceback.format_exc()}")
             raise e

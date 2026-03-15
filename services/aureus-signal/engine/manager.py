@@ -1,7 +1,9 @@
 import pandas as pd
 from collections import defaultdict
-
+import logging
 from .state import SymbolState
+
+logger = logging.getLogger("aureus-signal.manager")
 
 class WindowManager:
     """Manages a sliding window of candles and persistent state for each symbol."""
@@ -62,9 +64,7 @@ class WindowManager:
         
         # Log ingestion
         if len(window) > 0:
-            import logging
-            mgr_logger = logging.getLogger("aureus-manager")
-            mgr_logger.info(f"====>[Manager] Ingested {symbol} t={candle['t']} window_last={window[-1]['t']} size={len(window)}")
+            logger.info(f"[t={candle['t']}] [{symbol}] [update] 1... Ingested {symbol} t={candle['t']} window_last={window[-1]['t']} size={len(window)}")
         
         # Keep window size
         if len(window) > self.max_window:
