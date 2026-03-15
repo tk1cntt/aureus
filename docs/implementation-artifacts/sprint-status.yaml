@@ -5,6 +5,8 @@ last_updated: "2026-03-15"
 development_status:
   epic-1: in-progress
   1-1-sequenced-logging-gap-detector: in-progress
+  epic-2: in-progress
+  2-1-zigzag-ob-ib-matrix-implementation: done
 
 status_definitions:
   backlog: "Story identified but no implementation plan contexted"

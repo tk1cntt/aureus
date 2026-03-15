@@ -9,7 +9,7 @@ All index comparisons are carefully inverted to produce identical results.
 Reference: phase-2/step-3/reference/zigzag_pro2_utf8.mq5 (495 lines)
 
 Usage:
-    from engine.common import ZigZagPro, ExtremumType
+    from engine.common import ZigZagPro, ExtremumType, PivotState
     from engine.common import get_confirmed_pivots, label_pivots_pro
 """
 
@@ -20,7 +20,7 @@ import logging
 
 logger = logging.getLogger("aureus-signal.zigzag")
 
-from engine.common import OutsideBarAnalyzer, OrderFormation
+from .outside_bar import OutsideBarAnalyzer, OrderFormation
 
 
 # ============================================================================
@@ -32,6 +32,20 @@ class ExtremumType(IntEnum):
     TROUGH = -1           # Candle is a potential trough
     OUTSIDE_BULLISH = 2   # Low formed first, then High (bullish engulfing)
     OUTSIDE_BEARISH = -2  # High formed first, then Low (bearish engulfing)
+
+
+class PivotState(IntEnum):
+    UNKNOWN = 0
+    LAST_PEAK = 1
+    LAST_TROUGH = -1
+
+
+class OBMatrixCase(IntEnum):
+    NONE = 0
+    PENDING = 1
+    BREAKOUT_UP = 2
+    BREAKOUT_DOWN = 3
+    DEFAULT_EXIT = 4
 
 
 def normalize_double(value: float, digits: int) -> float:
@@ -118,6 +132,15 @@ class ZigZagPro:
         self.valid_indices: List[int] = []
         self.first_bar_time: int = 0
 
+        # --- Story 2.1: OB Matrix State Machine ---
+        self.ob_waiting: bool = False
+        self.ob_high: float = 0.0
+        self.ob_low: float = 0.0
+        self.ob_index: int = -1
+        self.ob_count: int = 0
+        self.last_piv_type: PivotState = PivotState.UNKNOWN
+        self.current_ob_case: OBMatrixCase = OBMatrixCase.NONE
+
     def normalize_double(self, value: float) -> float:
         """Helper to call module-level normalize_double with self.digits."""
         return normalize_double(value, self.digits)
@@ -175,6 +198,146 @@ class ZigZagPro:
         
         # If any pivot was in the dropped range, we might need a partial recalc, 
         # but for now we assume max_window is large enough.
+
+    def _process_ob_matrix(
+        self,
+        df: pd.DataFrame,
+        i: int,
+        curr_h: float,
+        curr_l: float,
+        prev_h: float,
+        prev_l: float,
+        let: int,
+        last_up: float,
+        last_dn: float,
+        last_up_bar: int,
+        last_dn_bar: int,
+        recalc_start: int
+    ) -> bool:
+        """
+        Implementation of the OB decision matrix (Story 2.1) - POST-PROCESS MODE.
+        Handles OB detection, Pending state (IB), and Breakout logic.
+        
+        This method runs AFTER standard MT5 logic for each bar.
+        """
+        # 0. Detection: Check if bar i is an Outside Bar to start waiting
+        if not self.ob_waiting and i > 0:
+            if curr_h > prev_h and curr_l < prev_l:
+                self.ob_waiting = True
+                self.ob_high = curr_h
+                self.ob_low = curr_l
+                self.ob_index = i
+                self.ob_count = 0
+                self.last_piv_type = PivotState.LAST_PEAK if let == 1 else (PivotState.LAST_TROUGH if let == -1 else PivotState.UNKNOWN)
+                self.current_ob_case = OBMatrixCase.NONE 
+                
+                # Priority Replacement (AC: 1)
+                # If OB creates a new local extreme within ext_period, update it immediately
+                if let == 1 and curr_h > self.normalize_double(last_up):
+                     if (i - last_up_bar) <= self.ext_period:
+                         if last_up_bar != -1: self.up[last_up_bar] = self.EMPTY_VALUE
+                         self.up[i] = curr_h
+                         self.last_up_idx = i
+                         self.type_buffer[i] = int(ExtremumType.PEAK)
+                elif let == -1 and curr_l < self.normalize_double(last_dn):
+                     if (i - last_dn_bar) <= self.ext_period:
+                         if last_dn_bar != -1: self.dn[last_dn_bar] = self.EMPTY_VALUE
+                         self.dn[i] = curr_l
+                         self.last_dn_idx = i
+                         self.type_buffer[i] = int(ExtremumType.TROUGH)
+                return False
+
+        if not self.ob_waiting:
+            self.current_ob_case = OBMatrixCase.NONE
+            return False
+
+        # 1. Handle Pending State (Inside Bar) - WIPE standard pivots
+        is_ib = curr_h <= self.ob_high and curr_l >= self.ob_low
+        if is_ib and i > self.ob_index:
+            self.ob_count = i - self.ob_index
+            self.current_ob_case = OBMatrixCase.PENDING
+            
+            # WIPE: Clear any pivot standard logic might have drawn inside the OB range
+            self.up[i] = self.EMPTY_VALUE
+            self.dn[i] = self.EMPTY_VALUE
+            self.type_buffer[i] = int(ExtremumType.NONE)
+            
+            # Default Exit Rule (AC: 4) after 5 candles
+            if self.ob_count >= 5:
+                lookback_start = max(0, i - 4)
+                ib_range_h = df.iloc[lookback_start:i+1]['h'].max()
+                ib_range_l = df.iloc[lookback_start:i+1]['l'].min()
+                ob_range = self.ob_high - self.ob_low
+                
+                if (ib_range_h - ib_range_l) < (0.5 * ob_range):
+                    self.current_ob_case = OBMatrixCase.DEFAULT_EXIT
+                    # Trigger Double Pivot (Sóng kép)
+                    if self.last_piv_type == PivotState.LAST_TROUGH:
+                         # Trough -> OB High (Peak) -> current Low (Trough)
+                        self.up[self.ob_index] = self.ob_high
+                        self.last_up_idx = self.ob_index
+                        self.dn[i] = curr_l
+                        self.last_dn_idx = i
+                        self.type_buffer[i] = int(ExtremumType.TROUGH)
+                    else:
+                        # Peak -> OB Low (Trough) -> current High (Peak)
+                        self.dn[self.ob_index] = self.ob_low
+                        self.last_dn_idx = self.ob_index
+                        self.up[i] = curr_h
+                        self.last_up_idx = i
+                        self.type_buffer[i] = int(ExtremumType.PEAK)
+                    
+                    self.ob_waiting = False
+                    return True
+            return False
+
+        # 2. Handle Breakout (AC: 3) - OVERRIDE standard pivots if needed
+        broke_h = curr_h > self.ob_high
+        broke_l = curr_l < self.ob_low
+        
+        if broke_h or broke_l:
+            self.current_ob_case = OBMatrixCase.BREAKOUT_UP if broke_h else OBMatrixCase.BREAKOUT_DOWN
+            
+            if self.last_piv_type == PivotState.LAST_TROUGH:
+                if broke_l:
+                    self.up[self.ob_index] = self.ob_high
+                    self.last_up_idx = self.ob_index
+                    self.dn[i] = curr_l
+                    self.last_dn_idx = i
+                    self.type_buffer[i] = int(ExtremumType.TROUGH)
+                elif broke_h:
+                    self.dn[self.ob_index] = self.ob_low
+                    self.last_dn_idx = self.ob_index
+                    self.up[i] = curr_h
+                    self.last_up_idx = i
+                    self.type_buffer[i] = int(ExtremumType.PEAK)
+            elif self.last_piv_type == PivotState.LAST_PEAK:
+                if broke_h:
+                    self.dn[self.ob_index] = self.ob_low
+                    self.last_dn_idx = self.ob_index
+                    self.up[i] = curr_h
+                    self.last_up_idx = i
+                    self.type_buffer[i] = int(ExtremumType.PEAK)
+                elif broke_l:
+                    self.up[self.ob_index] = self.ob_high
+                    self.last_up_idx = self.ob_index
+                    self.dn[i] = curr_l
+                    self.last_dn_idx = i
+                    self.type_buffer[i] = int(ExtremumType.TROUGH)
+            elif self.last_piv_type == PivotState.UNKNOWN:
+                if broke_h:
+                    self.dn[self.ob_index] = self.ob_low
+                    self.up[i] = curr_h
+                    self.last_up_idx = i
+                else:
+                    self.up[self.ob_index] = self.ob_high
+                    self.dn[i] = curr_l
+                    self.last_dn_idx = i
+            
+            self.ob_waiting = False
+            return True
+
+        return False
 
     def _comb(
         self,
@@ -427,6 +590,8 @@ class ZigZagPro:
             last_up = self.up[last_up_bar] if last_up_bar != -1 else 0.0
             last_dn = self.dn[last_dn_bar] if last_dn_bar != -1 else 0.0
 
+            # If both are -1, let remains 0.
+            
             # Line 277: Determine current 'let' (last extremum type)
             # 1 = Peak, -1 = Trough, 0 = None
             let = 0
@@ -436,7 +601,26 @@ class ZigZagPro:
                 let = 1
             elif last_dn_bar != -1:
                 let = -1
-            # If both are -1, let remains 0.
+
+            curr_h = float(df.iloc[i]['h'])
+            curr_l = float(df.iloc[i]['l'])
+            prev_h = float(df.iloc[i-1]['h']) if i > 0 else curr_h
+            prev_l = float(df.iloc[i-1]['l']) if i > 0 else curr_l
+
+            # --- AC: 5 OB Matrix WIPE & Resolution (Top of Loop) ---
+            if self.ob_waiting and i >= recalc_start:
+                resolved = self._process_ob_matrix(df, i, curr_h, curr_l, prev_h, prev_l, let, last_up, last_dn, last_up_bar, last_dn_bar, recalc_start)
+                if resolved:
+                    self.last_mother_idx = i
+                    if not self.valid_indices or self.valid_indices[-1] != i:
+                        self.valid_indices.append(i)
+                    continue
+                else:
+                    # PENDING (IB): WIPE and continue to skip rest of loop
+                    self.last_mother_idx = i
+                    if not self.valid_indices or self.valid_indices[-1] != i:
+                        self.valid_indices.append(i)
+                    continue
 
             # Lines 236-261: Same bar (outside bar) — resolve by looking further back
             if last_up_bar == last_dn_bar and last_up_bar >= 0:
@@ -456,18 +640,19 @@ class ZigZagPro:
                 elif m < n:
                     let = -1
 
+            curr_h = float(df.iloc[i]['h'])
+            curr_l = float(df.iloc[i]['l'])
+            prev_h = float(df.iloc[i-1]['h']) if i > 0 else 0.0
+            prev_l = float(df.iloc[i-1]['l']) if i > 0 else 0.0
+
             # --- Story 5.1/5.2: Inside Bar Detection & Bypass ---
             is_inside = False
             if self.last_mother_idx != -1:
                 mother_h = float(df.iloc[self.last_mother_idx]['h'])
                 mother_l = float(df.iloc[self.last_mother_idx]['l'])
-                curr_h = float(df.iloc[i]['h'])
-                curr_l = float(df.iloc[i]['l'])
                 if curr_h < mother_h and curr_l > mother_l:
                     is_inside = True
             
-            
-
             if is_inside:
                 # Story 5.2: Stale-mate Bypass
                 # If movement inside mother bar > min_amplitude from last pivot, bypass filter
@@ -487,9 +672,11 @@ class ZigZagPro:
 
                 if not bypass:
                     self.type_buffer[i] = int(ExtremumType.NONE)
+                    # If OB Matrix is waiting, we MUST process it to WIPE standard pivots
+                    if self.ob_waiting:
+                        self._process_ob_matrix(df, i, curr_h, curr_l, prev_h, prev_l, let, last_up, last_dn, last_up_bar, last_dn_bar, recalc_start)
                     continue
-            
-            # Not an inside bar (or bypassed): handle breakout and update state
+
             is_breakout = False
             if self.last_mother_idx != -1 and i >= recalc_start:
                 mother_h = self.normalize_double(float(df.iloc[self.last_mother_idx]['h']))
@@ -500,7 +687,9 @@ class ZigZagPro:
                 broke_h = c_h > mother_h
                 broke_l = c_l < mother_l
                 
-                if broke_h or broke_l:
+                # Story 2.1: If BOTH High and Low are broken (Outside Bar), we skip simple breakout 
+                # and let the standard _comb/OB Matrix logic handle it below.
+                if (broke_h or broke_l) and not (broke_h and broke_l):
                     # Breakout detected. Determine action based on current wave (let).
                     if let == 1: # Last was Peak
                         # Case: Break High (Priority Replace - even if broke_l)
@@ -528,7 +717,7 @@ class ZigZagPro:
                             self.last_dn_idx = i
                             self.type_buffer[i] = int(ExtremumType.TROUGH)
                             is_breakout = True
-
+ 
                         # Case: Break High ONLY (Transition)
                         elif broke_h:
                             self.up[i] = curr_h
@@ -539,19 +728,22 @@ class ZigZagPro:
                     elif let == 0:
                         # Starting state: let normal logic handle it
                         pass
-
+ 
             # If breakout occurred, we skip standard extremum search for this bar
             if is_breakout:
                 self.last_mother_idx = i
                 if not self.valid_indices or self.valid_indices[-1] != i:
                     self.valid_indices.append(i)
+                # If OB Matrix is waiting, handle breakout override
+                if self.ob_waiting:
+                    self._process_ob_matrix(df, i, curr_h, curr_l, prev_h, prev_l, let, last_up, last_dn, last_up_bar, last_dn_bar, recalc_start)
                 continue
-
+ 
             # Standard update of mother and valid indices
             self.last_mother_idx = i
             if not self.valid_indices or self.valid_indices[-1] != i:
                 self.valid_indices.append(i)
-
+ 
             if i < recalc_start:
                 continue
 
@@ -668,6 +860,13 @@ class ZigZagPro:
                                 self.dn[i] = fdn
                                 self.last_dn_idx = i
                 # default (let==0): break — do nothing (Line 382-383)
+                
+                # @user: distance <= ext_period check before call
+                # Use last_up_bar/last_dn_bar (state at the start of current bar i)
+                last_conf_piv = max(last_up_bar, last_dn_bar)
+                if last_conf_piv == -1 or (i - last_conf_piv) <= self.ext_period:
+                    # --- Story 2.1: OB Matrix Integration (START/OVERRIDE) ---
+                    self._process_ob_matrix(df, i, curr_h, curr_l, prev_h, prev_l, let, last_up, last_dn, last_up_bar, last_dn_bar, recalc_start)
 
             elif comb_res == ExtremumType.OUTSIDE_BEARISH:
                 # Lines 388-448: High formed first, then Low
@@ -720,6 +919,13 @@ class ZigZagPro:
                                 self.dn[i] = fdn
                                 self.last_dn_idx = i
                 # default (let==0): break — do nothing (Line 446-447)
+                
+                # @user: distance <= ext_period check before call
+                # Use last_up_bar/last_dn_bar (state at the start of current bar i)
+                last_conf_piv = max(last_up_bar, last_dn_bar)
+                if last_conf_piv == -1 or (i - last_conf_piv) <= self.ext_period:
+                    # --- Story 2.1: OB Matrix Integration (START/OVERRIDE) ---
+                    self._process_ob_matrix(df, i, curr_h, curr_l, prev_h, prev_l, let, last_up, last_dn, last_up_bar, last_dn_bar, recalc_start)
 
         # --- Line 456: Return prev_calculated for next call ---
         self.prev_calculated = rates_total
