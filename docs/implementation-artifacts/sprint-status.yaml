@@ -11,10 +11,10 @@ development_status:
   3-1-persistent-time-map-storage: done
   3-2-lazy-incremental-t-map-update: done
   3-3-performance-parity-validation: done
-  epic-4: backlog
+  epic-4: done
   4-1-fast-path-mitigation-detection: done
   4-2-conditional-historical-sweep: done
-  4-3-scalability-verification: backlog
+  4-3-scalability-verification: done
   epic-5: backlog
   5-1-stable-zigzag-engine-parameter: backlog
   5-2-standardized-signal-logging: backlog
