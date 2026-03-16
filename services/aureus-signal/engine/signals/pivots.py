@@ -41,7 +41,8 @@ class PivotSignal(BaseSignal):
         use_smaller_tf: bool = True,
         point: float = 0.01,
         digits: int = 2,
-        timeframe: str = "M1"
+        timeframe: str = "M1",
+        zigzag_engine: str = "pro2"
     ):
         super().__init__("Professional ZigZag Pivots")
         self.ext_period = ext_period
@@ -52,6 +53,13 @@ class PivotSignal(BaseSignal):
         self.point = point
         self.digits = digits
         self.timeframe = timeframe
+        self.zigzag_engine_name = zigzag_engine
+
+        # Story 5.1: Internal factory for zigzag engines
+        # This allows future extensions like "numpy-vectorized"
+        self._engine_registry = {
+            "pro2": ZigZagPro
+        }
 
     def calculate(self, df: pd.DataFrame, state_obj: Any,
                   sub_candles_by_tf: dict = None,
@@ -59,31 +67,61 @@ class PivotSignal(BaseSignal):
         # Find if this symbol's last received T is in this DF
         if not df.empty:
             last_val = df.iloc[-1]['t']
-            tail_vals = df['t'].tail(5).tolist()
-            logger.debug(f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate {symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}")
+            logger.debug(f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate {symbol} last_t={last_val}")
 
-        # 1. Initialize engine in state if not present
-        if not hasattr(state_obj, 'zigzag_engine') or state_obj.zigzag_engine is None:            
-            state_obj.zigzag_engine = ZigZagPro(
-                ext_period=self.ext_period,
-                min_amplitude=self.min_amplitude,
-                min_motion=self.min_motion,
-                use_smaller_tf=self.use_smaller_tf,
-                point=self.point,
-                digits=self.digits
-            )
+        # --- Story 5.1: Stable Engine Management ---
+        # 1. Determine current required parameters
+        req_params = {
+            "ext_period": self.ext_period,
+            "min_amplitude": self.min_amplitude,
+            "min_motion": self.min_motion,
+            "use_smaller_tf": self.use_smaller_tf,
+            "point": self.point,
+            "digits": self.digits,
+            "engine_type": self.zigzag_engine_name
+        }
 
-        # 1b. Update parameters dynamically if using percentage
-        if self.min_amplitude_pct is not None and len(df) > 0:
+        # Handle dynamic amplitude if percentage is used
+        if self.min_amplitude_pct is not None and not df.empty:
             last_close = float(df.iloc[-1]['c'])
-            # Calculate dynamic amplitude in points
-            # Formula: (Price * Pct / 100) / Point
             dynamic_amp_points = int(round((last_close * self.min_amplitude_pct / 100) / self.point))
+            req_params["min_amplitude"] = max(1, dynamic_amp_points)
+
+        # 2. Check for initialization or configuration change
+        engine_missing = not hasattr(state_obj, 'zigzag_engine') or state_obj.zigzag_engine is None
+        current_config = getattr(state_obj, 'zigzag_config', {})
+        
+        # Stability Check: Only re-init if engine type or CRITICAL structural params changed
+        # (Amplitude and Motion can be updated via update_params)
+        must_reinit = engine_missing or (req_params["engine_type"] != current_config.get("engine_type")) or \
+                     (req_params["ext_period"] != current_config.get("ext_period")) or \
+                     (req_params["use_smaller_tf"] != current_config.get("use_smaller_tf"))
+
+        if must_reinit:
+            logger.info(f"[{symbol}] Initializing ZigZag engine: {self.zigzag_engine_name} with params: {req_params}")
+            engine_cls = self._engine_registry.get(self.zigzag_engine_name, ZigZagPro)
             
-            # Ensure it doesn't fall below a sane minimum (e.g. 1 point)
-            dynamic_amp_points = max(1, dynamic_amp_points)
-            
-            state_obj.zigzag_engine.update_params(min_amplitude=dynamic_amp_points)
+            state_obj.zigzag_engine = engine_cls(
+                ext_period=req_params["ext_period"],
+                min_amplitude=req_params["min_amplitude"],
+                min_motion=req_params["min_motion"],
+                use_smaller_tf=req_params["use_smaller_tf"],
+                point=req_params["point"],
+                digits=req_params["digits"]
+            )
+            state_obj.zigzag_config = req_params.copy()
+        else:
+            # 3. Dynamic Parameter Update (Non-destructive)
+            # If only amp or motion changed, we don't need to wipe the whole stateful engine
+            if req_params["min_amplitude"] != current_config.get("min_amplitude") or \
+               req_params["min_motion"] != current_config.get("min_motion"):
+                
+                state_obj.zigzag_engine.update_params(
+                    min_amplitude=req_params["min_amplitude"],
+                    min_motion=req_params["min_motion"]
+                )
+                state_obj.zigzag_config["min_amplitude"] = req_params["min_amplitude"]
+                state_obj.zigzag_config["min_motion"] = req_params["min_motion"]
 
         # 2. Run stateful calculation (updates internal buffers)
         # O(1) Optimization: Always use incremental mode
