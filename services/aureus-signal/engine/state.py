@@ -123,7 +123,8 @@ class SymbolState:
         self.vol_sma_20 = data.get('vol_sma_20', 1000.0)
         self.htf_trend = data.get('htf_trend', "NEUTRAL")
         self.market_regime = data.get('market_regime', "SIDEWAYS")
-        self.t_map = data.get('t_map', {})
+        raw_t_map = data.get('t_map', {})
+        self.t_map = {int(k): v for k, v in raw_t_map.items()}
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes current state for dashboard/UI consumption."""

@@ -16,19 +16,38 @@ class StructureSignal(BaseSignal):
     def __init__(self):
         super().__init__("Market Structure Processor (MQL5 Parity)")
 
-    def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
-        if len(df) < 5 or not state_obj.swing_points: 
+    def calculate(self, df: pd.DataFrame, state_obj: 'SymbolState', **kwargs) -> Optional[Dict[str, Any]]:
+        # --- Performance Optimization (Story 3.2: Lazy Incremental t_map) ---
+        # 1. Initialize t_map if not present
+        if not hasattr(state_obj, 't_map'):
+            state_obj.t_map = {}
+            
+        t_map = state_obj.t_map
+        t_values = df['t'].values.astype(int) # Pre-convert to int array for faster access
+        df_len = len(df)
+        
+        # 2. Check for stale cache (Sliding Window or Window Mismatch)
+        # Rebuild if empty, or if index 0 doesn't match df start
+        is_stale = (not t_map or 
+                   t_values[0] not in t_map or 
+                   t_map[t_values[0]] != 0)
+                   
+        if is_stale:
+            # Full Rebuild O(N)
+            state_obj.t_map = {t: i for i, t in enumerate(t_values)}
+            t_map = state_obj.t_map
+        else:
+            # Incremental Update O(M) where M is new candles
+            current_len = len(t_map)
+            if current_len < df_len:
+                for i in range(current_len, df_len):
+                    t_map[t_values[i]] = i
+                    
+        if df_len < 5 or not state_obj.swing_points: 
             return None
             
         points = state_obj.swing_points
         nPoints = len(points)
-        
-        # --- Performance Optimization ---
-        # Generate timestamp to integer positional index mapping once per cycle.
-        # This replaces the old caching which became stale when len(df) was 
-        # constant in a rolling window.
-        t_values = df['t'].values
-        t_map = {int(t): i for i, t in enumerate(t_values)}
         
         # Pivot-Centric Scan: Iterate through every historical pivot
         # Check if it has been broken by subsequent price action
