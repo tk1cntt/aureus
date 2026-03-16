@@ -7,10 +7,10 @@ development_status:
   1-1-sequenced-logging-gap-detector: in-progress
   epic-2: in-progress
   2-1-zigzag-ob-ib-matrix-implementation: done
-  epic-3: in-progress
-  3-1-persistent-time-map-storage: review
+  epic-3: done
+  3-1-persistent-time-map-storage: done
   3-2-lazy-incremental-t-map-update: done
-  3-3-performance-parity-validation: backlog
+  3-3-performance-parity-validation: done
   epic-4: backlog
   4-1-fast-path-mitigation-detection: backlog
   4-2-conditional-historical-sweep: backlog

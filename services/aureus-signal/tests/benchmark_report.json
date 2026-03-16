@@ -1,0 +1,34 @@
+{
+    "timestamp": "2026-03-16T20:52:04.734830",
+    "golden_hash": "3eb91697aa95539dfc5b8dec9e325f1e705068e0a00b11f92737543ee138e1dd",
+    "total_duration_s": 15.340692520141602,
+    "total_candles": 10000,
+    "avg_latency_ms": 1.5340692520141601,
+    "symbol_metrics": {
+        "XAUUSD": {
+            "duration_s": 2.834306240081787,
+            "candles": 2000,
+            "latency_ms_per_candle": 1.4171531200408936
+        },
+        "BTCUSD": {
+            "duration_s": 2.8727779388427734,
+            "candles": 2000,
+            "latency_ms_per_candle": 1.4363889694213867
+        },
+        "ETHUSD": {
+            "duration_s": 2.9772915840148926,
+            "candles": 2000,
+            "latency_ms_per_candle": 1.4886457920074463
+        },
+        "EURUSD": {
+            "duration_s": 3.02009654045105,
+            "candles": 2000,
+            "latency_ms_per_candle": 1.510048270225525
+        },
+        "GBPUSD": {
+            "duration_s": 3.6362202167510986,
+            "candles": 2000,
+            "latency_ms_per_candle": 1.8181101083755493
+        }
+    }
+}
