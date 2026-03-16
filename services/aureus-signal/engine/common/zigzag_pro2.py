@@ -427,7 +427,7 @@ class ZigZagPro:
         """
         rates_total = len(df)
         last_t = df.iloc[-1]['t'] if rates_total > 0 else '0'
-        logger.info(f"[t={last_t}] [{timeframe}] [update] 1... Processing ZZ update rates_total={rates_total} incremental={incremental} last_t={last_t}")
+        logger.debug(f"[t={last_t}] [{timeframe}] [update] 1... Processing ZZ update rates_total={rates_total} incremental={incremental} last_t={last_t}")
         if rates_total == 0:
             return {"up": [], "dn": [], "type": []}
 

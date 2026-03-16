@@ -53,38 +53,60 @@ class StructureSignal(BaseSignal):
         points = state_obj.swing_points
         nPoints = len(points)
         
-        # Pivot-Centric Scan: Iterate through every historical pivot
-        # Check if it has been broken by subsequent price action
+        # Optimization: Only check the latest bar if we are in incremental mode
+        # to avoid O(N*P) where N is candles and P is pivots.
         new_signals = []
+        latest_candle = df.iloc[-1]
+        latest_t = int(latest_candle['t'])
+        latest_h = float(latest_candle['h'])
+        latest_l = float(latest_candle['l'])
+        latest_c = float(latest_candle['c'])
+
         for i in range(nPoints):
             p = points[i]
             if p.get('is_choch'): continue
-            
-            # User Rule: Only HH and LL swing points trigger CHOCH on breach.
-            # (LH and HL are considered internal structure and ignored for CHOCH).
-            if p.get('type') not in ["HH", "LL"]:
-                continue
+            if p.get('type') not in ["HH", "LL"]: continue
             
             is_bullish = p['is_high']
+            pivot_price = p['price']
             
-            # Using i as both starting scan index and pivot index
+            # --- Fast-Path CHOCH (Incremental) ---
+            # If we already checked this pivot up to latest_t - buffer, only check the current candle
+            # Dynamic buffer based on timeframe (default 1 candle duration)
+            tf_seconds = 60
+            if 'tf' in df.columns:
+                tf_map = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
+                tf_seconds = tf_map.get(df['tf'].iloc[-1], 60)
+            
+            last_checked_t = p.get('last_choch_check_t', 0)
+            if not is_stale and last_checked_t >= (latest_t - tf_seconds): 
+                isBreak = (latest_h > pivot_price) if is_bullish else (latest_l < pivot_price)
+                if isBreak:
+                    self._log(logger, "DEBUG", state_obj.symbol, latest_t, "calculate", f"CHOCH Fast-Path HIT for pivot {p['t']}")
+                    signal = self._process_choch(df, points, i, i, is_bullish, state_obj=state_obj, t_map=t_map)
+                    if signal:
+                        new_signals.append(signal)
+                        tag = signal.get('tag')
+                        if tag: state_obj.transient_signals[tag] = signal
+                p['last_choch_check_t'] = latest_t
+                continue
+
+            # --- Full-Scan Fallback (Backfill or First time) ---
             signal = self._process_choch(df, points, i, i, is_bullish, state_obj=state_obj, t_map=t_map)
             if signal:
                 new_signals.append(signal)
-                # Also store in transient_signals for consumer outlets
                 tag = signal.get('tag')
-                if tag:
-                    if tag not in [s.get('tag') for s in state_obj.signal_history if s.get('t') == signal.get('breakout_t')]:
-                        state_obj.transient_signals[tag] = signal
+                if tag: state_obj.transient_signals[tag] = signal
+            p['last_choch_check_t'] = latest_t
 
-        self._verify_mitigations(df, state_obj)
+        self._verify_mitigations(df, state_obj, latest_h, latest_l, latest_c)
 
         if new_signals:
             return new_signals[-1]
             
         return None
 
-    def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any):
+    def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any, latest_h: float, latest_l: float, latest_c: float):
         """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""
         if not hasattr(state_obj, 'obs') or not state_obj.obs:
             return
@@ -105,9 +127,9 @@ class StructureSignal(BaseSignal):
             # --- Fast-Path Optimization (Story 4.1) ---
             # First, check only the latest candle. If no touch, we skip historical sweep.
             if is_bullish:
-                last_candle_touch = (float(df.iloc[-1]['l']) <= ob['top'])
+                last_candle_touch = (latest_l <= ob['top'])
             else:
-                last_candle_touch = (float(df.iloc[-1]['h']) >= ob['bottom'])
+                last_candle_touch = (latest_h >= ob['bottom'])
             
             if not last_candle_touch:
                 # Telemetry: Fast-Path Miss (No touch detected)

@@ -19,11 +19,10 @@ class BaseSignal(ABC):
         pass
 
     def _log(self, logger, level, symbol, t, method, message):
-        """
-        Standardized log formatter for all signals.
-        Format: [t={t}] [{symbol}] [{method}] {message}
-        """
+        """Standardized log formatter with performance check."""
+        lvl_num = getattr(logging, level.upper(), logging.DEBUG)
+        if not logger.isEnabledFor(lvl_num):
+            return
+            
         prefix = f"[t={t}] [{symbol}] [{method}]"
-        # Map levels to logger methods
-        log_method = getattr(logger, level.lower())
-        log_method(f"{prefix} {message}")
+        logger.log(lvl_num, f"{prefix} {message}")

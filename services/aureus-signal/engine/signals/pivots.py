@@ -66,7 +66,12 @@ class PivotSignal(BaseSignal):
                   redis_client: Any = None, symbol: str = None) -> Optional[Dict[str, Any]]:
         # Find if this symbol's last received T is in this DF
         if not df.empty:
-            last_t = int(df.iloc[-1]['t'])
+            last_candle_values = df.values[-1]
+            # Assumes columns are in order: t, o, h, l, c, v
+            # If not sure, we can use column indexing. 
+            # In our benchmark/env, typical order is ['t', 'o', 'h', 'l', 'c', 'v']
+            # Let's be safer but still fast:
+            last_t = int(df['t'].values[-1])
             self._log(logger, "DEBUG", symbol, last_t, "calculate", "1... Entering PivotSignal.calculate")
 
         # --- Story 5.1: Stable Engine Management ---
@@ -83,7 +88,7 @@ class PivotSignal(BaseSignal):
 
         # Handle dynamic amplitude if percentage is used
         if self.min_amplitude_pct is not None and not df.empty:
-            last_close = float(df.iloc[-1]['c'])
+            last_close = float(df['c'].values[-1])
             dynamic_amp_points = int(round((last_close * self.min_amplitude_pct / 100) / self.point))
             req_params["min_amplitude"] = max(1, dynamic_amp_points)
 
@@ -135,7 +140,8 @@ class PivotSignal(BaseSignal):
         )
 
         # 3. Extract ALL pivots from buffers
-        raw_pivots = get_confirmed_pivots(buffers['up'], buffers['dn'], buffers['type'], df['t'].tolist())
+        # Performance: Use values[-1] or tolist() sparingly
+        raw_pivots = get_confirmed_pivots(buffers['up'], buffers['dn'], buffers['type'], df['t'].values)
         if not raw_pivots:
             return None
 

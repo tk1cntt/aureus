@@ -4,9 +4,11 @@ import os
 import sys
 import time
 import hashlib
+import numpy as np
 import cProfile
 import pstats
 from io import StringIO
+from datetime import datetime
 
 # Ensure service path is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -18,10 +20,16 @@ from engine.signals.pivots import PivotSignal
 GOLDEN_DATA_PATH = os.path.join(os.path.dirname(__file__), "benchmark_data_golden.json")
 OUTPUT_REPORT_PATH = os.path.join(os.path.dirname(__file__), "benchmark_report.json")
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer): return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.ndarray): return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
 def generate_golden_hash(results):
     """Generates a stable SHA256 hash from the results dictionary."""
-    # Convert to sorted JSON string to ensure stability
-    result_str = json.dumps(results, sort_keys=True)
+    result_str = json.dumps(results, sort_keys=True, cls=NumpyEncoder)
     return hashlib.sha256(result_str.encode()).hexdigest()
 
 def run_benchmark():
@@ -38,6 +46,7 @@ def run_benchmark():
     # Configuration for StructureSignal - mimicking local production setup
     # Note: Using default params for StructureSignal
     structure_signal = StructureSignal()
+    pivot_signal = PivotSignal(zigzag_engine="pro2")
     
     full_results = {}
     performance_metrics = {}
@@ -46,7 +55,8 @@ def run_benchmark():
     total_candles_processed = 0
 
     for symbol, candles in all_data.items():
-        print(f"Benchmarking {symbol} ({len(candles)} candles)...")
+        candles = candles[:2000]
+        print(f"\nBenchmarking {symbol} ({len(candles)} candles)...")
         symbol_start_t = time.time()
         
         # We collect hashes of swing points and OBs at each step or at the end
@@ -59,7 +69,7 @@ def run_benchmark():
             df, state = wm.update(symbol, candle_str)
             
             if df is not None and len(df) >= 5:
-                # Calculate Structure
+                pivot_signal.calculate(df, state, redis_client=None, symbol=symbol)
                 structure_signal.calculate(df, state, redis_client=None, symbol=symbol)
             
             total_candles_processed += 1
@@ -98,6 +108,8 @@ def run_benchmark():
             "candles": len(candles),
             "latency_ms_per_candle": (duration * 1000) / len(candles) if len(candles) > 0 else 0
         }
+        
+        print(f"[{symbol}] Summary: {len(swing_points)} swing points, {len(active_obs)} active OBs.")
 
     global_end_t = time.time()
     total_duration = global_end_t - global_start_t
@@ -124,23 +136,21 @@ def run_benchmark():
     print("="*40)
 
 if __name__ == "__main__":
-    from datetime import datetime
     # Use cProfile to find bottlenecks
-    pr = cProfile.Profile()
-    pr.enable()
+    # pr = cProfile.Profile()
+    # pr.enable()
     
     run_benchmark()
     
-    pr.disable()
-    s = StringIO()
-    # Sort by cumulative time to see high-level bottlenecks, 
-    # and then tottime to see expensive leaf functions
-    ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
-    ps.print_stats(50) 
+    # pr.disable()
+    # s = StringIO()
+    # ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
+    # ps.print_stats(30) 
+    # print(s.getvalue())
     
-    bottleneck_content = s.getvalue()
-    bottleneck_path = os.path.join(os.path.dirname(__file__), "bottlenecks.txt")
-    with open(bottleneck_path, "w") as f:
-        f.write(bottleneck_content)
+    # bottleneck_content = s.getvalue()
+    # bottleneck_path = os.path.join(os.path.dirname(__file__), "bottlenecks.txt")
+    # with open(bottleneck_path, "w") as f:
+    #     f.write(bottleneck_content)
     
-    print(f"\nTop 50 Bottlenecks saved to {bottleneck_path}")
+    # print(f"\nTop 50 Bottlenecks saved to {bottleneck_path}")
