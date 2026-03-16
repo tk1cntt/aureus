@@ -34,14 +34,18 @@ class StructureSignal(BaseSignal):
                    
         if is_stale:
             # Full Rebuild O(N)
+            self._log(logger, "DEBUG", state_obj.symbol, t_values[-1], "calculate", "t_map STALE - full rebuild triggered")
             state_obj.t_map = {t: i for i, t in enumerate(t_values)}
             t_map = state_obj.t_map
         else:
             # Incremental Update O(M) where M is new candles
             current_len = len(t_map)
             if current_len < df_len:
+                self._log(logger, "DEBUG", state_obj.symbol, t_values[-1], "calculate", f"t_map incremental update: {df_len - current_len} new bars")
                 for i in range(current_len, df_len):
                     t_map[t_values[i]] = i
+            else:
+                self._log(logger, "DEBUG", state_obj.symbol, t_values[-1], "calculate", "t_map cache HIT")
                     
         if df_len < 5 or not state_obj.swing_points: 
             return None
@@ -96,9 +100,28 @@ class StructureSignal(BaseSignal):
             
             if latest_t <= last_check_t: continue
             
+            is_bullish = (ob['ob_type'] == 'BULLISH')
+            
+            # --- Fast-Path Optimization (Story 4.1) ---
+            # First, check only the latest candle. If no touch, we skip historical sweep.
+            if is_bullish:
+                last_candle_touch = (float(df.iloc[-1]['l']) <= ob['top'])
+            else:
+                last_candle_touch = (float(df.iloc[-1]['h']) >= ob['bottom'])
+            
+            if not last_candle_touch:
+                # Telemetry: Fast-Path Miss (No touch detected)
+                self._log(logger, "DEBUG", state_obj.symbol, latest_t, "_verify_mitigations", f"OB {ob['t_start']} Fast-Path: No touch")
+                ob['last_check_t'] = latest_t
+                continue
+            
             # --- Vectorized Historical Sweep (Story 4.2) ---
-            # Filter candles since last check
-            search_df = df[df['t'] > last_check_t]
+            # If the latest candle is the one that touched, we need to sweep the full range from last_check_t
+            # to ensure we catch the *first* touch accurately.
+            self._log(logger, "DEBUG", state_obj.symbol, latest_t, "_verify_mitigations", f"OB {ob['t_start']} touched current candle - full sweep triggered")
+            
+            # Full sweep for precision
+            search_df = df[(df['t'] > last_check_t) & (df['t'] <= latest_t)]
             if search_df.empty: continue
             
             is_bullish = (ob['ob_type'] == 'BULLISH')

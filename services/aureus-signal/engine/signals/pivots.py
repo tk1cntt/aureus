@@ -4,7 +4,7 @@ import pandas as pd
 import asyncio
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-pivots")
+logger = logging.getLogger("aureus-signal.pivots")
 
 # Use the strict 1:1 MQL5 port (zigzag_pro2.py)
 from ..common.zigzag_pro2 import ZigZagPro, get_confirmed_pivots, label_pivots_pro
@@ -66,8 +66,8 @@ class PivotSignal(BaseSignal):
                   redis_client: Any = None, symbol: str = None) -> Optional[Dict[str, Any]]:
         # Find if this symbol's last received T is in this DF
         if not df.empty:
-            last_val = df.iloc[-1]['t']
-            logger.debug(f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate {symbol} last_t={last_val}")
+            last_t = int(df.iloc[-1]['t'])
+            self._log(logger, "DEBUG", symbol, last_t, "calculate", "1... Entering PivotSignal.calculate")
 
         # --- Story 5.1: Stable Engine Management ---
         # 1. Determine current required parameters
@@ -98,7 +98,8 @@ class PivotSignal(BaseSignal):
                      (req_params["use_smaller_tf"] != current_config.get("use_smaller_tf"))
 
         if must_reinit:
-            logger.info(f"[{symbol}] Initializing ZigZag engine: {self.zigzag_engine_name} with params: {req_params}")
+            self._log(logger, "INFO", symbol, last_t, "calculate", 
+                     f"Initializing ZigZag engine: {self.zigzag_engine_name} with params: {req_params}")
             engine_cls = self._engine_registry.get(self.zigzag_engine_name, ZigZagPro)
             
             state_obj.zigzag_engine = engine_cls(
@@ -115,6 +116,9 @@ class PivotSignal(BaseSignal):
             # If only amp or motion changed, we don't need to wipe the whole stateful engine
             if req_params["min_amplitude"] != current_config.get("min_amplitude") or \
                req_params["min_motion"] != current_config.get("min_motion"):
+                
+                self._log(logger, "INFO", symbol, last_t, "calculate", 
+                         f"Hot-updating ZigZag params: amp={req_params['min_amplitude']}, motion={req_params['min_motion']}")
                 
                 state_obj.zigzag_engine.update_params(
                     min_amplitude=req_params["min_amplitude"],
@@ -212,7 +216,8 @@ class PivotSignal(BaseSignal):
                 if stable_pivot['t'] > last_db_time:
                     # Sync to Writer via robust stream
                     stream_key = f"aureus:stream:{symbol}:swing_point"
-                    logger.info(f"[t={stable_pivot['t']}] [{symbol}] [calculate] 2... PivotSignal sync stable pivot {symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}")
+                    self._log(logger, "INFO", symbol, stable_pivot['t'], "calculate", 
+                             f"2... PivotSignal sync stable pivot price={stable_pivot['price']} type={stable_pivot.get('type')}")
                     asyncio.create_task(redis_client.xadd(stream_key, {
                         "t": str(stable_pivot['t']),
                         "price": str(stable_pivot['price']),
