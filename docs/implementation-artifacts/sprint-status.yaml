@@ -7,6 +7,18 @@ development_status:
   1-1-sequenced-logging-gap-detector: in-progress
   epic-2: in-progress
   2-1-zigzag-ob-ib-matrix-implementation: done
+  epic-3: in-progress
+  3-1-persistent-time-map-storage: ready-for-dev
+  3-2-lazy-incremental-t-map-update: backlog
+  3-3-performance-parity-validation: backlog
+  epic-4: backlog
+  4-1-fast-path-mitigation-detection: backlog
+  4-2-conditional-historical-sweep: backlog
+  4-3-scalability-verification: backlog
+  epic-5: backlog
+  5-1-stable-zigzag-engine-parameter: backlog
+  5-2-standardized-signal-logging: backlog
+  5-3-final-phase-2-integration: backlog
 
 status_definitions:
   backlog: "Story identified but no implementation plan contexted"

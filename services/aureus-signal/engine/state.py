@@ -44,6 +44,9 @@ class SymbolState:
         # Transient Signals (Cleared every candle cycle)
         self.transient_signals: Dict[str, Any] = {}
         
+        # Optimization Storage
+        self.t_map: Dict[int, int] = {}
+        
         # Performance Tracking
         self.net_pnl: float = 0.0
         self.win_count: int = 0
@@ -120,6 +123,7 @@ class SymbolState:
         self.vol_sma_20 = data.get('vol_sma_20', 1000.0)
         self.htf_trend = data.get('htf_trend', "NEUTRAL")
         self.market_regime = data.get('market_regime', "SIDEWAYS")
+        self.t_map = data.get('t_map', {})
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes current state for dashboard/UI consumption."""
@@ -137,6 +141,7 @@ class SymbolState:
             "sentiment": self.sentiment,
             "narrative": self.narrative,
             "debate_log": self.debate_log,
+            "t_map": self.t_map,
             "active_orders": [o for o in self.simulated_orders if o['status'] in ('ACTIVE', 'PENDING')],
             "closed_orders": sorted([o for o in self.simulated_orders if o['status'] == 'CLOSED'], key=lambda x: x.get('close_time', 0), reverse=True)[:10]
         }
