@@ -13,7 +13,7 @@ development_status:
   3-3-performance-parity-validation: done
   epic-4: backlog
   4-1-fast-path-mitigation-detection: done
-  4-2-conditional-historical-sweep: backlog
+  4-2-conditional-historical-sweep: done
   4-3-scalability-verification: backlog
   epic-5: backlog
   5-1-stable-zigzag-engine-parameter: backlog

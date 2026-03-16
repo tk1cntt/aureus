@@ -86,98 +86,75 @@ class StructureSignal(BaseSignal):
             return
             
         latest_t = int(df.iloc[-1]['t'])
-        latest_h = float(df.iloc[-1]['h'])
-        latest_l = float(df.iloc[-1]['l'])
         
         for ob in state_obj.obs:
             if ob.get('mitigated'): continue
             
             t_breakout = ob.get('t_breakout', 0)
-            if latest_t <= t_breakout: continue
+            # We must check from max(t_breakout + 1, last_check_t + 1) to latest_t
+            last_check_t = ob.get('last_check_t', t_breakout)
+            
+            if latest_t <= last_check_t: continue
+            
+            # --- Vectorized Historical Sweep (Story 4.2) ---
+            # Filter candles since last check
+            search_df = df[df['t'] > last_check_t]
+            if search_df.empty: continue
             
             is_bullish = (ob['ob_type'] == 'BULLISH')
             
-            # --- Fast-Path Check (Story 4.1) ---
-            # Check only the LATEST candle first. If no touch, skip the expensive scan.
-            # (Unless the OB was JUST created, then we must sweep initially - Handled by Story 4.2)
-            is_latest_touch = (latest_l <= ob['top']) if is_bullish else (latest_h >= ob['bottom'])
-            
-            if not is_latest_touch:
-                continue
+            if is_bullish:
+                # Vectorized touch detection
+                touch_mask = search_df['l'] <= ob['top']
+            else:
+                touch_mask = search_df['h'] >= ob['bottom']
                 
-            # --- Slow-Path: Historical Sweep ---
-            # Fallback to precise scan to find the EXACT first touch time.
-            search_df = df[df['t'] > t_breakout]
-            if search_df.empty: continue
-            
-            for _, candle in search_df.iterrows():
-                c_t = int(candle['t'])
-                c_h = float(candle['h'])
-                c_l = float(candle['l'])
+            if touch_mask.any():
+                # Found at least one touch! Get the FIRST one.
+                first_touch_row = search_df[touch_mask].iloc[0]
+                c_t = int(first_touch_row['t'])
+                c_h = float(first_touch_row['h'])
+                c_l = float(first_touch_row['l'])
+                c_c = float(first_touch_row['c'])
                 
+                ob['mitigated'] = True
+                ob['t_mitigation'] = c_t
+                
+                # Rejection Quality
+                ob_zone_height = ob['top'] - ob['bottom']
                 if is_bullish:
-                    if c_l <= ob['top']:
-                        ob['mitigated'] = True
-                        ob['t_mitigation'] = c_t
-                        
-                        # Rejection Quality (Wicking)
-                        ob_zone_height = ob['top'] - ob['bottom']
-                        penetration = ob['top'] - c_l
-                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
-                        # Evaluation: Closed out of zone? (Rejection strength)
-                        is_rejection = candle['c'] > ob['top']
-                        
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BULLISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
+                    penetration = ob['top'] - c_l
+                    is_rejection = c_c > ob['top']
+                    is_hard_break = c_c < ob['bottom']
+                else:
+                    penetration = c_h - ob['bottom']
+                    is_rejection = c_c < ob['bottom']
+                    is_hard_break = c_c > ob['top']
+                    
+                pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
+                
+                state_obj.log_actor(c_t, {
+                    "type": "OB_TOUCH",
+                    "ob_type": ob['ob_type'],
+                    "ob_start": ob['t_start'],
+                    "is_hard_break": is_hard_break,
+                    "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                    "candle": {
+                        "o": float(first_touch_row['o']), "h": c_h,
+                        "l": c_l, "c": c_c
+                    }
+                })
 
-                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bull_mitigated'] = ob
-                        break
-                else: # BEARISH
-                    if c_h >= ob['bottom']:
-                        ob['mitigated'] = True
-                        ob['t_mitigation'] = c_t
-                        
-                        # Rejection Quality
-                        ob_zone_height = ob['top'] - ob['bottom']
-                        penetration = c_h - ob['bottom']
-                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
-                        is_rejection = candle['c'] < ob['bottom']
-
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BEARISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] > ob['top'], # Closed above zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
-
-                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bear_mitigated'] = ob
-                        break
+                logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] {ob['ob_type']} OB ({ob['t_start']}) MITIGATED at {c_t}")
+                
+                if c_t == latest_t:
+                    state_obj.request_ai_update("OB_INTERACTION")
+                    if hasattr(state_obj, 'transient_signals'):
+                        signal_key = 'ob_bull_mitigated' if is_bullish else 'ob_bear_mitigated'
+                        state_obj.transient_signals[signal_key] = ob
+            else:
+                # No touch in this range, update last_check_t to latest_t
+                ob['last_check_t'] = latest_t
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""
