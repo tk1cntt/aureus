@@ -86,6 +86,8 @@ class StructureSignal(BaseSignal):
             return
             
         latest_t = int(df.iloc[-1]['t'])
+        latest_h = float(df.iloc[-1]['h'])
+        latest_l = float(df.iloc[-1]['l'])
         
         for ob in state_obj.obs:
             if ob.get('mitigated'): continue
@@ -93,11 +95,20 @@ class StructureSignal(BaseSignal):
             t_breakout = ob.get('t_breakout', 0)
             if latest_t <= t_breakout: continue
             
-            # Historical Sweep: Find the first candle AFTER breakout that touches the OB
+            is_bullish = (ob['ob_type'] == 'BULLISH')
+            
+            # --- Fast-Path Check (Story 4.1) ---
+            # Check only the LATEST candle first. If no touch, skip the expensive scan.
+            # (Unless the OB was JUST created, then we must sweep initially - Handled by Story 4.2)
+            is_latest_touch = (latest_l <= ob['top']) if is_bullish else (latest_h >= ob['bottom'])
+            
+            if not is_latest_touch:
+                continue
+                
+            # --- Slow-Path: Historical Sweep ---
+            # Fallback to precise scan to find the EXACT first touch time.
             search_df = df[df['t'] > t_breakout]
             if search_df.empty: continue
-            
-            is_bullish = (ob['ob_type'] == 'BULLISH')
             
             for _, candle in search_df.iterrows():
                 c_t = int(candle['t'])

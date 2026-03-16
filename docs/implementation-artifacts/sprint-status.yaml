@@ -12,7 +12,7 @@ development_status:
   3-2-lazy-incremental-t-map-update: done
   3-3-performance-parity-validation: done
   epic-4: backlog
-  4-1-fast-path-mitigation-detection: backlog
+  4-1-fast-path-mitigation-detection: done
   4-2-conditional-historical-sweep: backlog
   4-3-scalability-verification: backlog
   epic-5: backlog
