@@ -46,7 +46,11 @@ class SymbolState:
         
         # Optimization Storage
         self.t_map: Dict[int, int] = {}
-        
+
+        # Signal Identity Tracking
+        self.signal_seq: int = 0
+        self.current_run_id: str = "live"
+
         # Performance Tracking
         self.net_pnl: float = 0.0
         self.win_count: int = 0

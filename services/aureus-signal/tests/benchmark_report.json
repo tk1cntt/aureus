@@ -1,34 +1,34 @@
 {
-    "timestamp": "2026-03-16T20:52:04.734830",
-    "golden_hash": "3eb91697aa95539dfc5b8dec9e325f1e705068e0a00b11f92737543ee138e1dd",
-    "total_duration_s": 15.340692520141602,
+    "timestamp": "2026-03-17T00:13:24.451019",
+    "golden_hash": "968e030882ad889394daada09d80b2c7080bdd322e059b3e81c85cdaba8b7b56",
+    "total_duration_s": 739.1670439243317,
     "total_candles": 10000,
-    "avg_latency_ms": 1.5340692520141601,
+    "avg_latency_ms": 73.91670439243316,
     "symbol_metrics": {
         "XAUUSD": {
-            "duration_s": 2.834306240081787,
+            "duration_s": 215.71885299682617,
             "candles": 2000,
-            "latency_ms_per_candle": 1.4171531200408936
+            "latency_ms_per_candle": 107.85942649841309
         },
         "BTCUSD": {
-            "duration_s": 2.8727779388427734,
+            "duration_s": 284.42924213409424,
             "candles": 2000,
-            "latency_ms_per_candle": 1.4363889694213867
+            "latency_ms_per_candle": 142.21462106704712
         },
         "ETHUSD": {
-            "duration_s": 2.9772915840148926,
+            "duration_s": 204.63911199569702,
             "candles": 2000,
-            "latency_ms_per_candle": 1.4886457920074463
+            "latency_ms_per_candle": 102.31955599784851
         },
         "EURUSD": {
-            "duration_s": 3.02009654045105,
+            "duration_s": 26.050915479660034,
             "candles": 2000,
-            "latency_ms_per_candle": 1.510048270225525
+            "latency_ms_per_candle": 13.025457739830017
         },
         "GBPUSD": {
-            "duration_s": 3.6362202167510986,
+            "duration_s": 8.326411247253418,
             "candles": 2000,
-            "latency_ms_per_candle": 1.8181101083755493
+            "latency_ms_per_candle": 4.163205623626709
         }
     }
 }
