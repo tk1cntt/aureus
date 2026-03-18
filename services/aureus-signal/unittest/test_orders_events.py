@@ -88,6 +88,35 @@ def test_order_opened_event():
     assert len(state.simulated_orders) == 1, "Order should be created"
 
 
+def test_order_open_payload_contains_bridge_contract_fields():
+    """Task 3: outbound ORDER_OPEN payload must preserve bridge contract keys."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger = {
+        'strategy_id': 9,
+        'strategy': 'test_bull_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'BUY',
+        'exit_config': {},
+    }
+
+    run(tm.process_triggers("XAUUSD", [trigger], state, execution_mode="nautilus"))
+
+    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
+    assert order_open_streams, "Expected ORDER_OPEN stream event"
+
+    _, payload = order_open_streams[-1]
+    order_data = json.loads(payload['data'])
+
+    assert order_data['trace_id'] == 'XAUUSD:9:1709300000'
+    assert order_data['execution_mode'] == 'nautilus'
+    assert isinstance(order_data.get('entry_price'), float)
+    assert order_data.get('sl') is not None
+    assert order_data.get('tp') is not None
+
+
 def test_sl_hit_event():
     """AC1: SL_HIT appended when a BUY order hits stop loss."""
     r = FakeRedis()
@@ -276,6 +305,7 @@ if __name__ == "__main__":
     tests = [
         test_init_has_last_tick_events,
         test_order_opened_event,
+        test_order_open_payload_contains_bridge_contract_fields,
         test_sl_hit_event,
         test_tp_hit_event,
         test_clear_events_externally,

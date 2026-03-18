@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 
 REQUIRED_EVENT_FIELDS = ("trace_id", "symbol", "event_time")
@@ -61,6 +61,14 @@ def _to_unix_seconds(value: Any) -> int:
     raise ValueError(f"Unsupported timestamp value: {value!r}")
 
 
+def _to_optional_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    if value is None:
+        return default
+    if isinstance(value, str) and not value.strip():
+        return default
+    return float(value)
+
+
 def validate_required_fields(payload: Dict[str, Any], required_fields: Iterable[str] = REQUIRED_EVENT_FIELDS) -> None:
     missing = [field for field in required_fields if payload.get(field) in (None, "")]
     if missing:
@@ -90,6 +98,8 @@ def map_order_intent(order_payload: Dict[str, Any]) -> Dict[str, Any]:
         "type": TYPE_MAP.get(str(order_payload.get("type", "MARKET")).upper(), "MARKET"),
         "quantity": float(order_payload.get("quantity", 1.0)),
         "entry_price": float(order_payload.get("entry_price", 0.0)),
+        "sl": _to_optional_float(order_payload.get("sl")),
+        "tp": _to_optional_float(order_payload.get("tp")),
         "strategy_id": order_payload.get("strategy_id"),
         "execution_mode": order_payload.get("execution_mode", "simulated"),
     }
@@ -109,11 +119,18 @@ def build_execution_event(intent: Dict[str, Any], adapter_report: Dict[str, Any]
         "side": intent["side"],
         "type": intent["type"],
         "quantity": float(adapter_report.get("quantity", intent.get("quantity", 1.0))),
+        "entry_price": _to_optional_float(adapter_report.get("entry_price", intent.get("entry_price", 0.0)), 0.0),
         "fill_price": float(adapter_report.get("fill_price", intent.get("entry_price", 0.0))),
+        "sl": _to_optional_float(adapter_report.get("sl", intent.get("sl"))),
+        "tp": _to_optional_float(adapter_report.get("tp", intent.get("tp"))),
+        "realized_pnl": _to_optional_float(adapter_report.get("realized_pnl"), 0.0),
+        "unrealized_pnl": _to_optional_float(adapter_report.get("unrealized_pnl"), 0.0),
+        "position_id": adapter_report.get("position_id"),
         "adapter_order_id": adapter_report.get("adapter_order_id"),
         "rejection_reason": adapter_report.get("rejection_reason"),
         "execution_mode": intent.get("execution_mode", "simulated"),
         "raw_status": adapter_report.get("status"),
+        "event_version": 2,
     }
 
     validate_required_fields(execution_event)
