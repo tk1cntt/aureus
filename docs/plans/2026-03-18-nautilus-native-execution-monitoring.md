@@ -8,13 +8,17 @@
 
 **Tech Stack:** Python, Redis Streams, PostgreSQL/TimescaleDB, Docker Compose, Prometheus, Grafana.
 
-## Status Update (2026-03-18 22:43 +07)
+## Status Update (2026-03-19 00:28 +07)
 
 - ✅ **Task 1 complete**: execution contract v2 fields + bridge mapper/idempotency tests updated and passing.
 - ✅ **Task 2 complete**: bridge supports `NAUTILUS_ADAPTER_MODE=simulated|stream`, lifecycle stream ingestion, and transition-safe idempotency.
 - ✅ **Task 3 complete**: signal `ORDER_OPEN` payload includes `trace_id`, `entry_price`, `sl`, `tp`, `execution_mode`.
 - ✅ **Task 4 complete**: compose/runbook stream-mode toggles wired and focused bridge verification passed.
-- ⏳ **Next in queue**: Task 5 (position/account snapshot persistence), then Task 6-7 (business metrics + Grafana panels), then Task 8-9 (v2 E2E regression + rollout controls).
+- ✅ **Task 5 complete**: `aureus_position_snapshots` and `aureus_account_snapshots` schema tables added, stream insertion + idempotency implemented and verified.
+- ✅ **Task 6-7 complete**: Prometheus exporter expanded to capture missing SL/TP and PnL metrics; alerts added; Grafana `aureus_nautilus_flow.json` updated with new panels.
+- ✅ **Task 8-9 complete**: v2 E2E regression script `test_nautilus_redis_flow_v2.py` validates execution mode, positional snapshots, and end-to-end integration successfully.
+
+**Plan fully executed and verified.**
 
 ---
 

@@ -30,3 +30,12 @@ groups:
         annotations:
           summary: "Bridge metrics exporter is reporting errors"
           description: "Exporter processing errors increased in the last 5 minutes."
+
+      - alert: AureusPnLDrawdown
+        expr: aureus_bridge_unrealized_pnl < -500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Significant unrealized PnL drawdown detected"
+          description: "Unrealized PnL is below -500 for over 5 minutes."

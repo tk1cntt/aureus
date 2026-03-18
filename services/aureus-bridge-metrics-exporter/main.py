@@ -42,6 +42,26 @@ LATENCY_MS = Gauge(
     "Latest matched order->execution latency in milliseconds",
     ["symbol"],
 )
+ORDERS_MISSING_SL_TOTAL = Counter(
+    "aureus_bridge_orders_missing_sl_total",
+    "Total number of orders missing a Stop Loss",
+    ["symbol"],
+)
+ORDERS_MISSING_TP_TOTAL = Counter(
+    "aureus_bridge_orders_missing_tp_total",
+    "Total number of orders missing a Take Profit",
+    ["symbol"],
+)
+UNREALIZED_PNL = Gauge(
+    "aureus_bridge_unrealized_pnl",
+    "Latest unrealized PnL from position snapshots",
+    ["symbol"],
+)
+REALIZED_PNL = Gauge(
+    "aureus_bridge_realized_pnl",
+    "Latest realized PnL from position snapshots",
+    ["symbol"],
+)
 
 
 def _parse_stream_id_ms(stream_id: str) -> Optional[int]:
@@ -90,6 +110,7 @@ def _update_symbol_metrics(
 ) -> Tuple[str, str]:
     order_stream = f"aureus:stream:{symbol}:orders"
     execution_stream = f"aureus:stream:{symbol}:execution"
+    position_stream = f"aureus:stream:{symbol}:positions"
 
     order_entries, next_order_id = _read_new_entries(client, order_stream, last_order_id)
     if order_entries:
@@ -99,6 +120,19 @@ def _update_symbol_metrics(
             entry_ts_ms = _parse_stream_id_ms(entry_id)
             if trace_id and entry_ts_ms is not None:
                 order_stream_ids_by_trace[symbol][trace_id] = entry_ts_ms
+            
+            # Check for missing SL/TP
+            raw_data = fields.get("data", "")
+            if raw_data:
+                try:
+                    data = json.loads(raw_data)
+                    if data.get("type") == "ORDER_OPEN":
+                        if not data.get("sl"):
+                            ORDERS_MISSING_SL_TOTAL.labels(symbol=symbol).inc()
+                        if not data.get("tp"):
+                            ORDERS_MISSING_TP_TOTAL.labels(symbol=symbol).inc()
+                except Exception:
+                    pass
 
     execution_entries, next_execution_id = _read_new_entries(client, execution_stream, last_execution_id)
     if execution_entries:
@@ -119,6 +153,23 @@ def _update_symbol_metrics(
     orders_len = client.xlen(order_stream)
     executions_len = client.xlen(execution_stream)
     BACKLOG_MESSAGES.labels(symbol=symbol).set(max(orders_len - executions_len, 0))
+
+    # Read latest position snapshot for PnL
+    position_entries = client.xrevrange(position_stream, count=1)
+    if position_entries:
+        try:
+            fields = position_entries[0][1]
+            raw_data = fields.get("data", "")
+            if raw_data:
+                data = json.loads(raw_data)
+                upnl = data.get("unrealized_pnl")
+                rpnl = data.get("realized_pnl")
+                if upnl is not None:
+                    UNREALIZED_PNL.labels(symbol=symbol).set(float(upnl))
+                if rpnl is not None:
+                    REALIZED_PNL.labels(symbol=symbol).set(float(rpnl))
+        except Exception as e:
+            logger.debug(f"Failed to parse position for PnL: {e}")
 
     return next_order_id, next_execution_id
 

@@ -116,6 +116,41 @@ CREATE INDEX IF NOT EXISTS idx_execution_events_trace_id ON aureus_execution_eve
 CREATE INDEX IF NOT EXISTS idx_execution_events_symbol_time ON aureus_execution_events (symbol, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_events_status ON aureus_execution_events (status);
 
+-- Position Snapshots Table
+CREATE TABLE IF NOT EXISTS aureus_position_snapshots (
+    event_time        TIMESTAMPTZ      NOT NULL,
+    symbol            TEXT             NOT NULL,
+    position_id       TEXT             NOT NULL,
+    side              TEXT             NOT NULL,
+    qty               DOUBLE PRECISION NOT NULL,
+    avg_entry_price   DOUBLE PRECISION,
+    mark_price        DOUBLE PRECISION,
+    unrealized_pnl    DOUBLE PRECISION,
+    realized_pnl      DOUBLE PRECISION,
+    payload           JSONB            NOT NULL,
+    UNIQUE (position_id, event_time)
+);
+
+SELECT create_hypertable('aureus_position_snapshots', 'event_time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_position_snapshots_symbol_time ON aureus_position_snapshots (symbol, event_time DESC);
+
+-- Account Snapshots Table
+CREATE TABLE IF NOT EXISTS aureus_account_snapshots (
+    event_time        TIMESTAMPTZ      NOT NULL,
+    account_id        TEXT             NOT NULL,
+    equity            DOUBLE PRECISION,
+    balance           DOUBLE PRECISION,
+    margin_used       DOUBLE PRECISION,
+    margin_free       DOUBLE PRECISION,
+    unrealized_pnl    DOUBLE PRECISION,
+    realized_pnl      DOUBLE PRECISION,
+    payload           JSONB            NOT NULL,
+    UNIQUE (account_id, event_time)
+);
+
+SELECT create_hypertable('aureus_account_snapshots', 'event_time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_account_snapshots_id_time ON aureus_account_snapshots (account_id, event_time DESC);
+
 -- ── BACKTEST ISOLATION TABLES ──
 
 -- Backtest Candles (Isolated from Live)

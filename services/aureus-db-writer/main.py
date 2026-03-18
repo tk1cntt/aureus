@@ -51,6 +51,8 @@ class DBWriter:
         self.candle_buffer = []
         self.swing_point_buffer = []
         self.execution_buffer = []
+        self.position_buffer = []
+        self.account_buffer = []
         self.last_flush_time = time.time()
 
     async def connect_redis(self):
@@ -99,6 +101,8 @@ class DBWriter:
             "aureus:stream:*:candle",
             "aureus:stream:*:swing_point",
             "aureus:stream:*:execution",
+            "aureus:stream:*:positions",
+            "aureus:stream:*:account",
         ]
         found_streams = set()
         for pattern in patterns:
@@ -115,7 +119,7 @@ class DBWriter:
             self.known_streams.update(new_streams)
 
     async def process_batch(self):
-        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer:
+        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer:
             return
         async with self.pg_pool.acquire() as conn:
             if self.tick_buffer:
@@ -298,6 +302,130 @@ class DBWriter:
                     await pipe.execute()
                     logger.info(f"[GLOBAL] [process_batch] 4... Inserted {len(data_rows)} execution events")
 
+            if self.position_buffer:
+                positions_to_insert = self.position_buffer[:]
+                self.position_buffer.clear()
+                data_rows, msg_ids, stream_keys = [], [], []
+                for stream, msg_id, payload in positions_to_insert:
+                    try:
+                        raw_data = payload.get('data')
+                        event_payload = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
+                        if not isinstance(event_payload, dict):
+                            raise ValueError("Position payload data must be JSON")
+                        
+                        event_time = event_payload.get('event_time') or payload.get('t') or payload.get('time')
+                        if isinstance(event_time, str):
+                            try:
+                                f_ts = float(event_time)
+                                event_time = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
+                            except Exception:
+                                event_time = datetime.fromisoformat(event_time)
+                        elif isinstance(event_time, (int, float)):
+                            event_time = datetime.fromtimestamp(event_time / (1000.0 if event_time > 1e11 else 1.0))
+                        elif event_time is None:
+                            event_time = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
+                        
+                        symbol = event_payload.get('symbol', 'UNKNOWN')
+                        position_id = event_payload.get('position_id', 'UNKNOWN')
+                        if position_id == 'UNKNOWN':
+                            continue
+                        
+                        row = (
+                            event_time,
+                            symbol,
+                            position_id,
+                            event_payload.get('side', 'UNKNOWN'),
+                            float(event_payload.get('qty', 0.0)),
+                            float(event_payload.get('avg_entry_price', 0.0)),
+                            float(event_payload.get('mark_price', 0.0)),
+                            float(event_payload.get('unrealized_pnl', 0.0)),
+                            float(event_payload.get('realized_pnl', 0.0)),
+                            json.dumps(event_payload)
+                        )
+                        data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Position parse error: {e}")
+                
+                if data_rows:
+                    query = """
+                        INSERT INTO aureus_position_snapshots (
+                            event_time, symbol, position_id, side, qty,
+                            avg_entry_price, mark_price, unrealized_pnl, realized_pnl, payload
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+                        ON CONFLICT (position_id, event_time) DO NOTHING
+                    """
+                    await conn.executemany(query, data_rows)
+                    acks = {}
+                    for s, m in zip(stream_keys, msg_ids):
+                        if s not in acks: acks[s] = []
+                        acks[s].append(m)
+                    pipe = self.redis.pipeline()
+                    for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
+                    await pipe.execute()
+                    logger.info(f"[GLOBAL] [process_batch] 5... Inserted {len(data_rows)} position snapshots")
+
+            if self.account_buffer:
+                accounts_to_insert = self.account_buffer[:]
+                self.account_buffer.clear()
+                data_rows, msg_ids, stream_keys = [], [], []
+                for stream, msg_id, payload in accounts_to_insert:
+                    try:
+                        raw_data = payload.get('data')
+                        event_payload = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
+                        if not isinstance(event_payload, dict):
+                            raise ValueError("Account payload data must be JSON")
+                        
+                        event_time = event_payload.get('event_time') or payload.get('t') or payload.get('time')
+                        if isinstance(event_time, str):
+                            try:
+                                f_ts = float(event_time)
+                                event_time = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
+                            except Exception:
+                                event_time = datetime.fromisoformat(event_time)
+                        elif isinstance(event_time, (int, float)):
+                            event_time = datetime.fromtimestamp(event_time / (1000.0 if event_time > 1e11 else 1.0))
+                        elif event_time is None:
+                            event_time = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
+                        
+                        account_id = event_payload.get('account_id', 'UNKNOWN')
+                        if account_id == 'UNKNOWN':
+                            continue
+                        
+                        row = (
+                            event_time,
+                            account_id,
+                            float(event_payload.get('equity', 0.0)),
+                            float(event_payload.get('balance', 0.0)),
+                            float(event_payload.get('margin_used', 0.0)),
+                            float(event_payload.get('margin_free', 0.0)),
+                            float(event_payload.get('unrealized_pnl', 0.0)),
+                            float(event_payload.get('realized_pnl', 0.0)),
+                            json.dumps(event_payload)
+                        )
+                        data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Account parse error: {e}")
+                
+                if data_rows:
+                    query = """
+                        INSERT INTO aureus_account_snapshots (
+                            event_time, account_id, equity, balance, margin_used, margin_free,
+                            unrealized_pnl, realized_pnl, payload
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+                        ON CONFLICT (account_id, event_time) DO NOTHING
+                    """
+                    await conn.executemany(query, data_rows)
+                    acks = {}
+                    for s, m in zip(stream_keys, msg_ids):
+                        if s not in acks: acks[s] = []
+                        acks[s].append(m)
+                    pipe = self.redis.pipeline()
+                    for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
+                    await pipe.execute()
+                    logger.info(f"[GLOBAL] [process_batch] 6... Inserted {len(data_rows)} account snapshots")
+
     async def run(self):
         await self.connect_redis()
         await self.connect_postgres()
@@ -316,6 +444,8 @@ class DBWriter:
                             elif ":candle" in stream_name: self.candle_buffer.append((stream_name, msg_id, payload))
                             elif ":swing_point" in stream_name: self.swing_point_buffer.append((stream_name, msg_id, payload))
                             elif ":execution" in stream_name: self.execution_buffer.append((stream_name, msg_id, payload))
+                            elif ":positions" in stream_name: self.position_buffer.append((stream_name, msg_id, payload))
+                            elif ":account" in stream_name: self.account_buffer.append((stream_name, msg_id, payload))
             except Exception as e:
                 logger.error(f"[GLOBAL] [run] Error: Read error: {e}"); await asyncio.sleep(1)
             
@@ -324,6 +454,8 @@ class DBWriter:
                 + len(self.candle_buffer)
                 + len(self.swing_point_buffer)
                 + len(self.execution_buffer)
+                + len(self.position_buffer)
+                + len(self.account_buffer)
             )
             if buffer_size >= BATCH_SIZE or (buffer_size > 0 and (time.time() - self.last_flush_time) * 1000 >= BATCH_TIMEOUT_MS):
                 await self.process_batch(); self.last_flush_time = time.time()

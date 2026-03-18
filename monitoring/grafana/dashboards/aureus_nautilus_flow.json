@@ -268,6 +268,99 @@
       ],
       "title": "Redis Health",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-dev"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "aureus_bridge_unrealized_pnl",
+          "legendFormat": "Unrealized PnL ({{symbol}})",
+          "refId": "A"
+        },
+        {
+          "expr": "aureus_bridge_realized_pnl",
+          "legendFormat": "Realized PnL ({{symbol}})",
+          "refId": "B"
+        }
+      ],
+      "title": "Bridge PnL Tracker",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-dev"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "increase(aureus_bridge_orders_missing_sl_total[5m])",
+          "legendFormat": "Missing SL ({{symbol}})",
+          "refId": "A"
+        },
+        {
+          "expr": "increase(aureus_bridge_orders_missing_tp_total[5m])",
+          "legendFormat": "Missing TP ({{symbol}})",
+          "refId": "B"
+        }
+      ],
+      "title": "Orders Missing SL/TP (5m increase)",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
