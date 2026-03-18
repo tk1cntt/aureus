@@ -10,26 +10,37 @@ Lưu ý: Tất cả các chiến lược hay giải pháp đề xuất ra phải
 - Node.js (để chạy frontend Next.js).
 
 ## 2. Core Backend Services (Docker)
-Các dịch vụ nền tảng (Database, Message Queue, Signal Engine, Data Gateway) sẽ được chạy toàn bộ trong Docker thông qua file `docker-compose.dev.yml` (hoặc `aureus-foundation.yml` cho prod).
+Các dịch vụ nền tảng (Database, Message Queue, Signal Engine, Data Gateway) được chạy trong Docker qua `docker-compose.dev.yml` (hoặc `aureus-foundation.yml` cho môi trường production).
 
-> **Lưu ý**: Hãy chắc chắn rằng bạn đang trỏ terminal vào thư mục gốc của project `e:\Openclaw\aureus\workspace\aureus`.
+> **Lưu ý**: Hãy chắc chắn terminal đang ở thư mục gốc project: `d:\AIFramework\aureus` (WSL path: `/mnt/d/AIFramework/aureus`).
 
-Môi trường Development được khởi tạo nhanh bằng script có sẵn.
+Môi trường Development có thể khởi tạo nhanh bằng script có sẵn.
 Mở PowerShell và chạy lệnh sau để bật các core services:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/Aureus && ./scripts/dev-service.sh"
+wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/AIFramework/aureus && ./scripts/dev-service.sh"
 ```
 
 Lệnh này sẽ build và khởi động:
-- `aureus_redis` (Cổng: 6379)
-- `aureus_timescaledb` (Cổng: 5432)
-- `aureus-gateway`
-- `aureus-db-writer`
-- `aureus-signal`
-- `aureus-dashboard-api`
+- `aureus_redis_dev` (port host mặc định: `6380`)
+- `aureus_timescaledb_dev` (port host mặc định: `5433`)
+- `aureus-gateway-dev`
+- `aureus-db-writer-dev`
+- `aureus-signal-dev`
+- `aureus-dashboard-api-dev`
 
-*(WEB của Dashboard đã được comment tắt trong file compose để bạn có thể chạy native).*
+### 2.1 Build & chạy riêng Nautilus + Bridge (mới)
+Sau khi đã thêm service vào `docker-compose.dev.yml`, dùng lệnh sau để build và chạy 2 service mới:
+
+```powershell
+wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up --build -d nautilus_trader-dev aureus-nautilus-bridge-dev"
+```
+
+Service được khởi động:
+- `nautilus-trader-dev` (image prebuilt `ghcr.io/nautechsystems/nautilus_trader:nightly`)
+- `aureus-nautilus-bridge-dev` (build từ `services/aureus-nautilus-bridge/Dockerfile`)
+
+*(WEB của Dashboard có thể chạy native như phần bên dưới.)*
 
 ---
 
@@ -55,21 +66,42 @@ Khi người dùng hoặc AI (Antigravity) thực hiện thay đổi mã nguồn
 
 Nếu gặp lỗi **404 Not Found** sau khi thêm endpoint mới, hoặc logic mới không chạy, hãy thực hiện restart service tương ứng qua WSL.
 
-### Lệnh Restart từng Service cụ thể:
-Mở PowerShell và chạy lệnh (thay thế `[SERVICE_NAME]` bằng tên service cần restart):
+### Lệnh Rebuild/Restart từng Service cụ thể:
+Mở PowerShell và chạy lệnh (thay `[SERVICE_NAME]` bằng service cần restart trong `docker-compose.dev.yml`):
 
 ```powershell
-# Ví dụ: Restart Dashboard API
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml up -d --build aureus-dashboard-api"
+# Ví dụ: Rebuild + restart Dashboard API (dev)
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-dashboard-api-dev"
 
-# Ví dụ: Restart Signal Engine
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml up -d --build aureus-signal"
+# Ví dụ: Rebuild + restart Signal Engine (dev)
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev"
+
+# Ví dụ: Rebuild + restart Nautilus Bridge (dev)
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-nautilus-bridge-dev"
 ```
 
-### Lệnh Restart toàn bộ hệ thống:
+### Lệnh Rebuild/Restart riêng Nautilus + Bridge:
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml up -d --build"
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up -d --build nautilus_trader-dev aureus-nautilus-bridge-dev"
 ```
+
+### Lệnh Restart toàn bộ hệ thống dev:
+```powershell
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml up -d --build"
+```
+
+### Lệnh kiểm tra sau khi chạy/build lại:
+```powershell
+# Xem trạng thái 2 service mới
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker compose -f docker-compose.dev.yml ps nautilus_trader-dev aureus-nautilus-bridge-dev"
+
+# Kiểm tra health cơ bản bằng restart count = 0
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker inspect -f '{{.Name}}|{{.State.Status}}|restarts={{.RestartCount}}' nautilus-trader-dev aureus-nautilus-bridge-dev"
+
+# Xem log bridge để xác nhận có publish execution event
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/AIFramework/aureus && docker logs --tail 100 aureus-nautilus-bridge-dev"
+```
+
 
 ---
 

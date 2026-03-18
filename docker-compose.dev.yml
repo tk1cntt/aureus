@@ -98,6 +98,42 @@ services:
       - ./services/aureus-signal/brain:/app/brain
       - ./logs:/app/logs
 
+  nautilus_trader-dev:
+    image: ghcr.io/nautechsystems/nautilus_trader:nightly
+    container_name: nautilus-trader-dev
+    depends_on:
+      - redis-dev
+    networks:
+      - aureus_dev_net
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+    command: ["python", "-c", "import nautilus_trader, time; print('nautilus_trader ready'); time.sleep(10**9)"]
+    volumes:
+      - ./logs:/app/logs
+
+  aureus-nautilus-bridge-dev:
+    build:
+      context: ./services/aureus-nautilus-bridge
+    container_name: aureus-nautilus-bridge-dev
+    depends_on:
+      - redis-dev
+      - nautilus_trader-dev
+    networks:
+      - aureus_dev_net
+    restart: always
+    environment:
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+      - LOG_FILE=/app/logs/aureus-nautilus-bridge.log
+    volumes:
+      - ./services/aureus-nautilus-bridge:/app
+      - ./logs:/app/logs
+
   aureus-dashboard-api-dev:
     build:
       context: ./services/aureus-dashboard/api
