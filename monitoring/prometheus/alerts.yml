@@ -1,0 +1,32 @@
+groups:
+  - name: aureus_bridge_alerts
+    rules:
+      - alert: AureusBridgeHighLatency
+        expr: aureus_bridge_latency_ms > 5000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Aureus bridge latency is high"
+          description: "Order->execution latency has exceeded 5000ms for over 2 minutes."
+
+      - alert: AureusExecutionThroughputDrop
+        expr: |
+          (sum(rate(aureus_bridge_orders_total[5m])) > 0.05)
+          and
+          (sum(rate(aureus_bridge_executions_total[5m])) < 0.01)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Execution throughput is below expected level"
+          description: "Orders are arriving, but execution throughput is near zero for over 3 minutes."
+
+      - alert: AureusBridgeExporterErrors
+        expr: increase(aureus_bridge_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Bridge metrics exporter is reporting errors"
+          description: "Exporter processing errors increased in the last 5 minutes."

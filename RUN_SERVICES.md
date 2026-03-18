@@ -42,6 +42,37 @@ Service được khởi động:
 
 *(WEB của Dashboard có thể chạy native như phần bên dưới.)*
 
+### 2.2 Build & chạy Mini Monitoring Stack (Prometheus + Grafana + Exporter)
+Dùng lệnh sau để build và chạy các service monitoring trong `docker-compose.dev.yml`:
+
+```powershell
+wsl -d Ubuntu-24.04 -u root bash -c "docker compose --project-directory /mnt/d/AIFramework/aureus -f /mnt/d/AIFramework/aureus/docker-compose.dev.yml up --build -d redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
+```
+
+Service được khởi động:
+- `redis-exporter-dev`
+- `aureus-bridge-metrics-dev`
+- `prometheus-dev` (host: `http://localhost:19590`)
+- `grafana-dev` (host: `http://localhost:13555`, default login: `admin/admin`)
+
+### 2.3 Kiểm tra nhanh Monitoring Stack
+
+```powershell
+# Kiểm tra trạng thái containers monitoring
+wsl -d Ubuntu-24.04 -u root bash -c "docker compose --project-directory /mnt/d/AIFramework/aureus -f /mnt/d/AIFramework/aureus/docker-compose.dev.yml ps redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
+
+# Kiểm tra target scrape trong Prometheus
+wsl -d Ubuntu-24.04 -u root bash -c "docker exec prometheus-dev wget -qO- http://localhost:9090/api/v1/targets"
+
+# Kiểm tra endpoint metrics của exporter
+wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus-bridge-metrics-dev wget -qO- http://localhost:9108/metrics | head -n 40"
+```
+
+### 2.4 Troubleshooting cho Monitoring
+- Nếu dashboard chưa hiện dữ liệu: chạy flow test để tạo traffic (`scripts/test_nautilus_redis_flow.py`).
+- Nếu Prometheus target DOWN: kiểm tra logs bằng `docker logs prometheus-dev` hoặc `docker logs aureus-bridge-metrics-dev`.
+- Nếu quên mật khẩu Grafana: xóa volume `grafana_data_dev` rồi chạy lại stack để reset về `admin/admin`.
+
 ---
 
 ## 3. Dashboard Web UI (Native Windows/Powershell)

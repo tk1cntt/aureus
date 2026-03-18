@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Aureus Dashboards
+    orgId: 1
+    folder: Aureus
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
