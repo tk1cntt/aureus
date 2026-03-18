@@ -48,6 +48,20 @@ def _base_order_payload():
     }
 
 
+def _partial_fill_report():
+    return {
+        "trace_id": "XAUUSD:7:1709300000",
+        "symbol": "XAUUSD",
+        "status": "PARTIAL_FILL",
+        "event_time": 1709300002,
+        "quantity": 1.0,
+        "fill_price": 2002.0,
+        "position_id": "pos-1",
+        "realized_pnl": 1.2,
+        "unrealized_pnl": 3.4,
+    }
+
+
 def test_duplicate_same_status_is_suppressed_after_first_emit():
     adapter = SequencedAdapter([
         {"status": "ORDER_ACCEPTED"},
@@ -66,7 +80,7 @@ def test_duplicate_same_status_is_suppressed_after_first_emit():
 def test_status_transition_emits_next_event_with_v2_fields():
     adapter = SequencedAdapter([
         {"status": "ORDER_ACCEPTED", "position_id": "pos-1", "realized_pnl": 0.0, "unrealized_pnl": 0.0},
-        {"status": "PARTIAL_FILL", "position_id": "pos-1", "realized_pnl": 1.2, "unrealized_pnl": 3.4},
+        _partial_fill_report(),
     ])
     processor = BridgeProcessor(adapter=adapter)
 
@@ -85,6 +99,30 @@ def test_status_transition_emits_next_event_with_v2_fields():
     assert partial["event_version"] == 2
 
 
+def test_lifecycle_report_transition_emits_with_same_trace_id():
+    processor = BridgeProcessor(adapter=SequencedAdapter([{"status": "ORDER_ACCEPTED"}]))
+
+    accepted = run(processor.process_order_event("ORDER_OPEN", _base_order_payload()))
+    partial = run(processor.process_lifecycle_report(_base_order_payload(), _partial_fill_report()))
+
+    assert accepted is not None
+    assert accepted["status"] == "ORDER_ACCEPTED"
+    assert partial is not None
+    assert partial["status"] == "PARTIAL_FILL"
+    assert partial["trace_id"] == accepted["trace_id"]
+
+
+def test_lifecycle_duplicate_status_is_suppressed():
+    processor = BridgeProcessor(adapter=SequencedAdapter([{"status": "ORDER_ACCEPTED"}]))
+
+    run(processor.process_order_event("ORDER_OPEN", _base_order_payload()))
+    first_partial = run(processor.process_lifecycle_report(_base_order_payload(), _partial_fill_report()))
+    second_partial = run(processor.process_lifecycle_report(_base_order_payload(), _partial_fill_report()))
+
+    assert first_partial is not None
+    assert second_partial is None
+
+
 def test_non_order_open_events_are_skipped():
     processor = BridgeProcessor(adapter=SequencedAdapter([{"status": "ORDER_ACCEPTED"}]))
     order_payload = {
@@ -100,5 +138,7 @@ def test_non_order_open_events_are_skipped():
 if __name__ == "__main__":
     test_duplicate_same_status_is_suppressed_after_first_emit()
     test_status_transition_emits_next_event_with_v2_fields()
+    test_lifecycle_report_transition_emits_with_same_trace_id()
+    test_lifecycle_duplicate_status_is_suppressed()
     test_non_order_open_events_are_skipped()
     print("All bridge idempotency tests passed")

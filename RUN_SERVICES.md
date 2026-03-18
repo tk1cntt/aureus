@@ -40,6 +40,15 @@ Service được khởi động:
 - `nautilus-trader-dev` (image prebuilt `ghcr.io/nautechsystems/nautilus_trader:nightly`)
 - `aureus-nautilus-bridge-dev` (build từ `services/aureus-nautilus-bridge/Dockerfile`)
 
+#### 2.1.1 Bật stream-mode cho execution report lifecycle
+Mặc định bridge chạy với `NAUTILUS_ADAPTER_MODE=simulated` để tương thích flow cũ. Để bridge ingest lifecycle reports từ Redis stream, đặt biến môi trường khi chạy compose:
+
+```powershell
+wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/AIFramework/aureus && NAUTILUS_ADAPTER_MODE=stream NAUTILUS_LIFECYCLE_STREAM_PATTERN='aureus:stream:*:nautilus_execution' docker compose -f docker-compose.dev.yml up --build -d aureus-nautilus-bridge-dev"
+```
+
+Bridge sẽ đọc thêm các stream khớp với `NAUTILUS_LIFECYCLE_STREAM_PATTERN` và publish execution events chuẩn hóa về `aureus:stream:{symbol}:execution`.
+
 *(WEB của Dashboard có thể chạy native như phần bên dưới.)*
 
 ### 2.2 Build & chạy Mini Monitoring Stack (Prometheus + Grafana + Exporter)

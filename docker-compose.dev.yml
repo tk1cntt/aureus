@@ -127,6 +127,8 @@ services:
     environment:
       - REDIS_HOST=redis-dev
       - REDIS_PORT=6379
+      - NAUTILUS_ADAPTER_MODE=${NAUTILUS_ADAPTER_MODE:-simulated}
+      - NAUTILUS_LIFECYCLE_STREAM_PATTERN=${NAUTILUS_LIFECYCLE_STREAM_PATTERN:-aureus:stream:*:nautilus_execution}
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
       - LOG_FILE=/app/logs/aureus-nautilus-bridge.log
