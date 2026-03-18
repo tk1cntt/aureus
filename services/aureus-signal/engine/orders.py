@@ -11,7 +11,14 @@ class SimulatedTradeManager:
         self.r = r # Redis client
         self.last_tick_events: List[str] = []  # Track trade events per candle cycle
 
-    async def process_triggers(self, symbol: str, triggers: List[Dict[str, Any]], state_obj: Any, ai_validator: Any = None):
+    async def process_triggers(
+        self,
+        symbol: str,
+        triggers: List[Dict[str, Any]],
+        state_obj: Any,
+        ai_validator: Any = None,
+        execution_mode: str = "simulated",
+    ):
         """Processes strategy triggers, checks TraceID, and generates simulated orders."""
         for t in triggers:
             strat_id = t.get('strategy_id', 0)
@@ -68,6 +75,7 @@ class SimulatedTradeManager:
                 "close_time": None,
                 "pnl": 0.0,
                 "exit_price": None,
+                "execution_mode": execution_mode,
                 "ai_audit": None # Place for ACI and Debate Log
             }
             

@@ -71,7 +71,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     # --- Multi-Symbol Configuration ---
     symbols_env = os.getenv("SYMBOLS", "XAUUSD")
     symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]
-    logger.info(f"[GLOBAL] [run_signal_engine] 1... Initializing Signal Engine for: {symbols_list}")
+    execution_mode = os.getenv("EXECUTION_MODE", "simulated").strip().lower()
+    if execution_mode not in {"simulated", "nautilus"}:
+        logger.warning(f"[GLOBAL] [run_signal_engine] Invalid EXECUTION_MODE='{execution_mode}', defaulting to simulated")
+        execution_mode = "simulated"
+    logger.info(f"[GLOBAL] [run_signal_engine] 1... Initializing Signal Engine for: {symbols_list} | execution_mode={execution_mode}")
 
     # Load symbol-specific parameters
     SYMBOL_CONFIG = load_symbols_config()
@@ -484,10 +488,17 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {tag} calc error: {e}")
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
-                            await trade_manager.update_orders(symbol, data, state)
+                            if execution_mode == "simulated":
+                                await trade_manager.update_orders(symbol, data, state)
                             
                             if strategy_results:
-                                pending_order = await trade_manager.process_triggers(symbol, strategy_results, state, ai_validator)
+                                pending_order = await trade_manager.process_triggers(
+                                    symbol,
+                                    strategy_results,
+                                    state,
+                                    ai_validator,
+                                    execution_mode=execution_mode,
+                                )
                                 if pending_order:
                                     await queue_ai_audit_task(ai_queue, ai_validator, symbol, df, state, pending_order)
                                 

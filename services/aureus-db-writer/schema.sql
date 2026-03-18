@@ -92,6 +92,30 @@ CREATE TABLE IF NOT EXISTS aureus_signal_snapshots (
 SELECT create_hypertable('aureus_signal_snapshots', 'time', if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS idx_signal_snapshots_symbol ON aureus_signal_snapshots (symbol, time DESC);
 
+-- Execution Events Table (Aureus ↔ Nautilus bridge)
+CREATE TABLE IF NOT EXISTS aureus_execution_events (
+    event_time        TIMESTAMPTZ      NOT NULL,
+    trace_id          TEXT             NOT NULL,
+    symbol            TEXT             NOT NULL,
+    status            TEXT             NOT NULL,
+    side              TEXT,
+    order_type        TEXT,
+    quantity          DOUBLE PRECISION,
+    fill_price        DOUBLE PRECISION,
+    adapter_order_id  TEXT,
+    rejection_reason  TEXT,
+    execution_mode    TEXT             NOT NULL DEFAULT 'simulated',
+    raw_status        TEXT,
+    payload           JSONB            NOT NULL,
+    created_at        TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    UNIQUE (trace_id, status, event_time)
+);
+
+SELECT create_hypertable('aureus_execution_events', 'event_time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_execution_events_trace_id ON aureus_execution_events (trace_id);
+CREATE INDEX IF NOT EXISTS idx_execution_events_symbol_time ON aureus_execution_events (symbol, event_time DESC);
+CREATE INDEX IF NOT EXISTS idx_execution_events_status ON aureus_execution_events (status);
+
 -- ── BACKTEST ISOLATION TABLES ──
 
 -- Backtest Candles (Isolated from Live)

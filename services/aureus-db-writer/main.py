@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import time
+import json
 import redis.asyncio as redis
 import asyncpg
 from datetime import datetime
@@ -49,6 +50,7 @@ class DBWriter:
         self.tick_buffer = []
         self.candle_buffer = []
         self.swing_point_buffer = []
+        self.execution_buffer = []
         self.last_flush_time = time.time()
 
     async def connect_redis(self):
@@ -92,7 +94,12 @@ class DBWriter:
                 logger.error(f"[GLOBAL] [ensure_consumer_group] Error: Group error for {stream_key}: {e}")
 
     async def discover_streams(self):
-        patterns = ["aureus:stream:*:tick", "aureus:stream:*:candle", "aureus:stream:*:swing_point"]
+        patterns = [
+            "aureus:stream:*:tick",
+            "aureus:stream:*:candle",
+            "aureus:stream:*:swing_point",
+            "aureus:stream:*:execution",
+        ]
         found_streams = set()
         for pattern in patterns:
             cursor = 0
@@ -108,7 +115,8 @@ class DBWriter:
             self.known_streams.update(new_streams)
 
     async def process_batch(self):
-        if not self.tick_buffer and not self.candle_buffer: return
+        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer:
+            return
         async with self.pg_pool.acquire() as conn:
             if self.tick_buffer:
                 ticks_to_insert = self.tick_buffer[:]
@@ -221,6 +229,75 @@ class DBWriter:
                     await pipe.execute()
                     logger.info(f"[GLOBAL] [process_batch] 3... Inserted {len(data_rows)} swing points")
 
+            if self.execution_buffer:
+                execution_to_insert = self.execution_buffer[:]
+                self.execution_buffer.clear()
+                data_rows, msg_ids, stream_keys = [], [], []
+                for stream, msg_id, payload in execution_to_insert:
+                    try:
+                        raw_data = payload.get('data')
+                        event_payload = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
+                        if not isinstance(event_payload, dict):
+                            raise ValueError("Execution payload data must be a JSON object")
+
+                        event_time = event_payload.get('event_time') or payload.get('t') or payload.get('time')
+                        if isinstance(event_time, str):
+                            try:
+                                f_ts = float(event_time)
+                                event_time = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
+                            except Exception:
+                                event_time = datetime.fromisoformat(event_time)
+                        elif isinstance(event_time, (int, float)):
+                            event_time = datetime.fromtimestamp(event_time / (1000.0 if event_time > 1e11 else 1.0))
+                        elif event_time is None:
+                            event_time = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
+
+                        trace_id = event_payload.get('trace_id')
+                        symbol = event_payload.get('symbol', 'UNKNOWN')
+                        status = event_payload.get('status', 'UNKNOWN')
+                        if not trace_id or symbol == 'UNKNOWN':
+                            raise ValueError(f"Execution event missing trace_id/symbol: {event_payload}")
+
+                        row = (
+                            event_time,
+                            trace_id,
+                            symbol,
+                            status,
+                            event_payload.get('side'),
+                            event_payload.get('type'),
+                            float(event_payload.get('quantity', 0.0)),
+                            float(event_payload.get('fill_price', 0.0)),
+                            event_payload.get('adapter_order_id'),
+                            event_payload.get('rejection_reason'),
+                            event_payload.get('execution_mode', 'simulated'),
+                            event_payload.get('raw_status'),
+                            json.dumps(event_payload),
+                        )
+                        data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Execution parse error: {e}")
+
+                if data_rows:
+                    query = """
+                        INSERT INTO aureus_execution_events (
+                            event_time, trace_id, symbol, status, side, order_type,
+                            quantity, fill_price, adapter_order_id, rejection_reason,
+                            execution_mode, raw_status, payload
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+                        ON CONFLICT (trace_id, status, event_time) DO NOTHING
+                    """
+                    await conn.executemany(query, data_rows)
+                    acks = {}
+                    for s, m in zip(stream_keys, msg_ids):
+                        if s not in acks: acks[s] = []
+                        acks[s].append(m)
+                    pipe = self.redis.pipeline()
+                    for s, ids in acks.items():
+                        pipe.xack(s, CONSUMER_GROUP, *ids)
+                    await pipe.execute()
+                    logger.info(f"[GLOBAL] [process_batch] 4... Inserted {len(data_rows)} execution events")
+
     async def run(self):
         await self.connect_redis()
         await self.connect_postgres()
@@ -238,10 +315,16 @@ class DBWriter:
                             if ":tick" in stream_name: self.tick_buffer.append((stream_name, msg_id, payload))
                             elif ":candle" in stream_name: self.candle_buffer.append((stream_name, msg_id, payload))
                             elif ":swing_point" in stream_name: self.swing_point_buffer.append((stream_name, msg_id, payload))
+                            elif ":execution" in stream_name: self.execution_buffer.append((stream_name, msg_id, payload))
             except Exception as e:
                 logger.error(f"[GLOBAL] [run] Error: Read error: {e}"); await asyncio.sleep(1)
             
-            buffer_size = len(self.tick_buffer) + len(self.candle_buffer) + len(self.swing_point_buffer)
+            buffer_size = (
+                len(self.tick_buffer)
+                + len(self.candle_buffer)
+                + len(self.swing_point_buffer)
+                + len(self.execution_buffer)
+            )
             if buffer_size >= BATCH_SIZE or (buffer_size > 0 and (time.time() - self.last_flush_time) * 1000 >= BATCH_TIMEOUT_MS):
                 await self.process_batch(); self.last_flush_time = time.time()
 
