@@ -62,6 +62,11 @@ REALIZED_PNL = Gauge(
     "Latest realized PnL from position snapshots",
     ["symbol"],
 )
+DUPLICATE_TRACE_ID_TOTAL = Counter(
+    "aureus_bridge_duplicate_trace_id_total",
+    "Total number of duplicate trace IDs observed in order stream events",
+    ["symbol"],
+)
 
 
 def _parse_stream_id_ms(stream_id: str) -> Optional[int]:
@@ -107,6 +112,7 @@ def _update_symbol_metrics(
     last_order_id: str,
     last_execution_id: str,
     order_stream_ids_by_trace: Dict[str, Dict[str, int]],
+    seen_trace_ids_by_symbol: Dict[str, set[str]],
 ) -> Tuple[str, str]:
     order_stream = f"aureus:stream:{symbol}:orders"
     execution_stream = f"aureus:stream:{symbol}:execution"
@@ -118,9 +124,14 @@ def _update_symbol_metrics(
         for entry_id, fields in order_entries:
             trace_id = _decode_trace_id(fields)
             entry_ts_ms = _parse_stream_id_ms(entry_id)
-            if trace_id and entry_ts_ms is not None:
-                order_stream_ids_by_trace[symbol][trace_id] = entry_ts_ms
-            
+            if trace_id:
+                if trace_id in seen_trace_ids_by_symbol[symbol]:
+                    DUPLICATE_TRACE_ID_TOTAL.labels(symbol=symbol).inc()
+                else:
+                    seen_trace_ids_by_symbol[symbol].add(trace_id)
+                if entry_ts_ms is not None:
+                    order_stream_ids_by_trace[symbol][trace_id] = entry_ts_ms
+
             # Check for missing SL/TP
             raw_data = fields.get("data", "")
             if raw_data:
@@ -190,6 +201,7 @@ def run() -> None:
     last_order_ids = {symbol: _get_last_id(client, f"aureus:stream:{symbol}:orders") for symbol in SYMBOLS}
     last_execution_ids = {symbol: _get_last_id(client, f"aureus:stream:{symbol}:execution") for symbol in SYMBOLS}
     order_stream_ids_by_trace: Dict[str, Dict[str, int]] = defaultdict(dict)
+    seen_trace_ids_by_symbol: Dict[str, set[str]] = defaultdict(set)
 
     while True:
         for symbol in SYMBOLS:
@@ -200,6 +212,7 @@ def run() -> None:
                     last_order_id=last_order_ids[symbol],
                     last_execution_id=last_execution_ids[symbol],
                     order_stream_ids_by_trace=order_stream_ids_by_trace,
+                    seen_trace_ids_by_symbol=seen_trace_ids_by_symbol,
                 )
                 last_order_ids[symbol] = next_order_id
                 last_execution_ids[symbol] = next_execution_id

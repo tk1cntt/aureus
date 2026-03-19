@@ -15,8 +15,8 @@ services:
       context: ./services/aureus-gateway
     container_name: aureus-gateway-dev
     ports:
-      - "5555:5555"
-      - "5556:5556"
+      - "${DEV_BACKTEST_WS_PORT:-5555}:5555"
+      - "${DEV_BACKTEST_EVENTS_PORT:-5556}:5556"
     depends_on:
       - redis-dev
     networks:
@@ -195,7 +195,7 @@ services:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
     ports:
-      - "19158:9108"
+      - "${DEV_BRIDGE_METRICS_PORT:-19158}:9108"
 
   prometheus-dev:
     image: prom/prometheus:latest
@@ -207,7 +207,7 @@ services:
       - aureus_dev_net
     restart: unless-stopped
     ports:
-      - "19590:9090"
+      - "${DEV_PROMETHEUS_PORT:-19590}:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -226,7 +226,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
-      - "13555:3000"
+      - "${DEV_GRAFANA_PORT:-13555}:3000"
     volumes:
       - grafana_data_dev:/var/lib/grafana
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro

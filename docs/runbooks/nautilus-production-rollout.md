@@ -3,41 +3,63 @@
 ## Preconditions
 - `docker-compose.prod.yml` is deployed and healthy.
 - Prometheus is scraping `aureus-bridge-metrics`.
-- Batch 1-2 unit tests are green.
+- Batch 1-4 unit tests are green.
 
-## Step 1: Shadow Mode
-1. Deploy production stack:
+## Step 1: Shadow Rehearsal Checklist
+1. Deploy stack:
    - `docker compose -f docker-compose.prod.yml up -d --build`
-2. Keep shadow processing only (no promotion) for at least 30 minutes.
-3. Capture gate metrics:
+2. Run shadow-only for at least 30 minutes.
+3. Replay validation streams:
+   - `python scripts/replay_data.py --scenario normal --clear-stream`
+   - `python scripts/replay_data.py --scenario duplicate`
+   - `python scripts/replay_data.py --scenario stale`
+4. Capture evidence snapshots:
    - `increase(aureus_bridge_orders_missing_sl_total[5m])`
    - `increase(aureus_bridge_orders_missing_tp_total[5m])`
    - `changes(process_start_time_seconds{job="aureus_bridge_metrics"}[10m])`
    - `increase(aureus_bridge_duplicate_trace_id_total[10m])`
 
-## Step 2: Canary Promotion Gate
-Promote to canary only if all conditions hold:
+## Step 2: Automated Canary Promotion Gate
+Promote to canary only if all checks pass:
 - missing SL violations = `0`
 - missing TP violations = `0`
 - restart events = `0`
 - duplicate trace IDs = `0`
+- load rejected ratio `<= 0.05`
+- shadow mismatches = `0`
 
-Validation commands:
+### Gate Collection Example
+```python
+from rollout_gates import RolloutGateMetrics, evaluate_rollout_gate
+
+metrics = RolloutGateMetrics(
+    missing_sl_total=0,
+    missing_tp_total=0,
+    restart_per_hour=0.0,
+    duplicate_trace_id_total=0,
+    load_rejected_ratio=0.0,
+    shadow_mismatch_total=0,
+)
+decision = evaluate_rollout_gate(metrics)
+print(decision.allow_promotion, decision.reasons, decision.evidence)
+```
+
+### Validation Commands
 - `docker compose -f docker-compose.prod.yml ps`
-- `cmd /c curl -s http://localhost:19158/metrics | findstr /I "aureus_bridge_orders_missing_sl_total aureus_bridge_orders_missing_tp_total aureus_bridge_realized_pnl process_start_time_seconds"`
+- `cmd /c curl -s http://localhost:19158/metrics | findstr /I "missing_sl missing_tp duplicate_trace realized_pnl process_start_time_seconds"`
 
 ## Step 3: Full Promotion Gate
 After at least 60 minutes of stable canary:
-1. Re-check all gate thresholds.
+1. Re-check all gate thresholds and evidence payload.
 2. Confirm no DLQ spikes from sync worker.
-3. Promote all symbols by updating deployment env and reloading stack.
+3. Promote all symbols and redeploy.
 
-## Dry-Run Alert Validation (Batch 2)
-Capture and store evidence in rollout notes:
-1. `NautilusBridgeRestartSpike` remains inactive during the dry-run window.
-2. `NautilusMissingSLViolation` and `NautilusMissingTPViolation` remain inactive.
-3. `NautilusPnLStreamStale` remains inactive while `aureus_bridge_realized_pnl` keeps updating.
-4. If `aureus_bridge_duplicate_trace_id_total` is not emitted yet, document node-side fallback evidence (log scan + `test_execution_risk_controls.py`).
+## Evidence Capture Template
+- Shadow window start/end:
+- Canary window start/end:
+- Metrics snapshot command output:
+- Gate decision output (`allow_promotion`, `reasons`, `evidence`):
+- Residual risks / mitigations:
 
 ## Post-Promotion Checks
 - Node health endpoint returns healthy state:

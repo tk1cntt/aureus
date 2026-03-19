@@ -15,8 +15,8 @@ services:
       context: ./services/aureus-gateway
     container_name: aureus-gateway
     ports:
-      - "5555:5555"
-      - "5556:5556"
+      - "${BACKTEST_WS_PORT:-5555}:5555"
+      - "${BACKTEST_EVENTS_PORT:-5556}:5556"
     depends_on:
       - redis
     networks:
@@ -184,7 +184,7 @@ services:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
     ports:
-      - "19158:9108"
+      - "${BRIDGE_METRICS_PORT:-19158}:9108"
 
   prometheus:
     image: prom/prometheus:latest
@@ -196,7 +196,7 @@ services:
       - aureus_net
     restart: unless-stopped
     ports:
-      - "19590:9090"
+      - "${PROMETHEUS_PORT:-19590}:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro

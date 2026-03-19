@@ -3,12 +3,12 @@ groups:
     rules:
       - alert: NautilusBridgeRestartSpike
         expr: changes(process_start_time_seconds{job="aureus_bridge_metrics"}[10m]) > 0
-        for: 2m
+        for: 3m
         labels:
-          severity: critical
+          severity: warning
         annotations:
           summary: "Bridge restart detected during rollout window"
-          description: "Exporter process start time changed in the last 10 minutes. Keep promotion gates blocked and inspect container restarts."
+          description: "Exporter process start time changed in the last 10 minutes. Keep canary gate in hold and inspect restart cause before promotion."
 
       - alert: NautilusMissingSLViolation
         expr: increase(aureus_bridge_orders_missing_sl_total[5m]) > 0
@@ -30,18 +30,18 @@ groups:
 
       - alert: NautilusDuplicateTraceIdDetected
         expr: increase(aureus_bridge_duplicate_trace_id_total[10m]) > 0
-        for: 1m
+        for: 2m
         labels:
-          severity: warning
+          severity: critical
         annotations:
           summary: "Duplicate trace id detected"
-          description: "Idempotency anomaly detected in execution flow. If metric is unavailable, use node-side logs/tests until exporter instrumentation is added."
+          description: "Duplicate trace-id events were observed in bridge order flow. Treat as idempotency gate failure until root cause is resolved."
 
       - alert: NautilusPnLStreamStale
         expr: time() - max(timestamp(aureus_bridge_realized_pnl)) > 120
-        for: 2m
+        for: 3m
         labels:
           severity: warning
         annotations:
           summary: "PnL stream appears stale"
-          description: "Bridge exporter has not produced a fresh realized PnL sample within the SLO threshold (120s)."
+          description: "Bridge exporter has not produced a fresh realized PnL sample within the SLO threshold (120s) for at least 3 minutes."
