@@ -357,9 +357,19 @@
           "expr": "increase(aureus_bridge_orders_missing_tp_total[5m])",
           "legendFormat": "Missing TP ({{symbol}})",
           "refId": "B"
+        },
+        {
+          "expr": "increase(aureus_bridge_duplicate_trace_id_total[10m])",
+          "legendFormat": "Duplicate Trace IDs (10m)",
+          "refId": "C"
+        },
+        {
+          "expr": "time() - max(timestamp(aureus_bridge_realized_pnl))",
+          "legendFormat": "PnL Stream Age (s)",
+          "refId": "D"
         }
       ],
-      "title": "Orders Missing SL/TP (5m increase)",
+      "title": "SLO Signals (Missing SL/TP, Duplicate Trace, Freshness)",
       "type": "timeseries"
     }
   ],

@@ -1,0 +1,43 @@
+name: Aureus Nautilus Node Quality
+
+on:
+  push:
+    paths:
+      - "services/aureus-nautilus-node/**"
+      - ".github/workflows/aureus-nautilus-node-quality.yml"
+      - "docs/runbooks/QUALITY_GATES.md"
+  pull_request:
+    paths:
+      - "services/aureus-nautilus-node/**"
+      - ".github/workflows/aureus-nautilus-node-quality.yml"
+      - "docs/runbooks/QUALITY_GATES.md"
+  workflow_dispatch:
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/aureus-nautilus-node
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Run lint checks
+        run: python -m ruff check .
+
+      - name: Run type checks
+        run: python -m mypy --explicit-package-bases --ignore-missing-imports --disable-error-code no-redef execution_client.py data_client.py rollout_gates.py

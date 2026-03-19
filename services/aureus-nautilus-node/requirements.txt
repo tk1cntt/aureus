@@ -1,2 +1,4 @@
 redis
 pytest
+mypy
+ruff

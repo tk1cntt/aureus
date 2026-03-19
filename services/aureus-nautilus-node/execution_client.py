@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 try:
     from nautilus_trader.live.execution_client import LiveExecutionClient
