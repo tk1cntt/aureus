@@ -5,14 +5,14 @@ services:
     image: redis:alpine
     container_name: aureus_redis
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
     networks:
       - aureus_net
 
   aureus-gateway:
     build:
-      context: ../../prod/aureus/workspace/aureus/services/aureus-gateway
+      context: ./services/aureus-gateway
     container_name: aureus-gateway
     ports:
       - "5555:5555"
@@ -21,20 +21,22 @@ services:
       - redis
     networks:
       - aureus_net
+    restart: unless-stopped
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - TCP_PORT=5556
+      - PYTHONUNBUFFERED=1
 
   timescaledb:
     image: timescale/timescaledb:latest-pg15
     container_name: aureus_timescaledb
     environment:
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-aureus_password}
       - POSTGRES_USER=aureus
       - POSTGRES_DB=aureus
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT:-5432}:5432"
     restart: unless-stopped
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
@@ -43,7 +45,7 @@ services:
 
   aureus-db-writer:
     build:
-      context: ../../prod/aureus/workspace/aureus/services/aureus-db-writer
+      context: ./services/aureus-db-writer
     container_name: aureus-db-writer
     depends_on:
       - redis
@@ -58,13 +60,14 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_DB=aureus
       - POSTGRES_USER=aureus
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-aureus_password}
       - BATCH_SIZE=50
       - BATCH_TIMEOUT_MS=1000
+      - PYTHONUNBUFFERED=1
 
   aureus-signal:
     build:
-      context: ../../prod/aureus/workspace/aureus/services/aureus-signal
+      context: ./services/aureus-signal
     container_name: aureus-signal
     depends_on:
       - redis
@@ -77,37 +80,127 @@ services:
       - REDIS_PORT=6379
       - DATABASE_URL=postgresql://aureus:${DB_PASSWORD:-aureus_password}@timescaledb:5432/aureus
       - LOG_LEVEL=INFO
-      - SYMBOLS=XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD
-      - LLM_BASE_URL=http://host.docker.internal:8005/v1
+      - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:8005/v1}
+      - PYTHONUNBUFFERED=1
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ../../prod/aureus/workspace/aureus/services/aureus-signal/brain:/app/brain
+      - ./services/aureus-signal/brain:/app/brain
 
-  aureus-dashboard-api:
-    build:
-      context: ../../prod/aureus/workspace/aureus/services/aureus-dashboard/api
-    container_name: aureus-dashboard-api
+  nautilus_trader:
+    image: ghcr.io/nautechsystems/nautilus_trader:nightly
+    container_name: nautilus-trader
     depends_on:
       - redis
-      - timescaledb
     networks:
       - aureus_net
-    restart: always
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    command: ["python", "-c", "import nautilus_trader, time; print('nautilus_trader ready'); time.sleep(10**9)"]
+
+  aureus-nautilus-node:
+    build:
+      context: ./services/aureus-nautilus-node
+    container_name: aureus-nautilus-node
+    depends_on:
+      - redis
+    networks:
+      - aureus_net
+    restart: unless-stopped
+    stop_grace_period: 20s
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - DATABASE_URL=postgresql://aureus:${DB_PASSWORD:-aureus_password}@timescaledb:5432/aureus
-      - LLM_BASE_URL=http://host.docker.internal:8005/v1
-      - CORS_ORIGINS=http://localhost:${WEB_PORT:-12321},http://127.0.0.1:${WEB_PORT:-12321}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - NAUTILUS_SYMBOL_WHITELIST=${NAUTILUS_SYMBOL_WHITELIST:-XAUUSD}
+      - NAUTILUS_RISK_MODE=STRICT
+      - NAUTILUS_REQUIRE_SL_TP=1
+      - NAUTILUS_MAX_ORDER_NOTIONAL=${NAUTILUS_MAX_ORDER_NOTIONAL:-10000}
+      - NAUTILUS_MAX_POSITION_NOTIONAL=${NAUTILUS_MAX_POSITION_NOTIONAL:-100000}
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib; pathlib.Path('/tmp/nautilus-health').write_text('ok'); print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  aureus-nautilus-bridge:
+    build:
+      context: ./services/aureus-nautilus-bridge
+    container_name: aureus-nautilus-bridge
+    depends_on:
+      - redis
+      - nautilus_trader
+    networks:
+      - aureus_net
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NAUTILUS_ADAPTER_MODE=${NAUTILUS_ADAPTER_MODE:-simulated}
+      - NAUTILUS_LIFECYCLE_STREAM_PATTERN=${NAUTILUS_LIFECYCLE_STREAM_PATTERN:-aureus:stream:*:nautilus_execution}
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    depends_on:
+      - redis
+    networks:
+      - aureus_net
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+
+  aureus-bridge-metrics:
+    build:
+      context: ./services/aureus-bridge-metrics-exporter
+    container_name: aureus-bridge-metrics
+    depends_on:
+      - redis
+      - aureus-nautilus-bridge
+    networks:
+      - aureus_net
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - EXPORTER_PORT=9108
+      - POLL_INTERVAL_SECONDS=2
+      - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
     ports:
-      - "${API_PORT:-8001}:8001"
+      - "19158:9108"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    depends_on:
+      - redis-exporter
+      - aureus-bridge-metrics
+    networks:
+      - aureus_net
+    restart: unless-stopped
+    ports:
+      - "19590:9090"
     volumes:
-      - ../../prod/aureus/workspace/aureus/services/aureus-signal/symbols.json:/app/symbols.json
-
-
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/prometheus/rules/nautilus-alerts.yml:/etc/prometheus/nautilus-alerts.yml:ro
 
 networks:
   aureus_net:

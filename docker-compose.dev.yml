@@ -99,7 +99,7 @@ services:
       - ./logs:/app/logs
 
   nautilus_trader-dev:
-    image: ghcr.io/nautechsystems/nautilus_trader:latest
+    image: ghcr.io/nautechsystems/nautilus_trader:nightly
     container_name: nautilus-trader-dev
     depends_on:
       - redis-dev
@@ -110,7 +110,7 @@ services:
       - PYTHONUNBUFFERED=1
       - REDIS_HOST=redis-dev
       - REDIS_PORT=6379
-    command: ["python", "-c", "import nautilus_trader, time; print('nautilus_trader ready'); time.sleep(10**9)"]
+    command: [ "python", "-c", "import nautilus_trader, time; print('nautilus_trader ready'); time.sleep(10**9)" ]
     volumes:
       - ./logs:/app/logs
 
@@ -122,11 +122,23 @@ services:
       - redis-dev
     networks:
       - aureus_dev_net
-    restart: always
+    restart: unless-stopped
+    stop_grace_period: 20s
     environment:
       - REDIS_HOST=redis-dev
       - REDIS_PORT=6379
+      - NAUTILUS_SYMBOL_WHITELIST=${NAUTILUS_SYMBOL_WHITELIST:-XAUUSD}
+      - NAUTILUS_RISK_MODE=STRICT
+      - NAUTILUS_REQUIRE_SL_TP=1
+      - NAUTILUS_MAX_ORDER_NOTIONAL=${NAUTILUS_MAX_ORDER_NOTIONAL:-10000}
+      - NAUTILUS_MAX_POSITION_NOTIONAL=${NAUTILUS_MAX_POSITION_NOTIONAL:-100000}
       - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib; pathlib.Path('/tmp/nautilus-health').write_text('ok'); print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./services/aureus-nautilus-node:/app
       - ./logs:/app/logs
@@ -199,6 +211,7 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/prometheus/rules/nautilus-alerts.yml:/etc/prometheus/nautilus-alerts.yml:ro
 
   grafana-dev:
     image: grafana/grafana:latest
@@ -245,8 +258,6 @@ services:
     volumes:
       - ./services/aureus-signal/symbols.json:/app/symbols.json
       - ./logs:/app/logs
-
-
 
 networks:
   aureus_dev_net:

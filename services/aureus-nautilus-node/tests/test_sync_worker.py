@@ -1,25 +1,32 @@
-import pytest
-from unittest.mock import AsyncMock, patch
-from sync_worker import SyncWorker
-from nautilus_trader.core.message import Event
-from nautilus_trader.model.events import OrderEvent
-from nautilus_trader.model.events import OrderEvent, OrderAccepted
+import asyncio
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-@pytest.mark.asyncio
-async def test_sync_worker_pushes_order_event():
-    redis_mock = AsyncMock()
-    worker = SyncWorker(redis_client=redis_mock)
-    
-    # We will use a mock OrderEvent since creating full Nautilus events in isolation can be complex.
-    # In a real scenario we'd use a factory or captured event.
-    class FakeOrderEvent:
-        pass
-    
-    fake_event = FakeOrderEvent()
-    # Mock the internal extraction
-    with patch.object(worker, '_handle_order_event') as mock_handle:
-        worker.on_order_event(fake_event)
-        worker._running = True
-        # trigger processing queue
-        await worker._process_queue_once()
-        assert mock_handle.called
+from sync_worker import SyncWorker
+
+
+def test_sync_worker_pushes_order_event():
+    async def _case():
+        redis_mock = AsyncMock()
+        worker = SyncWorker(redis_client=redis_mock)
+
+        fake_event = SimpleNamespace(
+            client_order_id=SimpleNamespace(value="trace-1"),
+            instrument_id=SimpleNamespace(value="XAUUSD.SIM"),
+            ts_event=12345,
+        )
+
+        await worker._handle_order_event(fake_event)
+
+        assert redis_mock.xadd.await_count == 1
+        stream = redis_mock.xadd.await_args.args[0]
+        payload = redis_mock.xadd.await_args.args[1]
+        body = json.loads(payload["data"])
+
+        assert stream == "aureus:stream:XAUUSD:execution"
+        assert payload["type"] == "EXECUTION_REPORT"
+        assert body["schema_ver"] == "1.0"
+        assert body["trace_id"] == "trace-1"
+
+    asyncio.run(_case())

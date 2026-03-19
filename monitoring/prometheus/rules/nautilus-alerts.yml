@@ -1,0 +1,47 @@
+groups:
+  - name: nautilus_production_alerts
+    rules:
+      - alert: NautilusNodeRestartSpike
+        expr: increase(process_start_time_seconds{job="aureus_bridge_metrics"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nautilus stack restart detected"
+          description: "A process restart signal was observed in the last 10 minutes. Promotion gates should remain blocked."
+
+      - alert: NautilusMissingSLViolation
+        expr: aureus_bridge_missing_sl_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Missing SL violation detected"
+          description: "Strict risk policy violation: missing stop-loss detected from bridge metrics."
+
+      - alert: NautilusMissingTPViolation
+        expr: aureus_bridge_missing_tp_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Missing TP violation detected"
+          description: "Strict risk policy violation: missing take-profit detected from bridge metrics."
+
+      - alert: NautilusDuplicateTraceIdDetected
+        expr: aureus_bridge_duplicate_trace_id_total > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Duplicate trace id detected"
+          description: "Idempotency anomaly detected in execution flow."
+
+      - alert: NautilusPnLStreamStale
+        expr: time() - aureus_bridge_last_update_unix_seconds > 120
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PnL stream appears stale"
+          description: "Bridge exporter has not updated PnL stream timestamps in more than 2 minutes."

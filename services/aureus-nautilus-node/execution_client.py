@@ -1,20 +1,67 @@
+from __future__ import annotations
+
 import asyncio
 import json
-from nautilus_trader.live.execution_client import LiveExecutionClient
-from nautilus_trader.model.identifiers import InstrumentId, ClientOrderId
-from nautilus_trader.model.objects import Quantity
-from nautilus_trader.model.orders import MarketOrder
-from nautilus_trader.model.orders.creation import StopLossOrder, TakeProfitOrder
-from nautilus_trader.model.enums import OrderSide
-from nautilus_trader.model.objects import Price
-from nautilus_trader.model.identifiers import Venue
+import logging
+from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from nautilus_trader.live.execution_client import LiveExecutionClient
+except Exception:  # pragma: no cover - optional dependency in unit test env
+    LiveExecutionClient = object
+
+
+@dataclass(frozen=True)
+class ExecutionRiskPolicy:
+    symbol_whitelist: List[str]
+    require_sl_tp: bool
+    max_order_notional: float
+
 
 class AureusExecutionClient(LiveExecutionClient):
-    def __init__(self, redis_client, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, redis_client, settings: Any = None, *args, **kwargs):
+        if LiveExecutionClient is object:
+            super().__init__()
+        else:  # pragma: no cover
+            super().__init__(*args, **kwargs)
+
         self.redis_client = redis_client
         self._running = False
-        self._last_ids = {}
+        self._last_ids: Dict[str, str] = {}
+        self._seen_trace_ids: set[str] = set()
+        self._generated_orders: List[Dict[str, Any]] = []
+        self.log = logging.getLogger(self.__class__.__name__)
+
+        policy = self._build_policy(settings)
+        self._symbol_whitelist = set(policy.symbol_whitelist)
+        self._require_sl_tp = policy.require_sl_tp
+        self._max_order_notional = policy.max_order_notional
+
+        self.metrics = {
+            "accepted_total": 0,
+            "rejected_total": 0,
+            "duplicate_trace_id_total": 0,
+            "missing_sl_tp_total": 0,
+            "invalid_symbol_total": 0,
+            "invalid_notional_total": 0,
+        }
+
+    @staticmethod
+    def _build_policy(settings: Any) -> ExecutionRiskPolicy:
+        if settings is None:
+            settings = SimpleNamespace(
+                symbol_whitelist=["XAUUSD"],
+                require_sl_tp=True,
+                max_order_notional=10_000.0,
+            )
+
+        return ExecutionRiskPolicy(
+            symbol_whitelist=[str(s).upper() for s in getattr(settings, "symbol_whitelist", ["XAUUSD"])],
+            require_sl_tp=bool(getattr(settings, "require_sl_tp", True)),
+            max_order_notional=float(getattr(settings, "max_order_notional", 10_000.0)),
+        )
 
     async def connect(self):
         self._running = True
@@ -24,9 +71,7 @@ class AureusExecutionClient(LiveExecutionClient):
         self._running = False
 
     async def _poll_loop(self):
-        # We will listen to all order streams
-        self.log.info("AureusExecutionClient started polling orders...")
-        # Simplification: hardcoded pattern or polling a specific stream
+        self.log.info("AureusExecutionClient started polling orders")
         streams = {"aureus:stream:XAUUSD:orders": self._last_ids.get("aureus:stream:XAUUSD:orders", "0-0")}
         while self._running:
             await self._poll_orders_once(streams)
@@ -35,48 +80,125 @@ class AureusExecutionClient(LiveExecutionClient):
     async def _poll_orders_once(self, streams=None):
         if not streams:
             streams = {"aureus:stream:XAUUSD:orders": self._last_ids.get("aureus:stream:XAUUSD:orders", "0-0")}
+
         try:
             result = await self.redis_client.xread(streams, count=10, block=1000)
             if not result:
                 return
+
             for stream, messages in result:
                 stream_str = stream.decode() if isinstance(stream, bytes) else stream
                 for idx, message in messages:
-                    self._last_ids[stream_str] = idx
+                    self._last_ids[stream_str] = idx.decode() if isinstance(idx, bytes) else str(idx)
                     self._handle_message(message)
-        except Exception as e:
-            self.log.error(f"Error polling execution data: {e}")
+        except Exception as exc:
+            self.log.error(f"Error polling execution data: {exc}")
 
-    def _handle_message(self, message: dict):
+    def _handle_message(self, message: Dict[Any, Any]):
+        msg_type = self._decode_value(message.get(b"type", message.get("type", "")))
+        if msg_type != "ORDER_OPEN":
+            return
+
+        payload_raw = self._decode_value(message.get(b"data", message.get("data", "{}")))
         try:
-            msg_type = message.get(b"type", b"").decode()
-            if msg_type != "ORDER_OPEN":
-                return
+            payload = json.loads(payload_raw)
+        except Exception:
+            self._reject("MALFORMED_PAYLOAD")
+            return
 
-            data = json.loads(message[b"data"].decode())
-            trace_id = data["trace_id"]
-            symbol = data["symbol"]
-            side_str = data["side"].upper()
-            qty = float(data["qty"])
-            
-            instrument_id = InstrumentId.from_str(f"{symbol}.AUREUS_VIRTUAL")
-            
-            # Simple Market Order implementation
-            side = OrderSide.BUY if side_str == "BUY" else OrderSide.SELL
-            
-            # Create master order
-            order = MarketOrder(
-                instrument_id=instrument_id,
-                client_order_id=ClientOrderId(trace_id),
-                side=side,
-                quantity=Quantity.from_double(qty),
-                time_in_force=None,
-            )
+        valid, reason, orders = self._validate_and_build_orders(payload)
+        if not valid:
+            self._reject(reason)
+            return
+
+        self.metrics["accepted_total"] += 1
+        for order in orders:
             self.generate_order(order)
-            self.log.info(f"Generated Nautilus MarketOrder for {trace_id}")
-            
-            # Note: Proper Bracket Order (SL/TP) requires ContingentOrder logic in Nautilus.
-            # For this Slice 2 prototype, we just generate the master order first.
-            
-        except Exception as e:
-            self.log.error(f"Failed to handle execution message: {e}")
+
+    def _validate_and_build_orders(self, data: Dict[str, Any]) -> Tuple[bool, str, List[Dict[str, Any]]]:
+        trace_id = str(data.get("trace_id", "")).strip()
+        symbol = str(data.get("symbol", "")).upper().strip()
+        side = str(data.get("side", "")).upper().strip()
+
+        if not trace_id:
+            return False, "MISSING_TRACE_ID", []
+
+        if trace_id in self._seen_trace_ids:
+            self.metrics["duplicate_trace_id_total"] += 1
+            return False, "DUPLICATE_TRACE_ID", []
+
+        if symbol not in self._symbol_whitelist:
+            self.metrics["invalid_symbol_total"] += 1
+            return False, "SYMBOL_NOT_ALLOWED", []
+
+        if side not in {"BUY", "SELL"}:
+            return False, "INVALID_SIDE", []
+
+        qty_raw = data.get("qty")
+        if qty_raw is None:
+            return False, "INVALID_QTY", []
+
+        try:
+            qty = float(qty_raw)
+        except Exception:
+            return False, "INVALID_QTY", []
+
+        if qty <= 0:
+            return False, "INVALID_QTY", []
+
+        notional_raw = data.get("notional", qty)
+        notional_value = qty if notional_raw is None else notional_raw
+        try:
+            notional = float(notional_value)
+        except Exception:
+            return False, "INVALID_NOTIONAL", []
+
+        if notional > self._max_order_notional:
+            self.metrics["invalid_notional_total"] += 1
+            return False, "MAX_NOTIONAL_EXCEEDED", []
+
+        if self._require_sl_tp and ("sl" not in data or "tp" not in data):
+            self.metrics["missing_sl_tp_total"] += 1
+            return False, "MISSING_SL_TP", []
+
+        sl = data.get("sl")
+        tp = data.get("tp")
+        if sl is not None:
+            sl = float(sl)
+        if tp is not None:
+            tp = float(tp)
+
+        orders: List[Dict[str, Any]] = [
+            {
+                "kind": "ENTRY",
+                "trace_id": trace_id,
+                "instrument_id": f"{symbol}.AUREUS_VIRTUAL",
+                "side": side,
+                "qty": qty,
+            }
+        ]
+
+        if sl is not None:
+            orders.append({"kind": "STOP_LOSS", "trace_id": trace_id, "price": sl, "side": "SELL" if side == "BUY" else "BUY"})
+        if tp is not None:
+            orders.append({"kind": "TAKE_PROFIT", "trace_id": trace_id, "price": tp, "side": "SELL" if side == "BUY" else "BUY"})
+
+        self._seen_trace_ids.add(trace_id)
+        return True, "", orders
+
+    @staticmethod
+    def _decode_value(value: Any) -> str:
+        if isinstance(value, bytes):
+            return value.decode()
+        return str(value)
+
+    def _reject(self, reason: str) -> None:
+        self.metrics["rejected_total"] += 1
+        self.log.warning(f"Rejected execution intent: {reason}")
+
+    def generate_order(self, order: Dict[str, Any]) -> None:  # pragma: no cover - adapter method
+        base_generate = getattr(super(), "generate_order", None)
+        if callable(base_generate):
+            base_generate(order)
+            return
+        self._generated_orders.append(order)

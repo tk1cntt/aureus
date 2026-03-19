@@ -1,15 +1,26 @@
 import asyncio
 import json
-from nautilus_trader.core.message import Event
-from nautilus_trader.model.events import OrderEvent, PositionEvent
 import logging
+import uuid
+from typing import Any
+
+try:
+    from nautilus_trader.core.message import Event
+    from nautilus_trader.model.events import OrderEvent, PositionEvent
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in tests
+    Event = Any
+    OrderEvent = Any
+    PositionEvent = Any
+
 
 class SyncWorker:
-    def __init__(self, redis_client):
+    def __init__(self, redis_client, schema_ver: str = "1.0", dlq_stream: str = "aureus:stream:sync:dlq"):
         self.redis_client = redis_client
         self._running = False
         self._queue = asyncio.Queue()
         self.log = logging.getLogger(self.__class__.__name__)
+        self.schema_ver = schema_ver
+        self.dlq_stream = dlq_stream
 
     def start(self):
         self._running = True
@@ -19,67 +30,97 @@ class SyncWorker:
         self._running = False
 
     def on_order_event(self, event: OrderEvent):
-        # Called by msg_bus synchronously
         self._queue.put_nowait(("order", event))
-        
+
     def on_position_event(self, event: PositionEvent):
-        # Called by msg_bus synchronously
         self._queue.put_nowait(("position", event))
 
     async def _process_loop(self):
         while self._running:
             await self._process_queue_once()
             await asyncio.sleep(0.01)
-            
+
     async def _process_queue_once(self):
         while not self._queue.empty():
+            evt_type, event = self._queue.get_nowait()
             try:
-                evt_type, event = self._queue.get_nowait()
                 if evt_type == "order":
                     await self._handle_order_event(event)
                 elif evt_type == "position":
                     await self._handle_position_event(event)
-            except Exception as e:
-                self.log.error(f"Error processing sync event: {e}")
+                else:
+                    await self._emit_dlq("UNKNOWN_EVENT_TYPE", evt_type, event, "unsupported event type")
+            except Exception as exc:
+                await self._emit_dlq("PROCESSING_ERROR", evt_type, event, str(exc))
+
+    @staticmethod
+    def _unwrap_value(value: Any, default: str = "unknown") -> str:
+        if value is None:
+            return default
+        inner = getattr(value, "value", value)
+        return str(inner)
+
+    def _extract_symbol(self, event: Any) -> str:
+        instrument = getattr(event, "instrument_id", "UNKNOWN")
+        value = self._unwrap_value(instrument, "UNKNOWN")
+        return value.split(".")[0].upper()
+
+    def _build_envelope(self, event_type: str, trace_id: str, ts_event: Any, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "schema_ver": self.schema_ver,
+            "event_id": str(uuid.uuid4()),
+            "event_type": event_type,
+            "trace_id": trace_id,
+            "ts_event": ts_event,
+            "payload": payload,
+        }
 
     async def _handle_order_event(self, event):
-        # Extract fields to match Aureus execution contract
-        # Standardize Nautilus OrderEvent -> dict
         try:
-            # Here we extract properties from Nautilus OrderEvent dynamically
-            # For brevity, assuming we extract standard trace_id and status
-            trace_id = getattr(event, "client_order_id", getattr(event, "order_id", "unknown")).value if hasattr(event, "client_order_id") else "unknown"
-            
+            trace_raw = getattr(event, "client_order_id", getattr(event, "order_id", "unknown"))
+            trace_id = self._unwrap_value(trace_raw)
+            symbol = self._extract_symbol(event)
+            ts_event = getattr(event, "ts_event", 0)
             payload = {
-                "trace_id": str(trace_id),
-                "status": event.__class__.__name__.upper(),  # e.g., ORDERACCEPTED -> ORDER_ACCEPTED
-                "event_time": getattr(event, "ts_event", 0),
-                "nautilus_event": True
+                "status": event.__class__.__name__.upper(),
+                "nautilus_event": True,
+                "symbol": symbol,
             }
-            
-            # Use XADD to push back to Aureus
-            # Stream key could be dynamic based on instrument
-            symbol = getattr(event, "instrument_id", "UNKNOWN").value.split(".")[0] if hasattr(event, "instrument_id") else "UNKNOWN"
-            
-            stream_key = f"aureus:stream:{symbol}:execution"
-            await self.redis_client.xadd(stream_key, {"type": "EXECUTION_REPORT", "data": json.dumps(payload)})
-            self.log.debug(f"Pushed execution report for {trace_id} to {stream_key}")
-            
-        except Exception as e:
-            self.log.error(f"Failed to map order event to execution report: {e}")
+            envelope = self._build_envelope("ORDER_EVENT", trace_id, ts_event, payload)
+            await self.redis_client.xadd(
+                f"aureus:stream:{symbol}:execution",
+                {"type": "EXECUTION_REPORT", "data": json.dumps(envelope)},
+            )
+        except Exception as exc:
+            await self._emit_dlq("ORDER_MAPPING_FAILED", "order", event, str(exc))
 
     async def _handle_position_event(self, event):
-        # Extract fields to match Aureus position contract
         try:
-            symbol = getattr(event, "instrument_id", "UNKNOWN").value.split(".")[0] if hasattr(event, "instrument_id") else "UNKNOWN"
+            symbol = self._extract_symbol(event)
+            trace_id = self._unwrap_value(getattr(event, "position_id", "unknown"))
+            ts_event = getattr(event, "ts_event", 0)
             payload = {
-                "position_id": str(getattr(event, "position_id", "unknown")),
+                "position_id": trace_id,
                 "symbol": symbol,
                 "unrealized_pnl": float(getattr(event, "unrealized_pnl", 0.0)),
-                "realized_pnl": float(getattr(event, "realized_pnl", 0.0))
+                "realized_pnl": float(getattr(event, "realized_pnl", 0.0)),
             }
-            stream_key = f"aureus:stream:{symbol}:positions"
-            await self.redis_client.xadd(stream_key, {"type": "POSITION_REPORT", "data": json.dumps(payload)})
-            self.log.debug(f"Pushed position report to {stream_key}")
-        except Exception as e:
-            self.log.error(f"Failed to map position event to stream report: {e}")
+            envelope = self._build_envelope("POSITION_EVENT", trace_id, ts_event, payload)
+            await self.redis_client.xadd(
+                f"aureus:stream:{symbol}:positions",
+                {"type": "POSITION_REPORT", "data": json.dumps(envelope)},
+            )
+        except Exception as exc:
+            await self._emit_dlq("POSITION_MAPPING_FAILED", "position", event, str(exc))
+
+    async def _emit_dlq(self, reason: str, event_type: str, event: Any, error: str) -> None:
+        diagnostics = {
+            "schema_ver": self.schema_ver,
+            "event_id": str(uuid.uuid4()),
+            "event_type": event_type,
+            "reason": reason,
+            "error": error,
+            "source_event": event.__class__.__name__ if event is not None else "unknown",
+        }
+        await self.redis_client.xadd(self.dlq_stream, {"type": "SYNC_EVENT_DLQ", "data": json.dumps(diagnostics)})
+        self.log.error(f"SyncWorker routed event to DLQ: {reason} ({error})")
