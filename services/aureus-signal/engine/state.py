@@ -22,7 +22,14 @@ class SymbolState:
         self.strategy_progress: Dict[str, Any] = {}
         self.candle_actors: Dict[str, Any] = {} 
         self.current_session: str = "OFF_MARKET"
-        
+
+        # Phase 10: Strategy lifecycle and validation ledgers (bounded, deterministic order)
+        self.strategy_lifecycle_state: Dict[str, Dict[str, Any]] = {}
+        self.strategy_last_transition: Dict[str, Dict[str, Any]] = {}
+        self.strategy_transition_history: List[Dict[str, Any]] = []
+        self.strategy_validator_failures: List[Dict[str, Any]] = []
+        self.order_rejections: List[Dict[str, Any]] = []
+
         # Quantitative / Hybrid Data
         self.vol_sma_20: float = 1000.0 # Default for sims
         self.htf_trend: str = "NEUTRAL"
@@ -121,6 +128,12 @@ class SymbolState:
         self.htf_trend = data.get('htf_trend', "NEUTRAL")
         self.market_regime = data.get('market_regime', "SIDEWAYS")
 
+        self.strategy_lifecycle_state = data.get('strategy_lifecycle_state', {})
+        self.strategy_last_transition = data.get('strategy_last_transition', {})
+        self.strategy_transition_history = data.get('strategy_transition_history', [])
+        self.strategy_validator_failures = data.get('strategy_validator_failures', [])
+        self.order_rejections = data.get('order_rejections', [])
+
     def to_dict(self) -> Dict[str, Any]:
         """Serializes current state for dashboard/UI consumption."""
         return {
@@ -138,8 +151,76 @@ class SymbolState:
             "narrative": self.narrative,
             "debate_log": self.debate_log,
             "active_orders": [o for o in self.simulated_orders if o['status'] in ('ACTIVE', 'PENDING')],
-            "closed_orders": sorted([o for o in self.simulated_orders if o['status'] == 'CLOSED'], key=lambda x: x.get('close_time', 0), reverse=True)[:10]
+            "closed_orders": sorted([o for o in self.simulated_orders if o['status'] == 'CLOSED'], key=lambda x: x.get('close_time', 0), reverse=True)[:10],
+            "strategy_lifecycle_state": self.strategy_lifecycle_state,
+            "strategy_last_transition": self.strategy_last_transition,
+            "strategy_transition_history": self.strategy_transition_history,
+            "strategy_validator_failures": self.strategy_validator_failures,
+            "order_rejections": self.order_rejections,
         }
+
+    def _append_bounded(self, ledger: List[Dict[str, Any]], entry: Dict[str, Any], max_items: int) -> None:
+        ledger.append(entry)
+        if len(ledger) > max_items:
+            del ledger[0 : len(ledger) - max_items]
+
+    def record_strategy_transition(
+        self,
+        strategy_id: str,
+        current_state: str,
+        next_state: str,
+        transition_allowed: bool,
+        validator_passed: bool,
+        validator_failures: Optional[List[str]] = None,
+        timestamp: Optional[int] = None,
+    ) -> None:
+        safe_strategy_id = str(strategy_id)
+        transition = {
+            "strategy_id": safe_strategy_id,
+            "current_state": str(current_state),
+            "next_state": str(next_state),
+            "transition_allowed": bool(transition_allowed),
+            "validator_passed": bool(validator_passed),
+            "validator_failures": list(validator_failures or []),
+            "t": int(timestamp if timestamp is not None else (self.last_candle or {}).get("t", 0)),
+        }
+
+        self.strategy_last_transition[safe_strategy_id] = transition
+        self.strategy_lifecycle_state[safe_strategy_id] = {
+            "current_state": transition["next_state"] if transition["transition_allowed"] else transition["current_state"],
+            "last_transition_allowed": transition["transition_allowed"],
+            "validator_passed": transition["validator_passed"],
+            "last_updated_t": transition["t"],
+        }
+
+        self._append_bounded(self.strategy_transition_history, transition, 500)
+
+        if transition["validator_failures"]:
+            failure_entry = {
+                "strategy_id": safe_strategy_id,
+                "reason_code": "VALIDATOR_FAILED",
+                "failures": transition["validator_failures"],
+                "t": transition["t"],
+            }
+            self._append_bounded(self.strategy_validator_failures, failure_entry, 500)
+
+    def record_validator_failure(
+        self,
+        strategy_id: str,
+        reason_code: str,
+        failures: Optional[List[str]] = None,
+        timestamp: Optional[int] = None,
+    ) -> None:
+        entry = {
+            "strategy_id": str(strategy_id),
+            "reason_code": str(reason_code),
+            "failures": list(failures or []),
+            "t": int(timestamp if timestamp is not None else (self.last_candle or {}).get("t", 0)),
+        }
+        self._append_bounded(self.strategy_validator_failures, entry, 500)
+
+    def record_order_rejection(self, payload: Dict[str, Any]) -> None:
+        self._append_bounded(self.order_rejections, dict(payload), 500)
 
     def update_with_candle(self, candle: Dict[str, Any]):
         """Update lifecycle of all registered objects based on new price action."""

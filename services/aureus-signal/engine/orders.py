@@ -2,6 +2,8 @@ import logging
 import json
 from typing import Dict, List, Any
 
+from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS
+
 logger = logging.getLogger("aureus-signal.orders")
 
 class SimulatedTradeManager:
@@ -35,6 +37,35 @@ class SimulatedTradeManager:
             if await self.r.sismember(history_key, trace_id):
                 continue # Already processed this setup
 
+            order_plan_snapshot = self._build_order_plan_snapshot(t)
+            missing_order_plan_keys = self._missing_order_plan_keys(order_plan_snapshot)
+            if missing_order_plan_keys:
+                reason_payload = {
+                    "trace_id": trace_id,
+                    "symbol": symbol,
+                    "strategy_id": strat_id,
+                    "strategy_name": t.get("strategy", "UNKNOWN"),
+                    "decision_phase": "process_triggers",
+                    "status": "REJECTED",
+                    "reason_code": "ORDER_PLAN_INCOMPLETE",
+                    "missing_order_plan_keys": missing_order_plan_keys,
+                    "origin_timestamp": int(origin_t),
+                    "t": int(state_obj.last_candle.get("t", origin_t)),
+                }
+                self._persist_rejection(state_obj, reason_payload)
+                await self.r.xadd(
+                    f"aureus:stream:{symbol}:orders",
+                    {
+                        "type": "ORDER_REJECTED",
+                        "data": json.dumps(reason_payload),
+                    },
+                )
+                logger.warning(
+                    f"[{symbol}] [process_triggers] Error: Incomplete order plan for {trace_id}. "
+                    f"Missing keys: {missing_order_plan_keys}"
+                )
+                continue
+
             # It's a NEW trade!
             logger.info(f"[{symbol}] [process_triggers] 1... NEW Simulated Trade Triggered: {trace_id}")
             
@@ -45,6 +76,10 @@ class SimulatedTradeManager:
             if sl is None or tp is None:
                 logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
                 continue
+
+            # Enrich order-plan snapshot with concrete computed levels for persistence.
+            order_plan_snapshot["sl_value"] = sl
+            order_plan_snapshot["tp_value"] = tp
                 
             # 2. Determine Side
             side = t.get('side')
@@ -76,6 +111,7 @@ class SimulatedTradeManager:
                 "pnl": 0.0,
                 "exit_price": None,
                 "execution_mode": execution_mode,
+                "order_plan_snapshot": order_plan_snapshot,
                 "ai_audit": None # Place for ACI and Debate Log
             }
             
@@ -184,6 +220,70 @@ class SimulatedTradeManager:
                 })
         
         return updated
+
+    def _missing_order_plan_keys(self, order_plan_snapshot: Dict[str, Any]) -> List[str]:
+        missing: List[str] = []
+        for key in REQUIRED_ORDER_PLAN_KEYS:
+            value = order_plan_snapshot.get(key)
+            if value is None or value == "":
+                missing.append(key)
+        return missing
+
+    def _normalize_mapping(self, payload: Any) -> Dict[str, Any]:
+        if isinstance(payload, dict):
+            return payload
+        return {}
+
+    def _build_order_plan_snapshot(self, trigger: Dict[str, Any]) -> Dict[str, Any]:
+        order_plan = self._normalize_mapping(trigger.get("order_plan"))
+        exit_config = self._normalize_mapping(trigger.get("exit_config"))
+
+        sl_cfg = self._normalize_mapping(order_plan.get("sl"))
+        if not sl_cfg:
+            sl_cfg = self._normalize_mapping(exit_config.get("sl"))
+
+        tp_cfg = self._normalize_mapping(order_plan.get("tp"))
+        if not tp_cfg:
+            tp_cfg = self._normalize_mapping(exit_config.get("tp"))
+
+        trailing_cfg = self._normalize_mapping(order_plan.get("trailing"))
+        if not trailing_cfg:
+            trailing_cfg = self._normalize_mapping(exit_config.get("trailing"))
+
+        size_value = order_plan.get("size")
+        size_mode = str(order_plan.get("size_mode", "FIXED_UNITS")).upper()
+
+        expiry_policy = order_plan.get("expiry_policy")
+        if not expiry_policy:
+            expiry = order_plan.get("expiry", exit_config.get("expiry"))
+            expiry_policy = str(expiry if expiry is not None else "BAR_CLOSE")
+
+        snapshot = {
+            "entry_type": order_plan.get("entry_type", "MARKET"),
+            "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),
+            "sl_mode": sl_cfg.get("mode", "PRICE"),
+            "sl_value": sl_cfg.get("value"),
+            "tp_mode": tp_cfg.get("mode", "PRICE"),
+            "tp_value": tp_cfg.get("value"),
+            "trailing_mode": trailing_cfg.get("mode", "NONE"),
+            "trailing_value": trailing_cfg.get("value", 0.0),
+            "size_mode": size_mode,
+            "size_value": size_value,
+            "expiry_policy": expiry_policy,
+        }
+
+        return snapshot
+
+    def _persist_rejection(self, state_obj: Any, payload: Dict[str, Any]) -> None:
+        if hasattr(state_obj, "record_order_rejection") and callable(state_obj.record_order_rejection):
+            state_obj.record_order_rejection(payload)
+            return
+
+        if not hasattr(state_obj, "order_rejections"):
+            state_obj.order_rejections = []
+        state_obj.order_rejections.append(payload)
+        if len(state_obj.order_rejections) > 500:
+            state_obj.order_rejections = state_obj.order_rejections[-500:]
 
     def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
         """Calculates prices for SL and TP based on strategy config."""

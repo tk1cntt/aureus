@@ -4,10 +4,149 @@ Used by: live engine (main.py), signal_computer.py, and recovery (recalculate_al
 """
 import json
 import logging
+import os
 from typing import Dict, List, Any
 from datetime import datetime, timezone
 
 logger = logging.getLogger("aureus-signal")
+
+SPEC_VERSION = "2026-03-20-live-trading-v1"
+ENGINE_VERSION = os.getenv("AUREUS_SIGNAL_ENGINE_VERSION", "live-engine-v1")
+
+MANDATORY_SIGNAL_KEYS = (
+    "zigzag_state",
+    "ob_state",
+    "choch_state",
+    "fvg_state",
+    "trend_filter_state",
+)
+
+REQUIRED_TOP_LEVEL_TRACE_KEYS = (
+    "trace_id",
+    "decision_status",
+    "decision_timestamp",
+    "symbol",
+    "timeframe",
+    "strategy_id",
+    "strategy_version",
+    "spec_version",
+    "engine_version",
+    "correlation_id",
+)
+
+REQUIRED_MARKET_SNAPSHOT_KEYS = (
+    "bar_timestamp",
+    "bar_ohlcv",
+    "spread",
+    "session_label",
+    "backfill_status",
+    "data_window_start",
+    "data_window_end",
+    "data_window_hash",
+)
+
+REQUIRED_FLOW_INTEGRITY_KEYS = (
+    "current_state",
+    "next_state",
+    "transition_allowed",
+    "validator_passed",
+    "validator_failures",
+)
+
+REQUIRED_ORDER_PLAN_KEYS = (
+    "entry_type",
+    "entry_policy",
+    "sl_mode",
+    "sl_value",
+    "tp_mode",
+    "tp_value",
+    "trailing_mode",
+    "trailing_value",
+    "size_mode",
+    "size_value",
+    "expiry_policy",
+)
+
+
+class DecisionTraceValidationError(ValueError):
+    """Raised when a decision trace payload does not match required schema."""
+
+
+def build_decision_trace(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a decision-trace payload with required top-level blocks for Phase 9."""
+    trace = {
+        "trace_id": context.get("trace_id"),
+        "decision_status": context.get("decision_status"),
+        "decision_timestamp": context.get("decision_timestamp"),
+        "symbol": context.get("symbol"),
+        "timeframe": context.get("timeframe"),
+        "strategy_id": context.get("strategy_id"),
+        "strategy_version": context.get("strategy_version"),
+        "spec_version": context.get("spec_version", SPEC_VERSION),
+        "engine_version": context.get("engine_version", ENGINE_VERSION),
+        "correlation_id": context.get("correlation_id"),
+        "market_snapshot": context.get("market_snapshot", {}),
+        "signals": context.get("signals", {}),
+        "evaluated_rules": context.get("evaluated_rules", []),
+        "flow_integrity": context.get("flow_integrity", {}),
+    }
+
+    order_plan_snapshot = context.get("order_plan_snapshot", context.get("order_plan"))
+    if order_plan_snapshot is not None:
+        trace["order_plan_snapshot"] = order_plan_snapshot
+
+    return trace
+
+
+def _is_missing(value: Any) -> bool:
+    return value is None or value == ""
+
+
+def _require_keys(payload: Dict[str, Any], keys: tuple[str, ...], scope: str) -> None:
+    for key in keys:
+        if _is_missing(payload.get(key)):
+            raise DecisionTraceValidationError(f"Missing required key `{scope}.{key}`")
+
+
+def validate_decision_trace(trace: Dict[str, Any]) -> bool:
+    """Validate trace payload according to `SPEC_DECISION_TRACE_SCHEMA` quality gates."""
+    _require_keys(trace, REQUIRED_TOP_LEVEL_TRACE_KEYS, "trace")
+
+    status = str(trace.get("decision_status")).upper()
+    if status not in {"ACCEPTED", "REJECTED"}:
+        raise DecisionTraceValidationError("`decision_status` must be ACCEPTED or REJECTED")
+
+    market_snapshot = trace.get("market_snapshot")
+    if not isinstance(market_snapshot, dict):
+        raise DecisionTraceValidationError("`market_snapshot` must be an object")
+    _require_keys(market_snapshot, REQUIRED_MARKET_SNAPSHOT_KEYS, "market_snapshot")
+
+    signals = trace.get("signals")
+    if not isinstance(signals, dict):
+        raise DecisionTraceValidationError("`signals` must be an object")
+    _require_keys(signals, MANDATORY_SIGNAL_KEYS, "signals")
+
+    evaluated_rules = trace.get("evaluated_rules")
+    if not isinstance(evaluated_rules, list) or not evaluated_rules:
+        raise DecisionTraceValidationError("`evaluated_rules` must be a non-empty list")
+
+    if status == "REJECTED":
+        has_fail = any(str(rule.get("result", "")).upper() == "FAIL" for rule in evaluated_rules if isinstance(rule, dict))
+        if not has_fail:
+            raise DecisionTraceValidationError("Rejected traces require at least one FAIL rule")
+
+    flow_integrity = trace.get("flow_integrity")
+    if not isinstance(flow_integrity, dict):
+        raise DecisionTraceValidationError("`flow_integrity` must be an object")
+    _require_keys(flow_integrity, REQUIRED_FLOW_INTEGRITY_KEYS, "flow_integrity")
+
+    if status == "ACCEPTED":
+        order_plan = trace.get("order_plan_snapshot")
+        if not isinstance(order_plan, dict):
+            raise DecisionTraceValidationError("Accepted traces require `order_plan_snapshot`")
+        _require_keys(order_plan, REQUIRED_ORDER_PLAN_KEYS, "order_plan_snapshot")
+
+    return True
 
 
 def build_snapshot(state, candle: Dict[str, Any]) -> Dict[str, Any]:
