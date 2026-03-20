@@ -70,6 +70,7 @@ class TestSignalFactoryContracts(unittest.TestCase):
         os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = "0"
         try:
             signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
+            self.assertNotIn("fvg", signals)
             self.assertNotIn("fvg_up", signals)
             self.assertNotIn("fvg_down", signals)
         finally:
@@ -85,11 +86,33 @@ class TestSignalFactoryContracts(unittest.TestCase):
             signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
             self.assertIn("fvg_up", signals)
             self.assertIn("fvg_down", signals)
+            self.assertEqual(getattr(signals["fvg_up"], "TAG", None), "fvg_up")
+            self.assertEqual(getattr(signals["fvg_down"], "TAG", None), "fvg_down")
         finally:
             if previous is None:
                 os.environ.pop("AUREUS_ENABLE_FVG_SIGNAL", None)
             else:
                 os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = previous
+
+    def test_normalized_snapshot_tracks_fvg_signal_sources_when_flag_on(self):
+        previous = os.environ.get("AUREUS_ENABLE_FVG_SIGNAL")
+        os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = "1"
+        try:
+            signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
+            snapshot = build_normalized_signal_snapshot(signals=signals, state=_DummyState())
+            fvg_source = snapshot["fvg_state"]["source"]
+
+            self.assertEqual(fvg_source["up"]["status"], "OK")
+            self.assertEqual(fvg_source["up"]["signal_class"], "FVGUpSignal")
+            self.assertEqual(fvg_source["down"]["status"], "OK")
+            self.assertEqual(fvg_source["down"]["signal_class"], "FVGDownSignal")
+            self.assertEqual(fvg_source["legacy"]["status"], "MISSING")
+        finally:
+            if previous is None:
+                os.environ.pop("AUREUS_ENABLE_FVG_SIGNAL", None)
+            else:
+                os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = previous
+
 
 
 class TestDecisionVersionMetadata(unittest.TestCase):
