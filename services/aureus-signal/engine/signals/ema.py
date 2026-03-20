@@ -25,36 +25,34 @@ class EMASignal(BaseSignal):
         try:
             if len(df) < 1:  # Need at least one candle
                 return None
-                
+
             curr_candle = df.iloc[-1]
             curr_close = float(curr_candle['c'])
             curr_t = int(curr_candle['t'])
 
             # Initialize state emas if missing
-            if not hasattr(state_obj, 'emas'): state_obj.emas = {}
-            
+            if not hasattr(state_obj, 'emas'):
+                state_obj.emas = {}
+
             # Check for cached value from previous candle
             cached_data = state_obj.emas.get(self.period)
-            
-            if isinstance(cached_data, dict):
-                if "current" in cached_data:
-                    # OPTIMIZED O(1) LOGIC (COM-05/SIG-02)
-                    prev_ema = float(cached_data["current"])
-                    
-                    # EMA formula: EMA = (Price * k) + (Prev_EMA * (1 - k))
-                    # k = 2 / (period + 1)
-                    k = 2.0 / (self.period + 1.0)
-                    curr_ema = (curr_close * k) + (prev_ema * (1.0 - k))
-                else:
-                    # Fallback to batch logic if keys are missing
-                    ema_series = df['c'].ewm(span=self.period, adjust=False).mean()
-                    curr_ema = float(ema_series.iloc[-1])
-                    prev_ema = float(ema_series.iloc[-2]) if len(ema_series) > 1 else curr_ema
+            has_valid_cached_state = isinstance(cached_data, dict) and "current" in cached_data
+
+            if has_valid_cached_state:
+                # OPTIMIZED O(1) LOGIC (COM-05/SIG-02)
+                prev_ema = float(cached_data["current"])
+
+                # EMA formula: EMA = (Price * k) + (Prev_EMA * (1 - k))
+                # k = 2 / (period + 1)
+                k = 2.0 / (self.period + 1.0)
+                curr_ema = (curr_close * k) + (prev_ema * (1.0 - k))
             else:
-                # WARMUP / BATCH LOGIC (Pandas ewm)
-                if len(df) < self.period: # Standard warmup period
+                # EXPLICIT FALLBACK LOGIC:
+                # - warmup: require at least `period` candles before first emit
+                # - malformed/partial cache: recompute deterministic batch ewm safely
+                if len(df) < self.period:  # Standard warmup period
                     return None
-                
+
                 ema_series = df['c'].ewm(span=self.period, adjust=False).mean()
                 curr_ema = float(ema_series.iloc[-1])
                 prev_ema = float(ema_series.iloc[-2]) if len(ema_series) > 1 else curr_ema

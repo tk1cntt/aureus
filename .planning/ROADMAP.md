@@ -1,75 +1,154 @@
-# ROADMAP — Milestone v1.1 Signal Optimization
+# Roadmap: Aureus v1.1 Signal Optimization
 
-## Proposed Roadmap
+## Overview
 
-**9 phases** | **9 signals (1 signal / phase)** | Test gate per phase: unit + integration + coverage >= 80%
+Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-first cho `aureus-signal`, với mỗi phase tập trung 1 signal và phải đạt test gate (unit + integration + coverage >= 80%) trước khi đóng phase.
 
-| # | Phase Folder | Signal | Requirements | Success Criteria | Status |
-|---|---|---|---|---|---|
-| 01 | `01-signal-atr` | `atr` | SIG-01, TST-01..04, VAL-01..02 | 6 | ✅ Done |
-| 02 | `02-signal-ema` | `ema` | SIG-02, TST-01..04, VAL-01..02 | 6 | ⏳ Next |
-| 03 | `03-signal-fvg` | `fvg` | SIG-03, TST-01..04, VAL-01..02 | 6 | Pending |
-| 04 | `04-signal-pivots` | `pivots` | SIG-04, TST-01..04, VAL-01..02 | 6 | Pending |
-| 05 | `05-signal-session` | `session` | SIG-05, TST-01..04, VAL-01..02 | 6 | Pending |
-| 06 | `06-signal-sweep` | `sweep` | SIG-06, TST-01..04, VAL-01..02 | 6 | Pending |
-| 07 | `07-signal-trend` | `trend` | SIG-07, TST-01..04, VAL-01..02 | 6 | Pending |
-| 08 | `08-signal-volume-sma` | `volume_sma` | SIG-08, TST-01..04, VAL-01..02 | 6 | Pending |
-| 09 | `09-signal-structure` | `structure` | SIG-09, TST-01..04, VAL-01..02 | 6 | Pending |
+## Phases
 
-## Phase 01: Signal ATR Optimization
+**Phase Numbering:**
+- Integer phases (1, 2, 3...): Planned milestone work
+- Decimal phases (2.1, 2.2...): Urgent insertions (INSERTED)
 
-- **Directory:** `01-signal-atr`
-- **Status:** Done
-- **Requirements:** `SIG-01`, `TST-01..04`, `VAL-01..02`
+- [x] **Phase 1: Signal ATR Optimization** - Hoàn tất tối ưu `atr` và lưu đầy đủ evidence phase.
+- [x] **Phase 2: Signal EMA Optimization** - Hoàn tất tối ưu `ema` và đóng toàn bộ gate verification phase.
+- [ ] **Phase 3: Signal FVG Optimization** - Tối ưu `fvg` với guardrails và contract ổn định.
+- [ ] **Phase 4: Signal Pivots Optimization** - Tối ưu `pivots` và giữ tương thích pipeline hiện tại.
+- [ ] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn.
+- [ ] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects.
+- [ ] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu.
+- [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo chuẩn phase.
+- [ ] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1.
 
----
+## Phase Details
 
-## Phase 01 Completion Evidence
+### Phase 1: Signal ATR Optimization
+**Goal**: Tối ưu tín hiệu `atr` và hoàn tất phase evidence.
+**Depends on**: Nothing (first phase)
+**Requirements**: [SIG-01, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. Tín hiệu `atr` giữ intent giao dịch và event semantics.
+  2. Unit + integration tests cho scope phase pass.
+  3. Evidence phase đầy đủ trong thư mục phase.
+**Plans**: 1 plan
 
-- Folder: `.planning/phases/01-signal-atr/`
-- Research: `.planning/phases/01-signal-atr/RESEARCH.md`
-- Plan: `.planning/phases/01-signal-atr/PLAN.md`
-- Validation: `.planning/phases/01-signal-atr/VALIDATION.md`
-- Summary: `.planning/phases/01-signal-atr/SUMMARY.md`
+Plans:
+- [x] 01-01: Hoàn tất tối ưu ATR và phase evidence (`RESEARCH`, `PLAN`, `VALIDATION`, `SUMMARY`, `UAT`).
 
----
+### Phase 2: Signal EMA Optimization
+**Goal**: Tối ưu tín hiệu `ema` theo artifacts đã lập kế hoạch.
+**Depends on**: Phase 1
+**Requirements**: [SIG-02, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. Tín hiệu `ema` hoạt động đúng contract runtime.
+  2. Unit + integration tests scope EMA pass.
+  3. Coverage phase >= 80% với evidence rõ ràng.
+**Plans**: 1 plan
 
-## Phase Template (applies to every phase)
+Plans:
+- [x] 02-01: Execute EMA plan đã định nghĩa trong `02-01-PLAN.md`.
 
-For each phase `NN` (signal-specific), all criteria below must pass:
+### Phase 3: Signal FVG Optimization
+**Goal**: Tối ưu `fvg` với rollout-safe và snapshot contract ổn định.
+**Depends on**: Phase 2
+**Requirements**: [SIG-03, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `fvg` chạy ổn định theo contract mới.
+  2. Không phát sinh contamination/import side effect.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
 
-1. **Signal correctness:** optimized signal behavior keeps existing trading intent and event semantics.
-2. **Dedicated signal unit test:** create/update one dedicated unit test file for this signal.
-3. **Dedicated integration test:** create/update one dedicated integration test file for this signal in `aureus-signal` system flow.
-4. **Unit + integration pass:** all tests for this phase must pass.
-5. **Coverage gate:** coverage report for phase scope is **>= 80%**.
-6. **Traceability update:** `REQUIREMENTS.md` and roadmap references updated with evidence links/commands.
-7. **Phase docs required:** each phase has `RESEARCH.md`, `PLAN.md`, `VALIDATION.md`, `SUMMARY.md` in its own folder.
+Plans:
+- [ ] 03-01: Plan sẽ được tạo sau `gsd-discuss-phase 3`.
 
----
+### Phase 4: Signal Pivots Optimization
+**Goal**: Tối ưu `pivots` và giữ tương thích hệ thống.
+**Depends on**: Phase 3
+**Requirements**: [SIG-04, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `pivots` cho kết quả ổn định theo yêu cầu.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
 
-## Requirement Traceability Update
+Plans:
+- [ ] 04-01: Tối ưu và verify tín hiệu `pivots`.
 
-| Requirement ID | Planned Phase |
-|---|---|
-| SIG-01 | 01 |
-| SIG-02 | 02 |
-| SIG-03 | 03 |
-| SIG-04 | 04 |
-| SIG-05 | 05 |
-| SIG-06 | 06 |
-| SIG-07 | 07 |
-| SIG-08 | 08 |
-| SIG-09 | 09 |
-| TST-01 | 01-09 |
-| TST-02 | 01-09 |
-| TST-03 | 01-09 |
-| TST-04 | 01-09 |
-| VAL-01 | 01-09 |
-| VAL-02 | 01-09 |
+### Phase 5: Signal Session Optimization
+**Goal**: Tối ưu `session` với gate kiểm thử chuẩn.
+**Depends on**: Phase 4
+**Requirements**: [SIG-05, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `session` phản ánh logic thị trường đúng intent.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
 
----
+Plans:
+- [ ] 05-01: Tối ưu và verify tín hiệu `session`.
 
-## Next Up
+### Phase 6: Signal Sweep Optimization
+**Goal**: Tối ưu `sweep` với kiểm soát an toàn trạng thái.
+**Depends on**: Phase 5
+**Requirements**: [SIG-06, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `sweep` hoạt động ổn định trong flow chính.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
 
-**Phase 02 (`02-signal-ema`)** — optimize `ema` with dedicated unit + integration tests and coverage >= 80% before phase closure.
+Plans:
+- [ ] 06-01: Tối ưu và verify tín hiệu `sweep`.
+
+### Phase 7: Signal Trend Optimization
+**Goal**: Tối ưu `trend` và đảm bảo tương thích contract.
+**Depends on**: Phase 6
+**Requirements**: [SIG-07, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `trend` duy trì hành vi mong đợi.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 07-01: Tối ưu và verify tín hiệu `trend`.
+
+### Phase 8: Signal Volume SMA Optimization
+**Goal**: Tối ưu `volume_sma` theo chuẩn phase execution.
+**Depends on**: Phase 7
+**Requirements**: [SIG-08, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `volume_sma` hoạt động đúng intent.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 08-01: Tối ưu và verify tín hiệu `volume_sma`.
+
+### Phase 9: Signal Structure Optimization
+**Goal**: Tối ưu `structure` và chốt milestone v1.1.
+**Depends on**: Phase 8
+**Requirements**: [SIG-09, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `structure` ổn định trong pipeline signal.
+  2. Unit + integration tests pass.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 09-01: Tối ưu và verify tín hiệu `structure`.
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Signal ATR Optimization | 1/1 | Complete | - |
+| 2. Signal EMA Optimization | 1/1 | Complete | 2026-03-20 |
+| 3. Signal FVG Optimization | 0/1 | Not started | - |
+| 4. Signal Pivots Optimization | 0/1 | Not started | - |
+| 5. Signal Session Optimization | 0/1 | Not started | - |
+| 6. Signal Sweep Optimization | 0/1 | Not started | - |
+| 7. Signal Trend Optimization | 0/1 | Not started | - |
+| 8. Signal Volume SMA Optimization | 0/1 | Not started | - |
+| 9. Signal Structure Optimization | 0/1 | Not started | - |
