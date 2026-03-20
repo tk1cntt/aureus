@@ -19,9 +19,11 @@ from dotenv import load_dotenv
 PRIO_TRADE = 1
 PRIO_PULSE = 2
 _queue_counter = 0  # Monotonic counter for PriorityQueue tiebreaking
+SPEC_VERSION = "2026-03-20-live-trading-v1"
+ENGINE_VERSION = os.getenv("AUREUS_SIGNAL_ENGINE_VERSION", "live-engine-v1")
 
 from engine.manager import WindowManager
-from engine.signal_factory import create_signal_set
+from engine.signal_factory import create_signal_set, build_normalized_signal_snapshot
 from engine.snapshot_utils import build_snapshot, insert_single_snapshot, batch_insert_snapshots
 from engine.strategies.registry import StrategyRegistry
 from engine.strategies.seed_strategies import seed_system_strategies
@@ -60,6 +62,107 @@ def load_symbols_config(path="symbols.json"):
     except Exception as e:
         logger.error(f"[GLOBAL] [load_symbols_config] Error: Failed to load {path}: {e}")
         return {}
+
+
+def evaluate_closed_candle_gate(msg_type: str, stream_key: str, payload: dict) -> tuple[bool, str]:
+    """Returns (is_allowed, reason_code) for phase-1 closed-candle gate."""
+    if msg_type != "CANDLE":
+        return False, "NON_CANDLE_MESSAGE"
+
+    raw_is_closed = payload.get("is_closed")
+    if raw_is_closed is None:
+        # Gateway candle stream is treated as closed-candle by default.
+        return True, "OK"
+
+    if isinstance(raw_is_closed, bool):
+        is_closed = raw_is_closed
+    else:
+        is_closed = str(raw_is_closed).strip().lower() in {"1", "true", "yes", "y"}
+
+    if not is_closed:
+        return False, "BAR_NOT_CLOSED"
+
+    return True, "OK"
+
+
+def evaluate_backfill_readiness_gate(symbol: str, window_manager: WindowManager) -> tuple[bool, str]:
+    """Returns (is_allowed, reason_code) for phase-2 backfill readiness gate."""
+    status_payload = window_manager.get_backfill_status(symbol)
+    status = str(status_payload.get("status", "NOT_READY")).upper()
+    reason = str(status_payload.get("reason", "UNSPECIFIED"))
+
+    if status != "READY":
+        return False, f"BACKFILL_NOT_READY:{status}:{reason}"
+
+    return True, "OK"
+
+
+def evaluate_window_integrity_gate(symbol: str, window_manager: WindowManager) -> tuple[bool, str]:
+    """Returns (is_allowed, reason_code) for phase-3 contiguous-window integrity gate."""
+    integrity_payload = window_manager.get_window_integrity(symbol)
+    is_contiguous = bool(integrity_payload.get("is_contiguous_window", False))
+    reason = str(integrity_payload.get("reason", "UNSPECIFIED"))
+
+    if not is_contiguous:
+        return False, f"WINDOW_NOT_CONTIGUOUS:{reason}"
+
+    return True, "OK"
+
+
+def enrich_strategy_decisions_with_contract_metadata(strategy_results: list[dict], normalized_snapshot: dict) -> list[dict]:
+    """Adds required contract metadata to strategy decision payloads."""
+    enriched: list[dict] = []
+    for result in strategy_results:
+        decision = dict(result)
+        decision["spec_version"] = SPEC_VERSION
+        decision["engine_version"] = ENGINE_VERSION
+        decision["strategy_version"] = str(decision.get("strategy_version") or "v0")
+        decision["normalized_signal_snapshot"] = normalized_snapshot
+        enriched.append(decision)
+    return enriched
+
+
+def enrich_registry_rejections_with_contract_metadata(
+    symbol: str,
+    rejections: list[dict],
+    normalized_snapshot: dict,
+    default_t: int,
+) -> list[dict]:
+    """Adds required contract metadata to strategy registry rejection payloads."""
+    enriched: list[dict] = []
+    for record in rejections:
+        item = dict(record)
+        details = dict(item.get("details") or {})
+        event_t = int(details.get("t") or default_t)
+
+        item["symbol"] = symbol
+        item["status"] = "REJECTED"
+        item["spec_version"] = SPEC_VERSION
+        item["engine_version"] = ENGINE_VERSION
+        item["strategy_version"] = str(details.get("strategy_version") or item.get("strategy_version") or "v0")
+        item["reason_code"] = str(item.get("reason_code") or "UNKNOWN_REJECTION")
+        item["t"] = event_t
+        item["origin_timestamp"] = int(details.get("origin_timestamp") or details.get("t") or event_t)
+        item["normalized_signal_snapshot"] = normalized_snapshot
+        item["details"] = details
+        enriched.append(item)
+
+    return enriched
+
+
+async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_rejections: list[dict]):
+    """Publishes registry rejection records to orders stream for downstream observability."""
+    for rejection in enriched_rejections:
+        payload = dict(rejection)
+        payload.setdefault("symbol", symbol)
+        await redis_client.xadd(
+            f"aureus:stream:{symbol}:orders",
+            {
+                "type": "ORDER_REJECTED",
+                "data": json.dumps(payload),
+            },
+        )
+
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
     load_dotenv()
@@ -184,6 +287,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     logger.error(f"Failed to parse checkpoint for {symbol}: {e}")
             
             window_manager.reset(symbol)
+            window_manager.set_backfill_status(symbol, "WARMING", reason="INIT_WARMUP_STARTED", updated_at=time.time())
             from engine.state import SymbolState
             state = window_manager.states.setdefault(symbol, SymbolState(symbol))
 
@@ -316,7 +420,9 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
             await r.set(state_key, json.dumps(state.to_dict()))
             
             logger.info(f"[{symbol}] [run_signal_engine] 9... Engine ready. Last candle: {state.last_candle.get('t') if state.last_candle else 'None'}")
+            window_manager.set_backfill_status(symbol, "READY", reason="INIT_WARMUP_COMPLETED", updated_at=time.time())
         except Exception as e:
+            window_manager.set_backfill_status(symbol, "NOT_READY", reason="INIT_WARMUP_FAILED", updated_at=time.time())
             logger.warning(f"[{symbol}] [run_signal_engine] Error: Could not load history for {symbol}: {e}")
 
         # --- Background Tasks ---
@@ -454,6 +560,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             if msg_type == 'COMMAND':
                                 if data.get('cmd') == 'RECALCULATE':
                                     logger.info(f"[{symbol}] [run_signal_engine] 11... Received RECALCULATE for {symbol}.")
+                                    window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_REQUESTED", updated_at=time.time())
                                     asyncio.create_task(recalculate_all_signals(symbol, db_pool, r, window_manager, signals, symbol_strategies[symbol], symbol_locks[symbol]))
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
@@ -461,6 +568,30 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             if msg_type != 'CANDLE':
                                 # TBD: Currently ignoring TICK (or any other non-candle) events to avoid redundant signal/snapshot processing.
                                 # Future enhancement: Strategy SL/TP hits could be tracked here without full signal re-computation.
+                                await r.xack(stream_key, group_name, entry_id)
+                                continue
+
+                            is_allowed, gate_reason = evaluate_closed_candle_gate(msg_type, stream_key, data)
+                            if not is_allowed:
+                                logger.warning(
+                                    f"[{symbol}] [run_signal_engine] Closed-candle gate rejected entry_id={entry_id} reason={gate_reason}"
+                                )
+                                await r.xack(stream_key, group_name, entry_id)
+                                continue
+
+                            is_backfill_ready, backfill_reason = evaluate_backfill_readiness_gate(symbol, window_manager)
+                            if not is_backfill_ready:
+                                logger.warning(
+                                    f"[{symbol}] [run_signal_engine] Backfill gate rejected entry_id={entry_id} reason={backfill_reason}"
+                                )
+                                await r.xack(stream_key, group_name, entry_id)
+                                continue
+
+                            is_window_valid, window_reason = evaluate_window_integrity_gate(symbol, window_manager)
+                            if not is_window_valid:
+                                logger.warning(
+                                    f"[{symbol}] [run_signal_engine] Window integrity gate rejected entry_id={entry_id} reason={window_reason}"
+                                )
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
 
@@ -488,6 +619,27 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {tag} calc error: {e}")
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
+                            registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
+
+                            normalized_snapshot = None
+                            if strategy_results or registry_rejections:
+                                normalized_snapshot = build_normalized_signal_snapshot(signals, state)
+
+                            if strategy_results:
+                                strategy_results = enrich_strategy_decisions_with_contract_metadata(
+                                    strategy_results,
+                                    normalized_snapshot,
+                                )
+
+                            if registry_rejections:
+                                enriched_rejections = enrich_registry_rejections_with_contract_metadata(
+                                    symbol=symbol,
+                                    rejections=registry_rejections,
+                                    normalized_snapshot=normalized_snapshot or {},
+                                    default_t=ts_unix,
+                                )
+                                await emit_registry_rejections(r, symbol, enriched_rejections)
+
                             if execution_mode == "simulated":
                                 await trade_manager.update_orders(symbol, data, state)
                             
@@ -714,165 +866,176 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
     """
     Refreshes memory state and recalculates signals INCREMENTALLY.
     Processes only new candles after the last snapshot.
-    
+
     Uses 200-bar warm-up for EMA convergence. ON CONFLICT ensures idempotency.
     Publishes progress to Redis for UI tracking.
     """
     from engine.state_snapshot import StateSnapshot
 
     async with lock:
-        # Step 2: Check last existing snapshot (INCREMENTAL)
-        last_snapshot_time = await db_pool.fetchval("""
-            SELECT MAX(time) FROM aureus_signal_snapshots WHERE symbol = $1
-        """, symbol)
-        
-        # Step 2.5: Read Checkpoint Marker for Delta processing
-        checkpoint_payload = await r.get(f"aureus:checkpoint:{symbol}")
-        checkpoint_time = None
-        if checkpoint_payload:
-            try:
-                cp_data = json.loads(checkpoint_payload)
-                ts_unix = cp_data.get("last_processed_time")
-                if ts_unix:
-                    checkpoint_time = datetime.fromtimestamp(ts_unix, tz=timezone.utc)
-            except Exception as e:
-                logger.error(f"[{symbol}] [recalculate_all_signals] Error: Failed to parse checkpoint: {e}")
+        try:
+            window_manager.set_backfill_status(symbol, "WARMING", reason="RECALC_RUNNING", updated_at=time.time())
 
-        if last_snapshot_time:
-            # Determine delta start time (checkpoint takes precedence)
-            effective_start_time = checkpoint_time if checkpoint_time and checkpoint_time > last_snapshot_time else last_snapshot_time
-            if checkpoint_time:
-                 logger.info(f"[{symbol}] [recalculate_all_signals] 2... Using Checkpoint Marker {checkpoint_time} for recalculation delta.")
+            # Step 2: Check last existing snapshot (INCREMENTAL)
+            last_snapshot_time = await db_pool.fetchval("""
+                SELECT MAX(time) FROM aureus_signal_snapshots WHERE symbol = $1
+            """, symbol)
 
-            # Incremental: Load candles after last snapshot (+ 1500 bar warm-up)
-            warmup_rows = await db_pool.fetch("""
-                SELECT time, open, high, low, close, volume
-                FROM aureus_candles
-                WHERE symbol = $1 AND time <= $2
-                ORDER BY time DESC
-                LIMIT 1500
-            """, symbol, last_snapshot_time)
+            # Step 2.5: Read Checkpoint Marker for Delta processing
+            checkpoint_payload = await r.get(f"aureus:checkpoint:{symbol}")
+            checkpoint_time = None
+            if checkpoint_payload:
+                try:
+                    cp_data = json.loads(checkpoint_payload)
+                    ts_unix = cp_data.get("last_processed_time")
+                    if ts_unix:
+                        checkpoint_time = datetime.fromtimestamp(ts_unix, tz=timezone.utc)
+                except Exception as e:
+                    logger.error(f"[{symbol}] [recalculate_all_signals] Error: Failed to parse checkpoint: {e}")
 
-            new_rows = await db_pool.fetch("""
-                SELECT time, open, high, low, close, volume
-                FROM aureus_candles
-                WHERE symbol = $1 AND time > $2
-                ORDER BY time ASC
-            """, symbol, effective_start_time)
+            if last_snapshot_time:
+                # Determine delta start time (checkpoint takes precedence)
+                effective_start_time = checkpoint_time if checkpoint_time and checkpoint_time > last_snapshot_time else last_snapshot_time
+                if checkpoint_time:
+                    logger.info(f"[{symbol}] [recalculate_all_signals] 2... Using Checkpoint Marker {checkpoint_time} for recalculation delta.")
 
-            if not new_rows:
-                logger.info(f"[{symbol}] [recalculate_all_signals] 3... No new candles since last snapshot. Skipping.")
-                await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
-                    "symbol": symbol, "status": "COMPLETED", "progress": 100,
-                    "processed": 0, "total": 0, "message": "Already up to date"
-                }))
+                # Incremental: Load candles after last snapshot (+ 1500 bar warm-up)
+                warmup_rows = await db_pool.fetch("""
+                    SELECT time, open, high, low, close, volume
+                    FROM aureus_candles
+                    WHERE symbol = $1 AND time <= $2
+                    ORDER BY time DESC
+                    LIMIT 1500
+                """, symbol, last_snapshot_time)
+
+                new_rows = await db_pool.fetch("""
+                    SELECT time, open, high, low, close, volume
+                    FROM aureus_candles
+                    WHERE symbol = $1 AND time > $2
+                    ORDER BY time ASC
+                """, symbol, effective_start_time)
+
+                if not new_rows:
+                    logger.info(f"[{symbol}] [recalculate_all_signals] 3... No new candles since last snapshot. Skipping.")
+                    await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
+                        "symbol": symbol, "status": "COMPLETED", "progress": 100,
+                        "processed": 0, "total": 0, "message": "Already up to date"
+                    }))
+                    window_manager.set_backfill_status(symbol, "READY", reason="RECALC_UP_TO_DATE", updated_at=time.time())
+                    return
+
+                # Combine: warm-up (oldest first) + new candles
+                warmup_list = list(reversed(warmup_rows))
+                all_rows = warmup_list + list(new_rows)
+                warmup_count = len(warmup_list)
+                total_new = len(new_rows)
+
+                logger.info(f"[{symbol}] [recalculate_all_signals] 4... Incremental — {warmup_count} warm-up + {total_new} new candles")
+            else:
+                # No snapshot at all (shouldn't really happen if init logic worked)
+                logger.warning(f"[{symbol}] [recalculate_all_signals] Error: No history found in DB")
+                window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_NO_SNAPSHOT", updated_at=time.time())
                 return
 
-            # Combine: warm-up (oldest first) + new candles
-            warmup_list = list(reversed(warmup_rows))
-            all_rows = warmup_list + list(new_rows)
-            warmup_count = len(warmup_list)
-            total_new = len(new_rows)
+            window_manager.reset(symbol)
+            snapshot_batch = []
+            event_count = 0
+            processed_new = 0
 
-            logger.info(f"[{symbol}] [recalculate_all_signals] 4... Incremental — {warmup_count} warm-up + {total_new} new candles")
-        else:
-            # No snapshot at all (shouldn't really happen if init logic worked)
-            logger.warning(f"[{symbol}] [recalculate_all_signals] Error: No history found in DB")
-            return
+            # Publish initial progress
+            await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
+                "symbol": symbol, "status": "RUNNING", "progress": 0,
+                "processed": 0, "total": total_new
+            }))
 
-        window_manager.reset(symbol)
-        snapshot_batch = []
-        event_count = 0
-        processed_new = 0
+            # Process each candle individually (oldest first)
+            for i, row in enumerate(all_rows):
+                candle_data = {
+                    't': str(int(row['time'].timestamp())),
+                    'o': str(row['open']), 'h': str(row['high']),
+                    'l': str(row['low']), 'c': str(row['close']),
+                    'v': str(row['volume']), 'symbol': symbol,
+                }
 
-        # Publish initial progress
-        await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
-            "symbol": symbol, "status": "RUNNING", "progress": 0,
-            "processed": 0, "total": total_new
-        }))
+                df, state = window_manager.update(symbol, candle_data)
+                state.transient_signals = {}  # Clear for each candle
 
-        # Process each candle individually (oldest first)
-        for i, row in enumerate(all_rows):
-            candle_data = {
-                't': str(int(row['time'].timestamp())),
-                'o': str(row['open']), 'h': str(row['high']),
-                'l': str(row['low']), 'c': str(row['close']),
-                'v': str(row['volume']), 'symbol': symbol,
-            }
-            
-            df, state = window_manager.update(symbol, candle_data)
-            state.transient_signals = {}  # Clear for each candle
+                # Yield control every 100 candles
+                if i % 100 == 0:
+                    await asyncio.sleep(0)
 
-            # Yield control every 100 candles
-            if i % 100 == 0:
-                await asyncio.sleep(0)
-            
-            # Run all signals per candle
-            if df is not None and len(df) >= 5:
-                for tag, signal_calc in signals.items():
+                # Run all signals per candle
+                if df is not None and len(df) >= 5:
+                    for tag, signal_calc in signals.items():
+                        try:
+                            res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
+                            if res:
+                                sig_tag = res.get('tag', tag)
+                                if sig_tag:
+                                    state.log_signal(sig_tag, int(candle_data['t']))
+                                cross_tag = res.get('cross')
+                                if cross_tag:
+                                    state.log_signal(cross_tag, int(candle_data['t']))
+                        except Exception as e:
+                            if i < 3:
+                                logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")
+
+                    # Only save snapshots for NEW candles (skip warm-up)
+                    if i >= warmup_count:
+                        snapshot = StateSnapshot.from_state(state, candle_data)
+                        snapshot_batch.append(snapshot.to_db_row())
+                        if snapshot.events:
+                            event_count += 1
+                        processed_new += 1
+
+                    # Batch insert every 500
+                    if len(snapshot_batch) >= 500:
+                        await batch_insert_snapshots(db_pool, snapshot_batch)
+                        snapshot_batch = []
+                        # Update progress
+                        progress = int((processed_new / total_new) * 100) if total_new > 0 else 100
+                        await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
+                            "symbol": symbol, "status": "RUNNING", "progress": progress,
+                            "processed": processed_new, "total": total_new
+                        }))
+
+            # Final batch
+            if snapshot_batch:
+                await batch_insert_snapshots(db_pool, snapshot_batch)
+
+            # Evaluate strategies on final state
+            df = window_manager.get_df(symbol)
+            state = window_manager.states[symbol]
+            if df is not None:
+                strategy_registry.evaluate_all(df, signals, state)
+
+                # Update Redis state
+                state_key = f"aureus:state:{symbol}"
+                await r.set(state_key, json.dumps(state.to_dict()))
+
+                # --- Update Checkpoint ---
+                if all_rows:
+                    last_candle_time = int(all_rows[-1]['time'].timestamp())
                     try:
-                        res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
-                        if res:
-                            sig_tag = res.get('tag', tag)
-                            if sig_tag:
-                                state.log_signal(sig_tag, int(candle_data['t']))
-                            cross_tag = res.get('cross')
-                            if cross_tag:
-                                 state.log_signal(cross_tag, int(candle_data['t']))
+                        checkpoint_payload = json.dumps({
+                            "last_processed_time": last_candle_time,
+                            "updated_at": int(time.time())
+                        })
+                        await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
                     except Exception as e:
-                        if i < 3:
-                            logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")
-                
-                # Only save snapshots for NEW candles (skip warm-up)
-                if i >= warmup_count:
-                    snapshot = StateSnapshot.from_state(state, candle_data)
-                    snapshot_batch.append(snapshot.to_db_row())
-                    if snapshot.events:
-                        event_count += 1
-                    processed_new += 1
-                
-                # Batch insert every 500
-                if len(snapshot_batch) >= 500:
-                    await batch_insert_snapshots(db_pool, snapshot_batch)
-                    snapshot_batch = []
-                    # Update progress
-                    progress = int((processed_new / total_new) * 100) if total_new > 0 else 100
-                    await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
-                        "symbol": symbol, "status": "RUNNING", "progress": progress,
-                        "processed": processed_new, "total": total_new
-                    }))
-        
-        # Final batch
-        if snapshot_batch:
-            await batch_insert_snapshots(db_pool, snapshot_batch)
-        
-        # Evaluate strategies on final state
-        df = window_manager.get_df(symbol)
-        state = window_manager.states[symbol]
-        if df is not None:
-            strategy_registry.evaluate_all(df, signals, state)
-            
-            # Update Redis state
-            state_key = f"aureus:state:{symbol}"
-            await r.set(state_key, json.dumps(state.to_dict()))
-            
-            # --- Update Checkpoint ---
-            if all_rows:
-                last_candle_time = int(all_rows[-1]['time'].timestamp())
-                try:
-                    checkpoint_payload = json.dumps({
-                        "last_processed_time": last_candle_time,
-                        "updated_at": int(time.time())
-                    })
-                    await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
-                except Exception as e:
-                    logger.warning(f"[{symbol}] [recalculate_all_signals] Error: Checkpoint update error: {e}")
-            
-        # Publish completion status
-        await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
-            "symbol": symbol, "status": "COMPLETED", "progress": 100,
-            "processed": processed_new, "total": total_new
-        }))
+                        logger.warning(f"[{symbol}] [recalculate_all_signals] Error: Checkpoint update error: {e}")
+
+            # Publish completion status
+            await r.set(f"aureus:precompute:status:{symbol}", json.dumps({
+                "symbol": symbol, "status": "COMPLETED", "progress": 100,
+                "processed": processed_new, "total": total_new
+            }))
+            window_manager.set_backfill_status(symbol, "READY", reason="RECALC_COMPLETED", updated_at=time.time())
+        except Exception:
+            window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_FAILED", updated_at=time.time())
+            raise
+
+
 async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals, strategy_registry, lock):
     """
     Background worker that monitors data gaps and triggers a full state
@@ -892,6 +1055,7 @@ async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals,
 
             if gaps:
                 logger.info(f"[{symbol}] [integrity_and_recalc_task] 1... Found {len(gaps)} gaps. Requesting recovery...")
+                window_manager.set_backfill_status(symbol, "NOT_READY", reason="GAP_DETECTED", updated_at=time.time())
                 for gap in gaps:
                     cmd = {"type": "REQUEST_BACKFILL", "symbol": symbol, "start": gap["start"], "end": gap["end"]}
                     await r.publish("aureus:mt5:commands", json.dumps(cmd))
