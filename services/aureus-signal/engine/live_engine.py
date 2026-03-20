@@ -164,6 +164,29 @@ async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_reje
         )
 
 
+def execute_signals_for_candle(
+    signals: dict,
+    df,
+    state,
+    redis_client: Any,
+    symbol: str,
+    ts_unix: int,
+) -> None:
+    """Executes all signal calculators for one candle and records emitted signal tags."""
+    for signal_name, signal_calc in signals.items():
+        try:
+            logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 13... Calculating signal {signal_name}")
+            res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
+            if res:
+                emitted_tag = res.get("tag")
+                if emitted_tag:
+                    state.log_signal(emitted_tag, ts_unix)
+                if res.get("cross"):
+                    state.log_signal(res.get("cross"), ts_unix)
+        except Exception as e:
+            logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {signal_name} calc error: {e}")
+
+
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
     load_dotenv()
 
@@ -607,16 +630,14 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             current_dt = datetime.fromtimestamp(ts_unix, tz=timezone(timedelta(hours=7)))
                             state.news_events = NewsProvider.get_todays_events(current_dt)
 
-                            for tag, signal_calc in signals.items():
-                                try:
-                                    logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 13... Calculating signal {tag}")
-                                    res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
-                                    if res:
-                                        tag = res.get('tag')
-                                        if tag: state.log_signal(tag, ts_unix)
-                                        if res.get('cross'): state.log_signal(res.get('cross'), ts_unix)
-                                except Exception as e:
-                                    logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {tag} calc error: {e}")
+                            execute_signals_for_candle(
+                                signals=signals,
+                                df=df,
+                                state=state,
+                                redis_client=r,
+                                symbol=symbol,
+                                ts_unix=ts_unix,
+                            )
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
