@@ -29,11 +29,13 @@ class FVGSignal(BaseSignal):
                 "bottom": float(c1['h']),
                 "msg": "New Bullish FVG"
             }
-            state_obj.add_fvg(fvg_data)
-            
+            if hasattr(state_obj, 'add_fvg') and callable(getattr(state_obj, 'add_fvg')):
+                state_obj.add_fvg(fvg_data)
+
             # Story 3.5: Emit event for Event-Driven Sparse Storage
-            if hasattr(state_obj, 'transient_signals'):
-                state_obj.transient_signals['fvg_bull_new'] = fvg_data
+            ts = getattr(state_obj, 'transient_signals', None)
+            if isinstance(ts, dict):
+                ts['fvg_bull_new'] = fvg_data
                 
             result = fvg_data
             
@@ -46,11 +48,13 @@ class FVGSignal(BaseSignal):
                 "bottom": float(c3['h']),
                 "msg": "New Bearish FVG"
             }
-            state_obj.add_fvg(fvg_data)
-            
+            if hasattr(state_obj, 'add_fvg') and callable(getattr(state_obj, 'add_fvg')):
+                state_obj.add_fvg(fvg_data)
+
             # Story 3.5: Emit event for Event-Driven Sparse Storage
-            if hasattr(state_obj, 'transient_signals'):
-                state_obj.transient_signals['fvg_bear_new'] = fvg_data
+            ts = getattr(state_obj, 'transient_signals', None)
+            if isinstance(ts, dict):
+                ts['fvg_bear_new'] = fvg_data
                 
             result = fvg_data
 
@@ -61,7 +65,11 @@ class FVGSignal(BaseSignal):
 
     def _check_mitigations(self, df: pd.DataFrame, state_obj: Any):
         """Detect FVG mitigation on the current candle and emit transient signals."""
-        if not hasattr(state_obj, 'fvgs') or not state_obj.fvgs:
+        if state_obj is None:
+            return
+
+        fvgs = getattr(state_obj, 'fvgs', None)
+        if not isinstance(fvgs, list) or not fvgs:
             return
         
         latest = df.iloc[-1]
@@ -70,7 +78,7 @@ class FVGSignal(BaseSignal):
         c_l = float(latest['l'])
         c_c = float(latest['c'])
         
-        for fvg in state_obj.fvgs:
+        for fvg in fvgs:
             if fvg.get('state') == 'BROKEN':
                 continue
             if fvg.get('_mitigated_emitted'):
@@ -81,26 +89,30 @@ class FVGSignal(BaseSignal):
             # Bullish FVG mitigated: price drops into or through the gap
             if is_bullish and c_l <= fvg['top']:
                 fvg['_mitigated_emitted'] = True
-                if hasattr(state_obj, 'transient_signals'):
-                    state_obj.transient_signals['fvg_bull_mitigated'] = {
+                ts = getattr(state_obj, 'transient_signals', None)
+                if isinstance(ts, dict):
+                    ts['fvg_bull_mitigated'] = {
                         "t": c_t,
                         "direction": "BULLISH",
                         "fvg_t": fvg.get('t'),
                         "top": fvg['top'],
                         "bottom": fvg['bottom'],
                     }
-                    logger.info(f"[t={c_t}] [{state_obj.symbol}] [_check_mitigations] 1... Bullish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
+                    symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                    logger.info(f"[t={c_t}] [{symbol}] [_check_mitigations] 1... Bullish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
             
             # Bearish FVG mitigated: price rises into or through the gap 
             elif not is_bullish and c_h >= fvg['bottom']:
                 fvg['_mitigated_emitted'] = True
-                if hasattr(state_obj, 'transient_signals'):
-                    state_obj.transient_signals['fvg_bear_mitigated'] = {
+                ts = getattr(state_obj, 'transient_signals', None)
+                if isinstance(ts, dict):
+                    ts['fvg_bear_mitigated'] = {
                         "t": c_t,
                         "direction": "BEARISH",
                         "fvg_t": fvg.get('t'),
                         "top": fvg['top'],
                         "bottom": fvg['bottom'],
                     }
-                    logger.info(f"[t={c_t}] [{state_obj.symbol}] [_check_mitigations] 2... Bearish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
+                    symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                    logger.info(f"[t={c_t}] [{symbol}] [_check_mitigations] 2... Bearish FVG ({fvg.get('t')}) MITIGATED at {c_t}")
 

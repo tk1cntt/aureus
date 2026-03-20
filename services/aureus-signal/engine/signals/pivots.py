@@ -55,7 +55,8 @@ class PivotSignal(BaseSignal):
 
     def calculate(self, df: pd.DataFrame, state_obj: Any,
                   sub_candles_by_tf: dict = None,
-                  redis_client: Any = None, symbol: str = None) -> Optional[Dict[str, Any]]:
+                  redis_client: Any = None, symbol: str = None,
+                  **kwargs) -> Optional[Dict[str, Any]]:
         # Find if this symbol's last received T is in this DF
         if not df.empty:
             last_val = df.iloc[-1]['t']

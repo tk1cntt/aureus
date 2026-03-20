@@ -3,6 +3,7 @@ Signal Factory — Creates the full set of signal calculators for a symbol.
 Shared between: live engine (main.py), signal_computer.py, and recovery (recalculate_all_signals).
 """
 import logging
+import os
 from typing import Any, Dict
 
 from engine.signals.pivots import PivotSignal
@@ -17,6 +18,8 @@ from engine.signals.sweep_bull import SweepBullSignal
 from engine.signals.sweep_bear import SweepBearSignal
 from engine.signals.ema import EMASignal
 from engine.signals.atr import ATRSignal
+from engine.signals.fvg_up import FVGUpSignal
+from engine.signals.fvg_down import FVGDownSignal
 
 logger = logging.getLogger("aureus-signal.signal-factory")
 
@@ -64,6 +67,12 @@ def build_normalized_signal_snapshot(signals: Dict[str, Any], state: Any = None)
     fvg_value = transient_signals.get("fvg_state")
     trend_value = transient_signals.get("trend_filter_state")
 
+    fvg_source = {
+        "up": _extract_signal_source(signals.get("fvg_up")),
+        "down": _extract_signal_source(signals.get("fvg_down")),
+        "legacy": _extract_signal_source(signals.get("fvg")),
+    }
+
     return {
         "zigzag_state": zigzag_value if zigzag_value is not None else {
             "status": "MISSING",
@@ -80,12 +89,21 @@ def build_normalized_signal_snapshot(signals: Dict[str, Any], state: Any = None)
                 "down": _extract_signal_source(signals.get("choch_down")),
             },
         },
-        "fvg_state": fvg_value if fvg_value is not None else _missing_state("FVG_NOT_IMPLEMENTED"),
+        "fvg_state": fvg_value if fvg_value is not None else {
+            "status": "MISSING",
+            "source": fvg_source,
+        },
         "trend_filter_state": trend_value if trend_value is not None else {
             "status": "MISSING",
             "source": _extract_signal_source(signals.get("trend")),
         },
     }
+
+
+
+def _is_fvg_enabled() -> bool:
+    raw = os.getenv("AUREUS_ENABLE_FVG_SIGNAL", "0")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
@@ -116,7 +134,7 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
     # ⚠️ CRITICAL: Order matters! "structure_processor" MUST be before outlet signals
     # (choch_up, choch_down) because it writes to transient_signals
     # which the outlets consume. Python 3.7+ guarantees dict insertion order.
-    return {
+    signal_set = {
         "vol_sma": VolumeSMASignal(20),
         "trend": TrendSignal(200),
         "session": SessionSignal(gmt_user=7),
@@ -135,3 +153,9 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "ema_200": EMASignal(200),
         "atr_14": ATRSignal(14),
     }
+
+    if _is_fvg_enabled():
+        signal_set["fvg_up"] = FVGUpSignal()
+        signal_set["fvg_down"] = FVGDownSignal()
+
+    return signal_set

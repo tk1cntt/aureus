@@ -17,10 +17,13 @@ class StructureSignal(BaseSignal):
         super().__init__("Market Structure Processor (MQL5 Parity)")
 
     def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
-        if len(df) < 5 or not state_obj.swing_points: 
+        if len(df) < 5 or state_obj is None:
             return None
-            
-        points = state_obj.swing_points
+
+        points = getattr(state_obj, 'swing_points', None)
+        if not isinstance(points, list) or not points:
+            return None
+
         nPoints = len(points)
         
         # --- Performance Optimization ---
@@ -51,8 +54,13 @@ class StructureSignal(BaseSignal):
                 # Also store in transient_signals for consumer outlets
                 tag = signal.get('tag')
                 if tag:
-                    if tag not in [s.get('tag') for s in state_obj.signal_history if s.get('t') == signal.get('breakout_t')]:
-                        state_obj.transient_signals[tag] = signal
+                    history = getattr(state_obj, 'signal_history', [])
+                    transient = getattr(state_obj, 'transient_signals', None)
+                    is_duplicate = any(
+                        s.get('tag') == tag for s in history if s.get('t') == signal.get('breakout_t')
+                    )
+                    if not is_duplicate and isinstance(transient, dict):
+                        transient[tag] = signal
 
         self._verify_mitigations(df, state_obj)
 
@@ -98,55 +106,65 @@ class StructureSignal(BaseSignal):
                         # Evaluation: Closed out of zone? (Rejection strength)
                         is_rejection = candle['c'] > ob['top']
                         
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BULLISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
+                        log_actor = getattr(state_obj, 'log_actor', None)
+                        if callable(log_actor):
+                            log_actor(c_t, {
+                                "type": "OB_TOUCH",
+                                "ob_type": "BULLISH",
+                                "ob_start": ob['t_start'],
+                                "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            })
 
-                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bull_mitigated'] = ob
+                        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                        logger.info(f"[t={c_t}] [{symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        request_ai_update = getattr(state_obj, 'request_ai_update', None)
+                        if c_t == latest_t and callable(request_ai_update):
+                            request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
+                        # Story 3.5: Emit event for Event-Driven Sparse Storage
+                        transient = getattr(state_obj, 'transient_signals', None)
+                        if c_t == latest_t and isinstance(transient, dict):
+                            transient['ob_bull_mitigated'] = ob
                         break
                 else: # BEARISH
                     if c_h >= ob['bottom']:
                         ob['mitigated'] = True
                         ob['t_mitigation'] = c_t
-                        
+
                         # Rejection Quality
                         ob_zone_height = ob['top'] - ob['bottom']
                         penetration = c_h - ob['bottom']
                         pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
+
                         is_rejection = candle['c'] < ob['bottom']
 
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BEARISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] > ob['top'], # Closed above zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
+                        log_actor = getattr(state_obj, 'log_actor', None)
+                        if callable(log_actor):
+                            log_actor(c_t, {
+                                "type": "OB_TOUCH",
+                                "ob_type": "BEARISH",
+                                "ob_start": ob['t_start'],
+                                "is_hard_break": candle['c'] > ob['top'], # Closed above zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            })
 
-                        logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bear_mitigated'] = ob
+                        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                        logger.info(f"[t={c_t}] [{symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        request_ai_update = getattr(state_obj, 'request_ai_update', None)
+                        if c_t == latest_t and callable(request_ai_update):
+                            request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
+                        # Story 3.5: Emit event for Event-Driven Sparse Storage
+                        transient = getattr(state_obj, 'transient_signals', None)
+                        if c_t == latest_t and isinstance(transient, dict):
+                            transient['ob_bear_mitigated'] = ob
                         break
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
@@ -209,38 +227,46 @@ class StructureSignal(BaseSignal):
                 
                 ob = self._process_ob(df, points, current_idx, pivot_idx, is_bullish, state_obj=state_obj, t_map=t_map)
                 if ob:
-                    ob['symbol'] = state_obj.symbol
+                    symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                    ob['symbol'] = symbol
                     ob['breakout_t'] = breakout_t
-                    state_obj.add_ob(ob)
-                    
+
+                    add_ob = getattr(state_obj, 'add_ob', None)
+                    if callable(add_ob):
+                        add_ob(ob)
+
                     # Story 3.5: Emit event for Event-Driven Sparse Storage
-                    if breakout_t == int(df.iloc[-1]['t']) and hasattr(state_obj, 'transient_signals'):
+                    transient = getattr(state_obj, 'transient_signals', None)
+                    if breakout_t == int(df.iloc[-1]['t']) and isinstance(transient, dict):
                         if is_bullish:
-                            state_obj.transient_signals['ob_bull_new'] = ob
+                            transient['ob_bull_new'] = ob
                         else:
-                            state_obj.transient_signals['ob_bear_new'] = ob
-                    
-                    state_obj.log_actor(breakout_t, {
-                        "type": "CHOCH_BREAKOUT",
-                        "symbol": state_obj.symbol,
-                        "side": "BULLISH" if is_bullish else "BEARISH",
-                        "pivot_t": int(pivot_t),
-                        "pivot_price": pivot_price,
-                        "ob_t": ob['t_start'],
-                        "candle": {
-                            "o": float(candle['o']), "h": float(candle['h']),
-                            "l": float(candle['l']), "c": float(candle['c'])
-                        }
-                    })
+                            transient['ob_bear_new'] = ob
+
+                    log_actor = getattr(state_obj, 'log_actor', None)
+                    if callable(log_actor):
+                        log_actor(breakout_t, {
+                            "type": "CHOCH_BREAKOUT",
+                            "symbol": symbol,
+                            "side": "BULLISH" if is_bullish else "BEARISH",
+                            "pivot_t": int(pivot_t),
+                            "pivot_price": pivot_price,
+                            "ob_t": ob['t_start'],
+                            "candle": {
+                                "o": float(candle['o']), "h": float(candle['h']),
+                                "l": float(candle['l']), "c": float(candle['c'])
+                            }
+                        })
 
                     tag = self.TAG_CHOCH_UP if is_bullish else self.TAG_CHOCH_DN
                     # Determine if we already logged this to avoid spamming
                     already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
                     if not already_logged:
-                        logger.info(f"[t={breakout_t}] [{state_obj.symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
-                    
-                    if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged:
-                        state_obj.request_ai_update("CHOCH")
+                        logger.info(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
+
+                    request_ai_update = getattr(state_obj, 'request_ai_update', None)
+                    if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged and callable(request_ai_update):
+                        request_ai_update("CHOCH")
                         
                     self._register_sweep_targets(state_obj, ob, points[pivot_idx])
                     
@@ -328,17 +354,19 @@ class StructureSignal(BaseSignal):
         })
         
         # Merge with existing targets (keeping unique ones by price/source_t)
-        existing_targets = getattr(state_obj, 'sweep_targets', [])
+        existing_targets_raw = getattr(state_obj, 'sweep_targets', [])
+        existing_targets: List[Dict[str, Any]] = existing_targets_raw if isinstance(existing_targets_raw, list) else []
         for nt in new_targets:
             if not any(et['price'] == nt['price'] and et['t_source'] == nt['t_source'] for et in existing_targets):
                 existing_targets.append(nt)
-        
+
         # Keep only the most recent targets to avoid over-calculating
         if len(existing_targets) > 10:
             existing_targets = existing_targets[-10:]
-            
+
         state_obj.sweep_targets = existing_targets
-        logger.info(f"[GLOBAL] [{state_obj.symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {state_obj.symbol}. Active count: {len(state_obj.sweep_targets)}")
+        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+        logger.info(f"[GLOBAL] [{symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {symbol}. Active count: {len(existing_targets)}")
 
     def _process_ob(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with the updated OB Logic: Find extreme candle between pivot and breakout."""

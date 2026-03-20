@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import unittest
+from types import SimpleNamespace
 
 # Ensure engine module can be imported when running from repository root.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +16,9 @@ from engine.live_engine import (
     enrich_strategy_decisions_with_contract_metadata,
 )
 from engine.signal_factory import build_normalized_signal_snapshot, create_signal_set
+from engine.signals.structure import StructureSignal
+from engine.signals.sweep import SweepSignal
+import pandas as pd
 
 
 class _DummyState:
@@ -60,6 +64,32 @@ class TestSignalFactoryContracts(unittest.TestCase):
     def test_create_signal_set_includes_atr_14(self):
         signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
         self.assertIn("atr_14", signals)
+
+    def test_create_signal_set_does_not_register_fvg_when_flag_off(self):
+        previous = os.environ.get("AUREUS_ENABLE_FVG_SIGNAL")
+        os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = "0"
+        try:
+            signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
+            self.assertNotIn("fvg_up", signals)
+            self.assertNotIn("fvg_down", signals)
+        finally:
+            if previous is None:
+                os.environ.pop("AUREUS_ENABLE_FVG_SIGNAL", None)
+            else:
+                os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = previous
+
+    def test_create_signal_set_registers_fvg_when_flag_on(self):
+        previous = os.environ.get("AUREUS_ENABLE_FVG_SIGNAL")
+        os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = "1"
+        try:
+            signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
+            self.assertIn("fvg_up", signals)
+            self.assertIn("fvg_down", signals)
+        finally:
+            if previous is None:
+                os.environ.pop("AUREUS_ENABLE_FVG_SIGNAL", None)
+            else:
+                os.environ["AUREUS_ENABLE_FVG_SIGNAL"] = previous
 
 
 class TestDecisionVersionMetadata(unittest.TestCase):
@@ -154,6 +184,33 @@ class TestRegistryRejectionMetadata(unittest.TestCase):
         decoded = json.loads(fields["data"])
         self.assertEqual(decoded["symbol"], "EURUSD")
         self.assertEqual(decoded["strategy"], "PHASED_REJECT")
+
+
+class TestSignalRuntimeGuardrails(unittest.TestCase):
+    def test_structure_signal_returns_none_for_state_without_swing_points(self):
+        df = pd.DataFrame([
+            {"t": 1, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.0},
+            {"t": 2, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.0},
+            {"t": 3, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.0},
+            {"t": 4, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.0},
+            {"t": 5, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.0},
+        ])
+        state = SimpleNamespace()
+
+        signal = StructureSignal().calculate(df, state)
+
+        self.assertIsNone(signal)
+
+    def test_sweep_signal_ignores_malformed_target_and_does_not_raise(self):
+        df = pd.DataFrame([
+            {"t": 10, "o": 1.0, "h": 1.2, "l": 0.8, "c": 1.1},
+        ])
+        state = SimpleNamespace(sweep_targets=[{"foo": "bar"}], signal_history=[])
+
+        signal = SweepSignal().calculate(df, state)
+
+        self.assertIsNone(signal)
+        self.assertEqual(getattr(state, "sweep_targets"), [{"foo": "bar"}])
 
 
 if __name__ == "__main__":
