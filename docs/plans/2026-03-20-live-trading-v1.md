@@ -200,5 +200,23 @@
 6. Inject backfill/window-gap scenario and verify fail-closed behavior.
 7. Commit verification-only adjustments (if required).
 
+## Execution Update (2026-03-20)
+
+- **P1 → P3 (Safety gates):** đã implement closed-candle gate, backfill readiness gate và window integrity gate trong `live_engine.py`/`manager.py`, kèm test fail-closed tương ứng.
+- **P4 → P5 (Signal + metadata):** đã chuẩn hóa normalized signal keys trong `signal_factory.py` và bổ sung `spec_version`/`strategy_version`/`engine_version` vào decision payload.
+- **P6 → P8 (Strategy contract):** đã tách contract theo pha (`on_bar_close` → `validate_entry` → `build_order_plan`), giữ backward compatibility qua adapter `evaluate(...)`, và thêm compatibility checks trong `registry.py`.
+- **P9 → P10 (Decision trace):** đã bổ sung trace schema builders, required-key validation, cùng trace persistence cho order/state lifecycle (`snapshot_utils.py`, `orders.py`, `state.py`).
+- **P11 (Execution policy):** đã mở rộng policy validation + metrics trong `services/aureus-nautilus-node/execution_client.py` và test policy suite.
+- **P12 (Rollout gates):** đã thêm stage-aware rollout gate evaluation trong `services/aureus-nautilus-node/rollout_gates.py` cho `SHADOW_TO_PAPER` và `PAPER_TO_LIVE`.
+- **P13 (Bridge lineage):** đã propagate lineage (`trace_id`, `correlation_id`, `strategy_id`, `strategy_version`) qua `services/aureus-nautilus-bridge/mapper.py` và `services/aureus-nautilus-bridge/main.py`, kèm test mới `test_bridge_lineage.py`.
+- **P14 (Final verification):** đã chạy các regression suites cuối cho phạm vi P9–P13/P14 và thu evidence:
+  - Combined regression: `29 passed in 0.24s`
+  - Coverage-focused run: `20 passed in 0.58s`
+  - Coverage snapshot (from `d:\Aureus\tmp_coverage_phase14.json`):
+    - `services/aureus-nautilus-node/rollout_gates.py`: `81.43%`
+    - `services/aureus-nautilus-node/execution_client.py`: `72.44%`
+    - `services/aureus-nautilus-bridge/mapper.py`: `67.61%`
+    - `services/aureus-nautilus-bridge/main.py`: `29.67%`
+
 Plan complete and saved to `docs/plans/2026-03-20-live-trading-v1.md`.
 Next step: run `.agent/workflows/execute-plan.md` to execute this plan task-by-task in single-flow mode.

@@ -200,6 +200,9 @@ class AureusNautilusBridge:
         if not order_payload:
             order_payload = {
                 "trace_id": trace_id,
+                "correlation_id": report.get("correlation_id"),
+                "strategy_id": report.get("strategy_id"),
+                "strategy_version": report.get("strategy_version"),
                 "symbol": symbol,
                 "event_time": report.get("event_time"),
                 "side": report.get("side", "BUY"),
@@ -210,6 +213,13 @@ class AureusNautilusBridge:
                 "tp": report.get("tp"),
                 "execution_mode": "nautilus",
             }
+        else:
+            if "correlation_id" not in order_payload or not order_payload.get("correlation_id"):
+                order_payload["correlation_id"] = report.get("correlation_id")
+            if "strategy_id" not in order_payload or not order_payload.get("strategy_id"):
+                order_payload["strategy_id"] = report.get("strategy_id")
+            if "strategy_version" not in order_payload or not order_payload.get("strategy_version"):
+                order_payload["strategy_version"] = report.get("strategy_version")
 
         event = await self.processor.process_lifecycle_report(order_payload, report)
         if event is None:

@@ -46,6 +46,12 @@ class AureusExecutionClient(LiveExecutionClient):
             "missing_sl_tp_total": 0,
             "invalid_symbol_total": 0,
             "invalid_notional_total": 0,
+            "trace_completeness_failures_total": 0,
+            "missing_backfill_status_total": 0,
+            "missing_entry_policy_total": 0,
+            "missing_expiry_policy_total": 0,
+            "backfill_violation_total": 0,
+            "validator_state_error_total": 0,
         }
 
     @staticmethod
@@ -161,6 +167,35 @@ class AureusExecutionClient(LiveExecutionClient):
             self.metrics["missing_sl_tp_total"] += 1
             return False, "MISSING_SL_TP", []
 
+        entry_policy = str(data.get("entry_policy", "")).strip()
+        if not entry_policy:
+            self.metrics["missing_entry_policy_total"] += 1
+            self.metrics["trace_completeness_failures_total"] += 1
+
+        expiry_policy = str(data.get("expiry_policy", "")).strip()
+        if not expiry_policy:
+            self.metrics["missing_expiry_policy_total"] += 1
+            self.metrics["trace_completeness_failures_total"] += 1
+
+        backfill_status = str(data.get("backfill_status", "")).upper().strip()
+        if not backfill_status:
+            self.metrics["missing_backfill_status_total"] += 1
+            self.metrics["trace_completeness_failures_total"] += 1
+        elif backfill_status != "READY":
+            self.metrics["backfill_violation_total"] += 1
+            return False, "BACKFILL_NOT_READY", []
+
+        transition_allowed = data.get("transition_allowed")
+        validator_passed = data.get("validator_passed")
+        validator_failures = data.get("validator_failures")
+        validator_failures_list = validator_failures if isinstance(validator_failures, list) else []
+
+        transition_blocked = transition_allowed is False
+        validator_blocked = validator_passed is False or len(validator_failures_list) > 0
+        if transition_blocked or validator_blocked:
+            self.metrics["validator_state_error_total"] += 1
+            return False, "VALIDATOR_STATE_BLOCKED", []
+
         sl = data.get("sl")
         tp = data.get("tp")
         if sl is not None:
@@ -185,6 +220,7 @@ class AureusExecutionClient(LiveExecutionClient):
 
         self._seen_trace_ids.add(trace_id)
         return True, "", orders
+
 
     @staticmethod
     def _decode_value(value: Any) -> str:

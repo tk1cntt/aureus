@@ -21,6 +21,13 @@ services:
       - redis-dev
     networks:
       - aureus_dev_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 5556)); s.close(); print('ok')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     environment:
       - REDIS_HOST=redis-dev
       - REDIS_PORT=6379
