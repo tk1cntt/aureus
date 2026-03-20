@@ -3,7 +3,7 @@
 ## v1.1 Requirements
 
 ### Signal Scope (`SIG`)
-- [ ] **SIG-01**: Optimize and validate `atr` signal without changing trading intent.
+- [x] **SIG-01**: Optimize and validate `atr` signal without changing trading intent.
 - [ ] **SIG-02**: Optimize and validate `ema` signal without changing trading intent.
 - [ ] **SIG-03**: Optimize and validate `fvg` signal without changing trading intent.
 - [ ] **SIG-04**: Optimize and validate `pivots` signal without changing trading intent.
@@ -14,14 +14,22 @@
 - [ ] **SIG-09**: Optimize and validate `structure` signal without changing trading intent.
 
 ### Test Quality Gates (`TST`)
-- [ ] **TST-01**: For each signal phase, create/maintain a dedicated **unit test file** for that signal.
-- [ ] **TST-02**: For each signal phase, create/maintain a dedicated **integration test file** when integrated into `aureus-signal` flow.
-- [ ] **TST-03**: Test coverage for each signal phase must be **>= 80%** on changed signal code and related test scope.
-- [ ] **TST-04**: A phase cannot be marked complete unless unit + integration tests pass and coverage gate (`>=80%`) is met.
+- [x] **TST-01**: For each signal phase, create/maintain a dedicated **unit test file** for that signal.
+- [x] **TST-02**: For each signal phase, create/maintain a dedicated **integration test file** when integrated into `aureus-signal` flow.
+- [x] **TST-03**: Test coverage for each signal phase must be **>= 80%** on changed signal code and related test scope.
+- [x] **TST-04**: A phase cannot be marked complete unless unit + integration tests pass and coverage gate (`>=80%`) is met.
 
 ### Governance (`VAL`)
 - [ ] **VAL-01**: Roadmap must keep exactly **one signal per phase**.
 - [ ] **VAL-02**: Requirement-to-phase traceability must remain complete and explicit.
+
+## Phase 1 Evidence
+
+- Phase folder: `.planning/phases/01-signal-atr/`
+- Research: `.planning/phases/01-signal-atr/RESEARCH.md`
+- Plan: `.planning/phases/01-signal-atr/PLAN.md`
+- Validation: `.planning/phases/01-signal-atr/VALIDATION.md`
+- Summary: `.planning/phases/01-signal-atr/SUMMARY.md`
 
 ## Future Requirements (Deferred)
 

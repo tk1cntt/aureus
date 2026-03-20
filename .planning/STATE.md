@@ -2,14 +2,14 @@
 
 ## Current Position
 
-- Phase: Not started (defining requirements)
-- Plan: —
-- Status: Defining requirements
-- Last activity: 2026-03-20 — Milestone v1.1 started
+- Phase: `01-signal-atr` completed
+- Plan: `.planning/phases/01-signal-atr/PLAN.md` closed
+- Status: Awaiting kickoff of next phase folder
+- Last activity: 2026-03-20 — Backfilled Phase 1 per-phase documentation and synchronized root trackers
 
 ## Accumulated Context
 
 - Milestone intent: accuracy-first signal optimization for `aureus-signal`.
-- Signal modules reviewed: `base`, `atr`, `ema`, `fvg`, `pivots`, `session`, `structure`, `sweep`, `trend`, `volume_sma`, `news_provider`.
-- Existing tests identified for baseline confidence include contract normalization and zigzag regression suites.
-- No prior `PROJECT.md`, `MILESTONES.md`, or `STATE.md` existed in `.planning` at initialization time.
+- Phase 01 evidence is isolated under `.planning/phases/01-signal-atr/`.
+- Root planning files (`ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`) act as high-level trackers.
+- Per-phase documentation policy active: each phase must keep its own `RESEARCH.md`, `PLAN.md`, `VALIDATION.md`, `SUMMARY.md`.

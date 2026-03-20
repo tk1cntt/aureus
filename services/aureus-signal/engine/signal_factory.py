@@ -16,6 +16,7 @@ from engine.signals.sweep import SweepSignal
 from engine.signals.sweep_bull import SweepBullSignal
 from engine.signals.sweep_bear import SweepBearSignal
 from engine.signals.ema import EMASignal
+from engine.signals.atr import ATRSignal
 
 logger = logging.getLogger("aureus-signal.signal-factory")
 
@@ -132,4 +133,5 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "ema_89": EMASignal(89),
         "ema_100": EMASignal(100),
         "ema_200": EMASignal(200),
+        "atr_14": ATRSignal(14),
     }

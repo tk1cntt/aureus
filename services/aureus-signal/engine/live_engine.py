@@ -164,27 +164,27 @@ async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_reje
         )
 
 
-def execute_signals_for_candle(
-    signals: dict,
-    df,
-    state,
-    redis_client: Any,
-    symbol: str,
-    ts_unix: int,
-) -> None:
-    """Executes all signal calculators for one candle and records emitted signal tags."""
+
+
+def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
+    """Executes all signal calculators for the current candle and appends emitted tags into state history."""
+    if df is None or len(df) == 0:
+        return
+
+    ts_unix = int(df.iloc[-1]["t"])
     for signal_name, signal_calc in signals.items():
         try:
-            logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 13... Calculating signal {signal_name}")
+            logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             if res:
                 emitted_tag = res.get("tag")
                 if emitted_tag:
                     state.log_signal(emitted_tag, ts_unix)
-                if res.get("cross"):
-                    state.log_signal(res.get("cross"), ts_unix)
+                cross_tag = res.get("cross")
+                if cross_tag:
+                    state.log_signal(cross_tag, ts_unix)
         except Exception as e:
-            logger.error(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Error: Signal {signal_name} calc error: {e}")
+            logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
 
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
@@ -634,10 +634,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 signals=signals,
                                 df=df,
                                 state=state,
-                                redis_client=r,
                                 symbol=symbol,
-                                ts_unix=ts_unix,
+                                redis_client=r,
                             )
+
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)

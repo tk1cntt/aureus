@@ -14,7 +14,7 @@ from engine.live_engine import (
     enrich_registry_rejections_with_contract_metadata,
     enrich_strategy_decisions_with_contract_metadata,
 )
-from engine.signal_factory import build_normalized_signal_snapshot
+from engine.signal_factory import build_normalized_signal_snapshot, create_signal_set
 
 
 class _DummyState:
@@ -54,6 +54,12 @@ class TestSignalContractNormalization(unittest.TestCase):
         self.assertEqual(snapshot["choch_state"]["status"], "OK")
         self.assertEqual(snapshot["fvg_state"]["status"], "OK")
         self.assertEqual(snapshot["trend_filter_state"]["status"], "OK")
+
+
+class TestSignalFactoryContracts(unittest.TestCase):
+    def test_create_signal_set_includes_atr_14(self):
+        signals = create_signal_set("XAUUSD", {"point": 0.01, "digits": 2})
+        self.assertIn("atr_14", signals)
 
 
 class TestDecisionVersionMetadata(unittest.TestCase):
