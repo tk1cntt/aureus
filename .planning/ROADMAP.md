@@ -13,11 +13,11 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 1: Signal ATR Optimization** - Hoàn tất tối ưu `atr` và lưu đầy đủ evidence phase.
 - [x] **Phase 2: Signal EMA Optimization** - Hoàn tất tối ưu `ema` và đóng toàn bộ gate verification phase.
 - [x] **Phase 3: Signal FVG Optimization** - Tối ưu `fvg` với rollout-safe và snapshot contract ổn định. (completed 2026-03-20)
-- [ ] **Phase 4: Signal Pivots Optimization** - Tối ưu `pivots` và giữ tương thích pipeline hiện tại.
+- [x] **Phase 4: Signal Pivots Optimization** - Tối ưu `pivots` bằng defensive guards giữ contract tương thích hoàn hảo. (completed 2026-03-21)
 - [x] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn. (completed 2026-03-21)
 - [x] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects. (completed 2026-03-21)
 - [x] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu. (completed 2026-03-21)
-- [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo chuẩn phase.
+- [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo quyết định từ CONTEXT. (in progress)
 - [ ] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1.
 
 ## Phase Details
@@ -146,9 +146,9 @@ Plans:
 | 1. Signal ATR Optimization | v1.1 | 1/1 | Complete | 2026-03-19 |
 | 2. Signal EMA Optimization | v1.1 | 1/1 | Complete | 2026-03-20 |
 | 3. Signal FVG Optimization | v1.1 | 1/1 | Complete | 2026-03-20 |
-| 4. Signal Pivots Optimization | v1.1 | 0/2 | Not started | - |
+| 4. Signal Pivots Optimization | v1.1 | 2/2 | Complete | 2026-03-21 |
 | 5. Signal Session Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
 | 6. Signal Sweep Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
 | 7. Signal Trend Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
-| 8. Signal Volume SMA Optimization | v1.1 | 0/1 | Not started | - |
+| 8. Signal Volume SMA Optimization | v1.1 | 0/1 | In Progress | - |
 | 9. Signal Structure Optimization | v1.1 | 0/1 | Not started | - |
