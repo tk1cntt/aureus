@@ -12,11 +12,11 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 
 - [x] **Phase 1: Signal ATR Optimization** - Hoàn tất tối ưu `atr` và lưu đầy đủ evidence phase.
 - [x] **Phase 2: Signal EMA Optimization** - Hoàn tất tối ưu `ema` và đóng toàn bộ gate verification phase.
-- [ ] **Phase 3: Signal FVG Optimization** - Tối ưu `fvg` với guardrails và contract ổn định.
+- [x] **Phase 3: Signal FVG Optimization** - Tối ưu `fvg` với rollout-safe và snapshot contract ổn định. (completed 2026-03-20)
 - [ ] **Phase 4: Signal Pivots Optimization** - Tối ưu `pivots` và giữ tương thích pipeline hiện tại.
 - [x] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn. (completed 2026-03-21)
 - [x] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects. (completed 2026-03-21)
-- [ ] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu.
+- [x] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu. (completed 2026-03-21)
 - [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo chuẩn phase.
 - [ ] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1.
 
@@ -111,7 +111,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 07-01: Tối ưu và verify tín hiệu `trend`.
+- [x] 07-01: Tối ưu và verify tín hiệu `trend`.
 
 ### Phase 8: Signal Volume SMA Optimization
 **Goal**: Tối ưu `volume_sma` theo chuẩn phase execution.
@@ -141,14 +141,14 @@ Plans:
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Signal ATR Optimization | 1/1 | Complete | - |
-| 2. Signal EMA Optimization | 1/1 | Complete | 2026-03-20 |
-| 3. Signal FVG Optimization | 0/1 | Not started | - |
-| 4. Signal Pivots Optimization | 0/1 | Not started | - |
-| 5. Signal Session Optimization | 0/1 | Complete    | 2026-03-21 |
-| 6. Signal Sweep Optimization | 0/1 | Complete    | 2026-03-21 |
-| 7. Signal Trend Optimization | 0/1 | Not started | - |
-| 8. Signal Volume SMA Optimization | 0/1 | Not started | - |
-| 9. Signal Structure Optimization | 0/1 | Not started | - |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Signal ATR Optimization | v1.1 | 1/1 | Complete | 2026-03-19 |
+| 2. Signal EMA Optimization | v1.1 | 1/1 | Complete | 2026-03-20 |
+| 3. Signal FVG Optimization | v1.1 | 1/1 | Complete | 2026-03-20 |
+| 4. Signal Pivots Optimization | v1.1 | 0/2 | Not started | - |
+| 5. Signal Session Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
+| 6. Signal Sweep Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
+| 7. Signal Trend Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
+| 8. Signal Volume SMA Optimization | v1.1 | 0/1 | Not started | - |
+| 9. Signal Structure Optimization | v1.1 | 0/1 | Not started | - |
