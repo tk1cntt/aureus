@@ -5,17 +5,12 @@ Pipeline:  Gateway → Redis Stream → [THIS] → TimescaleDB + Redis State →
 """
 
 import asyncio
-import logging
-import os
+from engine.logging_common import configure_logging, get_logger
+
+configure_logging("main")
+logger = get_logger(__name__)
+
 from engine.live_engine import run_signal_engine
-
-# Configure logging
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("aureus-signal.main")
-
 if __name__ == "__main__":
     try:
         asyncio.run(run_signal_engine())

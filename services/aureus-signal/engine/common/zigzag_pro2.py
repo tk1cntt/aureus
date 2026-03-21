@@ -17,9 +17,9 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 from enum import IntEnum
 import logging
+from engine.logging_common import get_logger
 
-logger = logging.getLogger("aureus-signal.zigzag")
-
+logger = get_logger(__name__)
 from engine.common import OutsideBarAnalyzer, OrderFormation
 
 
@@ -264,7 +264,7 @@ class ZigZagPro:
         """
         rates_total = len(df)
         last_t = df.iloc[-1]['t'] if rates_total > 0 else '0'
-        logger.info(f"[t={last_t}] [{timeframe}] [update] 1... Processing ZZ update rates_total={rates_total} incremental={incremental} last_t={last_t}")
+        logger.debug(f"[t={last_t}] [{timeframe}] [update] 1... Processing ZZ update rates_total={rates_total} incremental={incremental} last_t={last_t}")
         if rates_total == 0:
             return {"up": [], "dn": [], "type": []}
 
@@ -730,7 +730,7 @@ class ZigZagPro:
             valid_up = [v for v in self.up[:rates_total] if v != 0.0]
             valid_dn = [v for v in self.dn[:rates_total] if v != 0.0]
             last_t = df.iloc[-1]['t'] if len(df) > 0 else '0'
-            logger.info(f"[t={last_t}] [{timeframe}] [update] 2... ZZ finished: valid_up_count={len(valid_up)} valid_dn_count={len(valid_dn)}")
+            logger.debug(f"[t={last_t}] [{timeframe}] [update] 2... ZZ finished: valid_up_count={len(valid_up)} valid_dn_count={len(valid_dn)}")
         except Exception as e:
             last_t = df.iloc[-1]['t'] if len(df) > 0 else '0'
             logger.error(f"[t={last_t}] [{timeframe}] [update] Error: Error logging ZigZagPro results: {e}")

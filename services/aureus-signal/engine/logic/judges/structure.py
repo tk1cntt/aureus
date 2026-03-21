@@ -1,9 +1,9 @@
 from typing import Dict, Any
 import logging
+from engine.logging_common import get_logger
 from .base import BaseJudge, JudgeResult
 
-logger = logging.getLogger("aureus-signal.judges.structure")
-
+logger = get_logger(__name__)
 class CHOCHJudge(BaseJudge):
     """
     Judge that evaluates Market Structure Breakouts (CHOCH).

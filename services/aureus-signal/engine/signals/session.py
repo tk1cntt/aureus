@@ -1,11 +1,11 @@
 import logging
+from engine.logging_common import get_logger
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from .base import BaseSignal
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-signal.session")
-
+logger = get_logger(__name__)
 class SessionSignal(BaseSignal):
     """
     Identifies trading sessions based on Broker Server Time (Dynamic DST).

@@ -1,4 +1,5 @@
 import logging
+from engine.logging_common import get_logger
 import json
 import os
 import time
@@ -16,8 +17,7 @@ from .logic.judges.liquidity import LiquidityJudge
 from .logic.judges.momentum import MomentumJudge
 from .logic.judges.patterns import MultiPatternJudge
 
-logger = logging.getLogger("aureus-signal.ai-validator")
-
+logger = get_logger(__name__)
 class ContextBuilder:
     """Synthesizes technical data into a descriptive narrative for AI Agents."""
     

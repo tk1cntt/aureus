@@ -3,6 +3,7 @@ Signal Factory — Creates the full set of signal calculators for a symbol.
 Shared between: live engine (main.py), signal_computer.py, and recovery (recalculate_all_signals).
 """
 import logging
+from engine.logging_common import get_logger
 import os
 from typing import Any, Dict
 
@@ -21,9 +22,7 @@ from engine.signals.atr import ATRSignal
 from engine.signals.fvg_up import FVGUpSignal
 from engine.signals.fvg_down import FVGDownSignal
 
-logger = logging.getLogger("aureus-signal.signal-factory")
-
-
+logger = get_logger(__name__)
 def _missing_state(reason: str = "NOT_AVAILABLE") -> Dict[str, Any]:
     return {
         "status": "MISSING",

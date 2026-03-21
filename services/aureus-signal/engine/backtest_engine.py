@@ -5,12 +5,13 @@ This module is isolated from the live engine to prevent production interference.
 import asyncio
 import os
 import json
-import logging
 import asyncpg
 import redis.asyncio as redis
 from datetime import datetime, timezone, timedelta
 import time
 from dotenv import load_dotenv
+
+from engine.logging_common import get_logger
 
 from engine.manager import WindowManager
 from engine.signal_factory import create_signal_set
@@ -24,14 +25,7 @@ from engine.event_filter import has_structural_event
 # from engine.ai_validator import AIValidator       # Live-only
 # from engine.signals.news_provider import NewsProvider # Live-only
 
-# Configure logging
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("aureus-signal.snapshot-utils.backtest-engine")
-
-
+logger = get_logger(__name__)
 def load_symbols_config(path="symbols.json"):
     try:
         if not os.path.exists(path):
@@ -254,7 +248,7 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                             processed_count += 1
                             
                             if processed_count % 1000 == 0:
-                                logger.info(f"[{symbol}] [consumer_task] 2... Processed {processed_count} candles... Time: {ts_str}")
+                                logger.debug(f"[{symbol}] [consumer_task] 2... Processed {processed_count} candles... Time: {ts_str}")
                                 
                         except Exception as e:
                             logger.error(f"Error processing candle {msg_id}: {e}")

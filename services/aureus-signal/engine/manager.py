@@ -1,14 +1,13 @@
 import hashlib
 import logging
+from engine.logging_common import get_logger
 from collections import defaultdict
 
 import pandas as pd
 
 from .state import SymbolState
 
-logger = logging.getLogger("aureus-signal.manager")
-
-
+logger = get_logger(__name__)
 class WindowManager:
     """Manages a sliding window of candles and persistent state for each symbol."""
 
@@ -116,12 +115,6 @@ class WindowManager:
             window_dict[candle["t"]] = candle
             if len(window) > 1 and candle["t"] < window[-2]["t"]:
                 window.sort(key=lambda x: x["t"])
-
-        if len(window) > 0:
-            logger.info(
-                f"[t={candle['t']}] [{symbol}] [update] 1... Ingested {symbol} t={candle['t']} "
-                f"window_last={window[-1]['t']} size={len(window)}"
-            )
 
         if len(window) > self.max_window:
             removed_candles = window[:-self.max_window]

@@ -1,10 +1,10 @@
 import logging
+from engine.logging_common import get_logger
 import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-logger = logging.getLogger("aureus-backtest-v5.simulated-orders")
-
+logger = get_logger(__name__)
 class SimulatedTradeManager:
     """
     Manages simulated trade lifecycle for Backtest Engine V5.

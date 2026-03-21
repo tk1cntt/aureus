@@ -1,12 +1,12 @@
 import logging
+from engine.logging_common import get_logger
 import json
 import asyncio
 import asyncpg
 import redis.asyncio as redis
 from datetime import datetime, timedelta
 
-logger = logging.getLogger("mock-producer")
-
+logger = get_logger(__name__)
 class CSVMockProducer:
     """
     Mock Producer that reads candles from DB (aureus_backtest_candles)

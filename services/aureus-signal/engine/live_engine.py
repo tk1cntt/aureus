@@ -6,7 +6,6 @@ Pipeline:  Gateway → Redis Stream → [THIS] → TimescaleDB + Redis State →
 import asyncio
 import os
 import json
-import logging
 import asyncpg
 import redis.asyncio as redis
 from datetime import datetime, timezone, timedelta
@@ -14,6 +13,8 @@ from typing import Optional, Any
 import time
 import traceback
 from dotenv import load_dotenv
+
+from engine.logging_common import get_logger
 
 # --- Priority Constants ---
 PRIO_TRADE = 1
@@ -34,25 +35,7 @@ from engine.signals.news_provider import NewsProvider
 from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
 
-# Configure logging
-log_level = os.getenv("LOG_LEVEL", "INFO")
-log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-log_file = os.getenv("LOG_FILE")
-
-handlers = [logging.StreamHandler()]
-if log_file:
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    handlers.append(logging.FileHandler(log_file))
-
-logging.basicConfig(
-    level=log_level,
-    format=log_format,
-    handlers=handlers
-)
-logger = logging.getLogger("aureus-signal.live-engine")
-
-
+logger = get_logger(__name__)
 def load_symbols_config(path="symbols.json"):
     try:
         if not os.path.exists(path):
@@ -535,7 +518,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             if msg_type == 'CANDLE':
                                 eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                                logger.info(f"[t={data.get('t')}] [{symbol}] [run_signal_engine] 10... Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
+                                logger.debug(f"[t={data.get('t')}] [{symbol}] [run_signal_engine] 10... Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
 
                             if msg_type == 'COMMAND':
                                 if data.get('cmd') == 'RECALCULATE':
@@ -622,7 +605,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             flags = FeatureFlags(r)
                             sync_mode = await flags.get("redis_sync_mode", "ALWAYS")
                             if sync_mode == "ALWAYS" or has_event or (candle_count % 5 == 0):
-                                logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 12... State Saved to Redis (reason: sync_mode={sync_mode}, event={has_event}, count={candle_count})")
+                                logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 12... State Saved to Redis (reason: sync_mode={sync_mode}, event={has_event}, count={candle_count})")
                                 await r.set(f"aureus:state:{symbol}", json.dumps(state.to_dict()))
 
                             # --- SPARSE STORAGE LOGIC ---
@@ -651,7 +634,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             candle_count += 1
                             if candle_count % 20 == 0:
-                                logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
+                                logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
 
                             # Trigger Event-Driven AI Pulse Analysis (Aggregated for this candle)
                             if state.ai_update_pending:

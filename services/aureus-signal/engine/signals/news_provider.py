@@ -1,12 +1,12 @@
 import os
 import json
 import logging
+from engine.logging_common import get_logger
 import requests
 import time
 from datetime import datetime, timedelta, timezone
 
-logger = logging.getLogger("aureus-signal.news-provider")
-
+logger = get_logger(__name__)
 class NewsProvider:
     """
     Fetches economic calendar from Faireconomy JSON.

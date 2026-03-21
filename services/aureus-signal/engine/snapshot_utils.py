@@ -4,12 +4,12 @@ Used by: live engine (main.py), signal_computer.py, and recovery (recalculate_al
 """
 import json
 import logging
+from engine.logging_common import get_logger
 import os
 from typing import Dict, List, Any
 from datetime import datetime, timezone
 
-logger = logging.getLogger("aureus-signal")
-
+logger = get_logger(__name__)
 SPEC_VERSION = "2026-03-20-live-trading-v1"
 ENGINE_VERSION = os.getenv("AUREUS_SIGNAL_ENGINE_VERSION", "live-engine-v1")
 

@@ -2,11 +2,11 @@ import asyncio
 import os
 import json
 import logging
+from engine.logging_common import get_logger
 import asyncpg
 from dotenv import load_dotenv
 
-logger = logging.getLogger("aureus-signal")
-
+logger = get_logger(__name__)
 async def seed_system_strategies(pool):
     """
     Seeds the database with system-default strategy templates.

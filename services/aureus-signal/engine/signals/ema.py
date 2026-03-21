@@ -1,11 +1,11 @@
 from .base import BaseSignal
 import logging
+from engine.logging_common import get_logger
 import traceback
 import pandas as pd
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-signal.ema")
-
+logger = get_logger(__name__)
 class EMASignal(BaseSignal):
     """
     Exponential Moving Average signal.

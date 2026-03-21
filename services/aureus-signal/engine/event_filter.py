@@ -5,10 +5,10 @@ Reduces DB writes by targeting only significant market or trade events.
 Shared between Live Engine V2 and Backtest V5.
 """
 import logging
+from engine.logging_common import get_logger
 from typing import Any
 
-logger = logging.getLogger("aureus.event-filter")
-
+logger = get_logger(__name__)
 # Structural signal tags that trigger a snapshot write.
 # These correspond to transient_signals keys emitted by:
 #   - structure.py: choch_up/down, ob_bull/bear_new/mitigated

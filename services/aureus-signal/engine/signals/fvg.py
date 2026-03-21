@@ -1,11 +1,10 @@
 from .base import BaseSignal
 import logging
+from engine.logging_common import get_logger
 import pandas as pd
 from typing import Dict, Any, Optional, cast
 
-logger = logging.getLogger("aureus-signal.fvg")
-
-
+logger = get_logger(__name__)
 class FVGSignal(BaseSignal):
     """Signal Calculator for Fair Value Gaps."""
 

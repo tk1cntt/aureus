@@ -1,12 +1,12 @@
 import importlib
 import pkgutil
 import logging
+from engine.logging_common import get_logger
 from typing import List, Dict, Optional
 from .signals.base import BaseSignal
 from .strategies.base import BaseStrategy
 
-logger = logging.getLogger("aureus-signal.registry")
-
+logger = get_logger(__name__)
 class EngineRegistry:
     """Registry for managing and discovering Signals and Strategies."""
     

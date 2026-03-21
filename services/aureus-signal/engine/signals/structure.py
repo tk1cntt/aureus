@@ -1,10 +1,10 @@
 import logging
+from engine.logging_common import get_logger
 from .base import BaseSignal
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
-logger = logging.getLogger("aureus-signal.structure")
-
+logger = get_logger(__name__)
 class StructureSignal(BaseSignal):
     """
     Detects Market Structure Shifts (CHoCH) and creates Order Blocks (OB).
@@ -121,7 +121,7 @@ class StructureSignal(BaseSignal):
                             })
 
                         symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-                        logger.info(f"[t={c_t}] [{symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        logger.debug(f"[t={c_t}] [{symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         request_ai_update = getattr(state_obj, 'request_ai_update', None)
                         if c_t == latest_t and callable(request_ai_update):
                             request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
@@ -157,7 +157,7 @@ class StructureSignal(BaseSignal):
                             })
 
                         symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-                        logger.info(f"[t={c_t}] [{symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        logger.debug(f"[t={c_t}] [{symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         request_ai_update = getattr(state_obj, 'request_ai_update', None)
                         if c_t == latest_t and callable(request_ai_update):
                             request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
@@ -262,7 +262,7 @@ class StructureSignal(BaseSignal):
                     # Determine if we already logged this to avoid spamming
                     already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
                     if not already_logged:
-                        logger.info(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
+                        logger.debug(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
 
                     request_ai_update = getattr(state_obj, 'request_ai_update', None)
                     if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged and callable(request_ai_update):
@@ -366,7 +366,7 @@ class StructureSignal(BaseSignal):
 
         state_obj.sweep_targets = existing_targets
         symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-        logger.info(f"[GLOBAL] [{symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {symbol}. Active count: {len(existing_targets)}")
+        logger.debug(f"[GLOBAL] [{symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {symbol}. Active count: {len(existing_targets)}")
 
     def _process_ob(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with the updated OB Logic: Find extreme candle between pivot and breakout."""

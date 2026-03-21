@@ -1,11 +1,11 @@
 from .base import BaseSignal
 import logging
+from engine.logging_common import get_logger
 import pandas as pd
 import asyncio
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-pivots")
-
+logger = get_logger(__name__)
 # Use the strict 1:1 MQL5 port (zigzag_pro2.py)
 from ..common.zigzag_pro2 import ZigZagPro, get_confirmed_pivots, label_pivots_pro
 
@@ -72,13 +72,20 @@ class PivotSignal(BaseSignal):
         try:
             last_val = int(df.iloc[-1]["t"])
             tail_vals = df["t"].tail(5).tolist()
-            logger.debug(
-                f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate "
-                f"{symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}"
+        except Exception as e:
+            # Degrade gracefully: keep processing even if debug-tail extraction is malformed.
+            last_val = "UNKNOWN"
+            tail_vals = []
+            logger.warning(
+                "[%s] [calculate] Tail timestamp parse failed, continuing safely: %s",
+                symbol or "UNKNOWN",
+                e,
             )
-        except Exception:
-            # Conservative fail-safe: avoid changing trading flow on malformed tail values.
-            return None
+
+        logger.debug(
+            f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate "
+            f"{symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}"
+        )
 
         # 1. Initialize engine in state if not present
         if not hasattr(state_obj, "zigzag_engine") or state_obj.zigzag_engine is None:
@@ -132,14 +139,54 @@ class PivotSignal(BaseSignal):
             return None
 
         # 6. Synchronize with state_obj.swing_points
-        existing_swing_points = [
-            p for p in state_obj.swing_points
-            if isinstance(p, dict) and p.get("t") is not None and p.get("is_high") is not None
-        ]
+        existing_swing_points_raw = state_obj.swing_points
+        existing_swing_points = []
+        dropped_invalid = 0
+
+        for p in existing_swing_points_raw:
+            if not isinstance(p, dict):
+                dropped_invalid += 1
+                continue
+
+            t_val = p.get("t")
+            is_high = p.get("is_high")
+
+            # Continuity fallback: infer `is_high` from structure label if possible.
+            if is_high is None:
+                pivot_type = p.get("type")
+                if pivot_type in {"HH", "LH"}:
+                    is_high = True
+                elif pivot_type in {"LL", "HL"}:
+                    is_high = False
+
+            if t_val is None or is_high is None:
+                dropped_invalid += 1
+                continue
+
+            if p.get("is_high") is None:
+                p = {**p, "is_high": is_high}
+
+            existing_swing_points.append(p)
+
+        if dropped_invalid > 0:
+            logger.warning(
+                "[%s] [calculate] Dropped %s invalid historical swing points (kept=%s raw=%s)",
+                symbol or "UNKNOWN",
+                dropped_invalid,
+                len(existing_swing_points),
+                len(existing_swing_points_raw),
+            )
 
         earliest_new_t = labeled_pivots[0].get("t")
+        if earliest_new_t is None and confirmed_pivots:
+            earliest_new_t = confirmed_pivots[0].get("t")
+
         if earliest_new_t is None:
-            return None
+            logger.warning(
+                "[%s] [calculate] Unable to determine earliest_new_t, preserving existing swing_points",
+                symbol or "UNKNOWN",
+            )
+            earliest_new_t = max((p.get("t", 0) for p in existing_swing_points), default=0) + 1
 
         # STEP A: Keep historical pivots strictly before the new window
         historical_pivots = [p for p in existing_swing_points if p.get("t") < earliest_new_t]
@@ -176,6 +223,14 @@ class PivotSignal(BaseSignal):
                 )
 
         state_obj.swing_points = merged_labeled
+
+        logger.debug(
+            "[%s] [calculate] Swing merge completed: historical=%s new=%s merged=%s",
+            symbol or "UNKNOWN",
+            len(historical_pivots),
+            len(labeled_pivots),
+            len(state_obj.swing_points),
+        )
 
         # Limit memory (keep enough history for CHOCH/OB to function)
         if len(state_obj.swing_points) > 500:

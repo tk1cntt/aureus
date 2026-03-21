@@ -14,9 +14,10 @@ import json
 import os
 import sys
 import time
-import logging
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+
+from engine.logging_common import configure_logging, get_logger
 
 # Ensure engine is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,13 +29,8 @@ from engine.manager import WindowManager
 from engine.signal_factory import create_signal_set
 from engine.snapshot_utils import build_snapshot, batch_insert_snapshots
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("aureus-signal.signal-computer")
-
-
+configure_logging("signal_computer")
+logger = get_logger(__name__)
 def load_symbols_config(path="symbols.json"):
     try:
         if not os.path.exists(path):
@@ -163,7 +159,7 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
                 
                 # Log progress
                 pct = (processed / max(total_candles, 1)) * 100
-                logger.info(f"[{symbol}] [precompute_signals] 5... Progress: {processed}/{total_candles} ({pct:.1f}%) | Events: {event_count}")
+                logger.debug(f"[{symbol}] [precompute_signals] 5... Progress: {processed}/{total_candles} ({pct:.1f}%) | Events: {event_count}")
                 
                 # Update Redis progress
                 if r:

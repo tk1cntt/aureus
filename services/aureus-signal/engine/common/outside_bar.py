@@ -19,7 +19,8 @@ import pandas as pd
 from .physics import is_touching, has_closed_above
 from collections import OrderedDict
 import logging
-logger = logging.getLogger("aureus-signal.outside-bar")
+from engine.logging_common import get_logger
+logger = get_logger(__name__)
 from typing import Dict, Optional
 from enum import IntEnum
 import calendar

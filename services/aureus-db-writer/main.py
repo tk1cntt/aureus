@@ -14,14 +14,18 @@ log_file = os.getenv("LOG_FILE")
 
 handlers = [logging.StreamHandler()]
 if log_file:
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    handlers.append(logging.FileHandler(log_file))
+    log_file = log_file.strip()
+    if log_file:
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file))
 
 logging.basicConfig(
     level=log_level,
     format=log_format,
-    handlers=handlers
+    handlers=handlers,
+    force=True,
 )
 logger = logging.getLogger("aureus-db-writer.main")
 

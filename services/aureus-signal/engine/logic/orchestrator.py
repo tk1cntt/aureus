@@ -1,11 +1,11 @@
 import logging
+from engine.logging_common import get_logger
 from typing import List, Dict, Any
 
 from .gates.base import BaseGate
 from .judges.base import BaseJudge
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 class HybridOrchestrator:
     """
     Central brain that coordinates Boolean Gates and Algorithmic Judges.

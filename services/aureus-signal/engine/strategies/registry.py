@@ -1,11 +1,10 @@
 import logging
+from engine.logging_common import get_logger
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 from .base import BaseStrategy
 
-logger = logging.getLogger("aureus-signal.strategy-registry")
-
-
+logger = get_logger(__name__)
 class StrategyRegistry:
     """Registry for managing and executing trading strategies.
 

@@ -1,11 +1,11 @@
 import logging
+from engine.logging_common import get_logger
 import json
 from typing import Dict, List, Any
 
 from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS
 
-logger = logging.getLogger("aureus-signal.orders")
-
+logger = get_logger(__name__)
 class SimulatedTradeManager:
     """Manages creation, monitoring and closure of simulated trades."""
     

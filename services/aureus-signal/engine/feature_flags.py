@@ -13,10 +13,10 @@ Toggle via redis-cli:
 """
 import time
 import logging
+from engine.logging_common import get_logger
 from typing import Dict, Optional
 
-logger = logging.getLogger("aureus-signal")
-
+logger = get_logger(__name__)
 # Default cache TTL in seconds
 DEFAULT_CACHE_TTL = 60
 

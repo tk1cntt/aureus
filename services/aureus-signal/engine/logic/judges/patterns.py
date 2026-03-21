@@ -1,9 +1,9 @@
 from typing import Dict, Any
 import logging
+from engine.logging_common import get_logger
 from .base import BaseJudge, JudgeResult
 
-logger = logging.getLogger("aureus-signal.judges.patterns")
-
+logger = get_logger(__name__)
 class MultiPatternJudge(BaseJudge):
     """
     Judge that recognizes complex Price Action patterns beyond simple wicks.

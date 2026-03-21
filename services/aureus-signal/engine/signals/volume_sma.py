@@ -1,10 +1,10 @@
 import logging
+from engine.logging_common import get_logger
 import pandas as pd
 from .base import BaseSignal
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("aureus-signal.volume_sma")
-
+logger = get_logger(__name__)
 class VolumeSMASignal(BaseSignal):
     """
     Calculates Simple Moving Average of Volume.
