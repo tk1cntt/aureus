@@ -28,27 +28,38 @@ class TrendSignal(BaseSignal):
             ema_series = df['c'].ewm(span=self.ema_period, adjust=False).mean()
 
         current_ema = float(ema_series.iloc[-1])
-        prev_ema = float(ema_series.iloc[-2]) if len(ema_series) > 1 else current_ema
         current_price = float(df['c'].iloc[-1])
-        slope = (current_ema - prev_ema) / prev_ema if prev_ema > 0 else 0
         
-        # Thresholds for SIDEWAYS detection
-        is_flat = abs(slope) < 0.00005
-        is_close = abs(current_price - current_ema) / current_ema < 0.0003
+        # M1-Strict Unmitigated OB Counter Matrix
+        obs = getattr(state_obj, 'obs', [])
+        green_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BULLISH')
+        red_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BEARISH')
         
-        if is_flat or is_close:
+        # "N=2, M>=2" Order Flow Matrix Contract
+        if green_count >= 2 and red_count >= 2:
             regime = "SIDEWAYS"
+            htf_trend = "NEUTRAL"
+        elif (green_count - red_count) >= 2 and current_price > current_ema:
+            regime = "TREND_UP"
+            htf_trend = "BULLISH"
+        elif (red_count - green_count) >= 2 and current_price < current_ema:
+            regime = "TREND_DN"
+            htf_trend = "BEARISH"
         else:
-            regime = "TREND_UP" if current_price > current_ema else "TREND_DN"
+            # Divergence (Anti-FOMO) or weak trend -> NEUTRAL stood aside
+            regime = "SIDEWAYS"
+            htf_trend = "NEUTRAL"
             
         # Enrich state object
-        state_obj.htf_trend = "BULLISH" if current_price > current_ema else "BEARISH"
+        state_obj.htf_trend = htf_trend
         state_obj.market_regime = regime
         
         return {
             "tag": "htf_trend",
-            "value": state_obj.htf_trend,
+            "value": htf_trend,
             "regime": regime,
             "ema_ref": round(current_ema, 5),
-            "slope": round(slope, 7)
+            "green_ob_count": green_count,
+            "red_ob_count": red_count,
+            "delta": green_count - red_count
         }
