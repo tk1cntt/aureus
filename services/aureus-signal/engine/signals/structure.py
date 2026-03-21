@@ -64,6 +64,27 @@ class StructureSignal(BaseSignal):
 
         self._verify_mitigations(df, state_obj)
 
+        # Soft Garbage Collection: Prevent memory leak from endless OB array
+        if hasattr(state_obj, 'obs') and isinstance(state_obj.obs, list) and len(state_obj.obs) > 200:
+            unmitigated = [ob for ob in state_obj.obs if not ob.get('mitigated')]
+            mitigated = [ob for ob in state_obj.obs if ob.get('mitigated')]
+            if len(mitigated) > 50:
+                state_obj.obs = sorted(unmitigated + mitigated[-50:], key=lambda x: x.get('t_start', 0))
+
+        # Traceability v1.1: Export explicit ob_state to transient_signals for Factory consumption
+        if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
+            state_obj.transient_signals["ob_state"] = {
+                "active_obs": [
+                    {
+                        "top": ob.get("top"),
+                        "bottom": ob.get("bottom"),
+                        "ob_type": ob.get("ob_type"),
+                        "t_start": ob.get("t_start"),
+                        "mitigated": ob.get("mitigated", False)
+                    } for ob in getattr(state_obj, 'obs', [])
+                ]
+            }
+
         if new_signals:
             return new_signals[-1]
             
@@ -80,13 +101,17 @@ class StructureSignal(BaseSignal):
             if ob.get('mitigated'): continue
             
             t_breakout = ob.get('t_breakout', 0)
-            if latest_t <= t_breakout: continue
+            last_checked_t = ob.get('_last_checked_t', t_breakout)
             
-            # Historical Sweep: Find the first candle AFTER breakout that touches the OB
-            search_df = df[df['t'] > t_breakout]
-            if search_df.empty: continue
+            if latest_t <= last_checked_t: continue
+            
+            # Optimized Sweep: Find only the candles AFTER the last checked time
+            search_df = df[df['t'] > last_checked_t]
+            if search_df.empty: 
+                continue
             
             is_bullish = (ob['ob_type'] == 'BULLISH')
+            mitigated_in_this_run = False
             
             for _, candle in search_df.iterrows():
                 c_t = int(candle['t'])
@@ -129,6 +154,7 @@ class StructureSignal(BaseSignal):
                         transient = getattr(state_obj, 'transient_signals', None)
                         if c_t == latest_t and isinstance(transient, dict):
                             transient['ob_bull_mitigated'] = ob
+                        mitigated_in_this_run = True
                         break
                 else: # BEARISH
                     if c_h >= ob['bottom']:
@@ -165,7 +191,12 @@ class StructureSignal(BaseSignal):
                         transient = getattr(state_obj, 'transient_signals', None)
                         if c_t == latest_t and isinstance(transient, dict):
                             transient['ob_bear_mitigated'] = ob
+                        mitigated_in_this_run = True
                         break
+                        
+            if not mitigated_in_this_run:
+                # If we scanned everything and found no mitigation, update the checkpoint
+                ob['_last_checked_t'] = int(search_df.iloc[-1]['t'])
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""
