@@ -64,49 +64,6 @@ def load_symbols_config(path="symbols.json"):
         return {}
 
 
-def evaluate_closed_candle_gate(msg_type: str, stream_key: str, payload: dict) -> tuple[bool, str]:
-    """Returns (is_allowed, reason_code) for phase-1 closed-candle gate."""
-    if msg_type != "CANDLE":
-        return False, "NON_CANDLE_MESSAGE"
-
-    raw_is_closed = payload.get("is_closed")
-    if raw_is_closed is None:
-        # Gateway candle stream is treated as closed-candle by default.
-        return True, "OK"
-
-    if isinstance(raw_is_closed, bool):
-        is_closed = raw_is_closed
-    else:
-        is_closed = str(raw_is_closed).strip().lower() in {"1", "true", "yes", "y"}
-
-    if not is_closed:
-        return False, "BAR_NOT_CLOSED"
-
-    return True, "OK"
-
-
-def evaluate_backfill_readiness_gate(symbol: str, window_manager: WindowManager) -> tuple[bool, str]:
-    """Returns (is_allowed, reason_code) for phase-2 backfill readiness gate."""
-    status_payload = window_manager.get_backfill_status(symbol)
-    status = str(status_payload.get("status", "NOT_READY")).upper()
-    reason = str(status_payload.get("reason", "UNSPECIFIED"))
-
-    if status != "READY":
-        return False, f"BACKFILL_NOT_READY:{status}:{reason}"
-
-    return True, "OK"
-
-
-def evaluate_window_integrity_gate(symbol: str, window_manager: WindowManager) -> tuple[bool, str]:
-    """Returns (is_allowed, reason_code) for phase-3 contiguous-window integrity gate."""
-    integrity_payload = window_manager.get_window_integrity(symbol)
-    is_contiguous = bool(integrity_payload.get("is_contiguous_window", False))
-    reason = str(integrity_payload.get("reason", "UNSPECIFIED"))
-
-    if not is_contiguous:
-        return False, f"WINDOW_NOT_CONTIGUOUS:{reason}"
-
-    return True, "OK"
 
 
 def enrich_strategy_decisions_with_contract_metadata(strategy_results: list[dict], normalized_snapshot: dict) -> list[dict]:
@@ -594,31 +551,6 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
                             
-                            '''
-                            is_allowed, gate_reason = evaluate_closed_candle_gate(msg_type, stream_key, data)
-                            if not is_allowed:
-                                logger.warning(
-                                    f"[{symbol}] [run_signal_engine] Closed-candle gate rejected entry_id={entry_id} reason={gate_reason}"
-                                )
-                                await r.xack(stream_key, group_name, entry_id)
-                                continue
-
-                            is_backfill_ready, backfill_reason = evaluate_backfill_readiness_gate(symbol, window_manager)
-                            if not is_backfill_ready:
-                                logger.warning(
-                                    f"[{symbol}] [run_signal_engine] Backfill gate rejected entry_id={entry_id} reason={backfill_reason}"
-                                )
-                                await r.xack(stream_key, group_name, entry_id)
-                                continue
-
-                            is_window_valid, window_reason = evaluate_window_integrity_gate(symbol, window_manager)
-                            if not is_window_valid:
-                                logger.warning(
-                                    f"[{symbol}] [run_signal_engine] Window integrity gate rejected entry_id={entry_id} reason={window_reason}"
-                                )
-                                await r.xack(stream_key, group_name, entry_id)
-                                continue
-                            '''
 
                             ts_ms = int(data.get('t', 0))
                             ts_unix = ts_ms // 1000 if ts_ms > 1e12 else ts_ms

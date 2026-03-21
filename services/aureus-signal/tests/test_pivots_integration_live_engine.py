@@ -164,9 +164,6 @@ class TestPivotsEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
             patch("engine.live_engine.NewsProvider.fetch_this_week", return_value=None),
             patch("engine.live_engine.NewsProvider.get_todays_events", return_value=[]),
             patch("engine.live_engine.integrity_and_recalc_task", new=lambda *_a, **_k: asyncio.sleep(0)),
-            patch("engine.live_engine.evaluate_closed_candle_gate", return_value=(True, "")),
-            patch("engine.live_engine.evaluate_backfill_readiness_gate", return_value=(True, "")),
-            patch("engine.live_engine.evaluate_window_integrity_gate", return_value=(True, "")),
             patch("engine.live_engine.asyncio.create_task", side_effect=_swallow_task),
         ):
             with self.assertRaises(asyncio.CancelledError):
