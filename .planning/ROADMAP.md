@@ -17,7 +17,7 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn. (completed 2026-03-21)
 - [x] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects. (completed 2026-03-21)
 - [x] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu. (completed 2026-03-21)
-- [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo quyết định từ CONTEXT. (in progress)
+- [x] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo quyết định từ CONTEXT. (completed 2026-03-21)
 - [ ] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1.
 
 ## Phase Details
@@ -150,5 +150,5 @@ Plans:
 | 5. Signal Session Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
 | 6. Signal Sweep Optimization | v1.1 | 0/1 | Complete | 2026-03-21 |
 | 7. Signal Trend Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
-| 8. Signal Volume SMA Optimization | v1.1 | 0/1 | In Progress | - |
+| 8. Signal Volume SMA Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 9. Signal Structure Optimization | v1.1 | 0/1 | Not started | - |

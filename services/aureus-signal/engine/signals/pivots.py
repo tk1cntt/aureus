@@ -69,6 +69,18 @@ class PivotSignal(BaseSignal):
             )
             return None
 
+        # --- DEFENSIVE GUARDS: Clean malformed input ---
+        if df[list(required_cols)].isna().any().any():
+            df = df.dropna(subset=list(required_cols)).copy()
+
+        if df.empty:
+            return None
+
+        if not df['t'].is_monotonic_increasing or df['t'].duplicated().any():
+            logger.warning("[%s] [calculate] df['t'] is not sorted or has duplicates. Repairing.", symbol or "UNKNOWN")
+            df = df.drop_duplicates(subset=['t'], keep='last').sort_values(by='t').reset_index(drop=True)
+        # --- END DEFENSIVE GUARDS ---
+
         try:
             last_val = int(df.iloc[-1]["t"])
             tail_vals = df["t"].tail(5).tolist()
@@ -159,7 +171,7 @@ class PivotSignal(BaseSignal):
                 elif pivot_type in {"LL", "HL"}:
                     is_high = False
 
-            if t_val is None or is_high is None:
+            if t_val is None or is_high is None or is_high not in (True, False):
                 dropped_invalid += 1
                 continue
 
@@ -266,10 +278,10 @@ class PivotSignal(BaseSignal):
 
             latest = state_obj.swing_points[-1]
             return {
-                "tag": latest["type"].lower(),
-                "price": latest["price"],
-                "t": latest["t"],
-                "is_high": latest["is_high"],
+                "tag": str(latest.get("type", "")).lower(),
+                "price": float(latest.get("price", 0.0)),
+                "t": int(latest.get("t", 0)),
+                "is_high": bool(latest.get("is_high", False)),
             }
 
         return None
