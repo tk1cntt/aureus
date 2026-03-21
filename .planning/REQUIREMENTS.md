@@ -17,7 +17,7 @@
 - [x] **TST-01**: For each signal phase, create/maintain a dedicated **unit test file** for that signal.
 - [x] **TST-02**: For each signal phase, create/maintain a dedicated **integration test file** when integrated into `aureus-signal` flow.
 - [x] **TST-03**: Test coverage for each signal phase must be **>= 80%** on changed signal code and related test scope.
-- [x] **TST-04**: A phase cannot be marked complete unless unit + integration tests pass and coverage gate (`>=80%`) is met.
+- [x] **TST-04**: A phase cannot be marked complete unless unit + integration tests pass and coverage gate (`100%`) is met.
 
 ### Governance (`VAL`)
 - [ ] **VAL-01**: Roadmap must keep exactly **one signal per phase**.

@@ -27,7 +27,7 @@ key-files:
 
 key-decisions:
   - "Preserve EMA output schema (`tag`, optional `cross`, `period`, `value`, `t`) while hardening malformed-cache fallback behavior."
-  - "Require explicit EMA coverage proof (>=80%) before phase closure."
+  - "Require explicit EMA coverage proof (100%) before phase closure."
 
 patterns-established:
   - "State cache hardening without semantic drift in emitted events"

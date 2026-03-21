@@ -24,7 +24,7 @@ Phase 03 targets `SIG-03`: optimize and validate `fvg` without changing trading 
    - `fvg_up` / `fvg_down` tags for strategy sequencing
 2. Keep mitigation semantics `touch` + emit-once.
 3. Add missing dedicated FVG tests across unit/helper/runtime path.
-4. Enforce explicit coverage gate (`>=80%`) for changed FVG signal scope.
+4. Enforce explicit coverage gate (`100%`) for changed FVG signal scope.
 
 ## Validation Architecture
 - Per-task quick checks: FVG unit + helper integration tests.

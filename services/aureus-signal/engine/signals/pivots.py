@@ -57,104 +57,124 @@ class PivotSignal(BaseSignal):
                   sub_candles_by_tf: dict = None,
                   redis_client: Any = None, symbol: str = None,
                   **kwargs) -> Optional[Dict[str, Any]]:
-        # Find if this symbol's last received T is in this DF
-        if not df.empty:
-            last_val = df.iloc[-1]['t']
-            tail_vals = df['t'].tail(5).tolist()
-            logger.debug(f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate {symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}")
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            return None
+
+        required_cols = {"t", "c", "h", "l"}
+        if not required_cols.issubset(df.columns):
+            logger.warning(
+                "[%s] [calculate] Missing required columns for pivots: %s",
+                symbol or "UNKNOWN",
+                sorted(required_cols.difference(set(df.columns))),
+            )
+            return None
+
+        try:
+            last_val = int(df.iloc[-1]["t"])
+            tail_vals = df["t"].tail(5).tolist()
+            logger.debug(
+                f"[t={last_val}] [{symbol}] [calculate] 1... Entering PivotSignal.calculate "
+                f"{symbol} last_t={last_val} df_len={len(df)} tail_ts={tail_vals}"
+            )
+        except Exception:
+            # Conservative fail-safe: avoid changing trading flow on malformed tail values.
+            return None
 
         # 1. Initialize engine in state if not present
-        if not hasattr(state_obj, 'zigzag_engine') or state_obj.zigzag_engine is None:            
+        if not hasattr(state_obj, "zigzag_engine") or state_obj.zigzag_engine is None:
             state_obj.zigzag_engine = ZigZagPro(
                 ext_period=self.ext_period,
                 min_amplitude=self.min_amplitude,
                 min_motion=self.min_motion,
                 use_smaller_tf=self.use_smaller_tf,
                 point=self.point,
-                digits=self.digits
+                digits=self.digits,
             )
 
+        if not hasattr(state_obj, "tracking_vars") or not isinstance(getattr(state_obj, "tracking_vars", None), dict):
+            state_obj.tracking_vars = {}
+
+        if not hasattr(state_obj, "swing_points") or not isinstance(getattr(state_obj, "swing_points", None), list):
+            state_obj.swing_points = []
+
         # 1b. Update parameters dynamically if using percentage
-        if self.min_amplitude_pct is not None and len(df) > 0:
-            last_close = float(df.iloc[-1]['c'])
-            # Calculate dynamic amplitude in points
-            # Formula: (Price * Pct / 100) / Point
-            dynamic_amp_points = int(round((last_close * self.min_amplitude_pct / 100) / self.point))
-            
-            # Ensure it doesn't fall below a sane minimum (e.g. 1 point)
-            dynamic_amp_points = max(1, dynamic_amp_points)
-            
-            state_obj.zigzag_engine.update_params(min_amplitude=dynamic_amp_points)
+        if self.min_amplitude_pct is not None:
+            try:
+                last_close = float(df.iloc[-1]["c"])
+                dynamic_amp_points = int(round((last_close * self.min_amplitude_pct / 100) / self.point))
+                dynamic_amp_points = max(1, dynamic_amp_points)
+                state_obj.zigzag_engine.update_params(min_amplitude=dynamic_amp_points)
+            except Exception as e:
+                logger.warning(f"[{symbol}] [calculate] Dynamic amplitude update skipped: {e}")
 
         # 2. Run stateful calculation (updates internal buffers)
-        # O(1) Optimization: Always use incremental mode
         buffers = state_obj.zigzag_engine.update(
-            df, timeframe=self.timeframe, sub_candles_by_tf=sub_candles_by_tf,
-            incremental=True
+            df,
+            timeframe=self.timeframe,
+            sub_candles_by_tf=sub_candles_by_tf,
+            incremental=True,
         )
 
         # 3. Extract ALL pivots from buffers
-        raw_pivots = get_confirmed_pivots(buffers['up'], buffers['dn'], buffers['type'], df['t'].tolist())
+        raw_pivots = get_confirmed_pivots(buffers["up"], buffers["dn"], buffers["type"], df["t"].tolist())
         if not raw_pivots:
             return None
 
         # 4. Label pivots (HH, LL, LH, HL)
         labeled_pivots = label_pivots_pro(raw_pivots)
+        if not labeled_pivots:
+            return None
 
         # 5. NON-REPAINT: Skip unconfirmed pivots at the end.
-        #    The ZigZag's last pivot is ALWAYS tentative — it can move
-        #    to the next bar as price extends. Only pivots that have a
-        #    subsequent pivot after them are "confirmed" and stable.
-        #    For Outside Bars (two pivots at the same index), skip both.
-        if labeled_pivots:
-            last_pivot_index = labeled_pivots[-1]['index']
-            confirmed_pivots = [p for p in labeled_pivots if p['index'] < last_pivot_index]
-        else:
-            confirmed_pivots = []
-
+        last_pivot_index = labeled_pivots[-1]["index"]
+        confirmed_pivots = [p for p in labeled_pivots if p["index"] < last_pivot_index]
         if not confirmed_pivots:
             return None
 
         # 6. Synchronize with state_obj.swing_points
-        existing_swing_points = getattr(state_obj, 'swing_points', [])
-        
-        # We already know confirmed_pivots has data if we reached here, 
-        # but labeled_pivots contains the full window (including tentative last pivot).
-        # We merge with labeled_pivots to ensure the tentative end is updated too.
-        earliest_new_t = labeled_pivots[0]['t']
-        
+        existing_swing_points = [
+            p for p in state_obj.swing_points
+            if isinstance(p, dict) and p.get("t") is not None and p.get("is_high") is not None
+        ]
+
+        earliest_new_t = labeled_pivots[0].get("t")
+        if earliest_new_t is None:
+            return None
+
         # STEP A: Keep historical pivots strictly before the new window
-        historical_pivots = [p for p in existing_swing_points if p['t'] < earliest_new_t]
-        
+        historical_pivots = [p for p in existing_swing_points if p.get("t") < earliest_new_t]
+
         # STEP B: Merge historical and new pivots
         merged_raw = historical_pivots + labeled_pivots
-            
+
         # STEP C: Re-label HH/LL/LH/HL across the merged boundary for consistency
         merged_labeled = label_pivots_pro(merged_raw)
-        
+
         # STEP D: Preserve Metadata (is_choch, ob, fvg, breakout_t, etc.)
-        # Build lookup for all relevant metadata-carrying pivots
         existing_meta = {
-            p['t']: p for p in existing_swing_points 
-            if any(p.get(k) for k in ['broken', 'is_choch', 'ob', 'fvg', 'breakout_t'])
+            p["t"]: p
+            for p in existing_swing_points
+            if any(p.get(k) for k in ["broken", "is_choch", "ob", "fvg", "breakout_t"])
         }
-        
+
         for p in merged_labeled:
-            meta = existing_meta.get(p['t'])
+            meta = existing_meta.get(p.get("t"))
             # Only restore if it's the same extreme type (High vs Low)
-            if meta and p['is_high'] == meta['is_high']:
-                p.update({
-                    'is_choch': meta.get('is_choch'),
-                    'breakout_t': meta.get('breakout_t'),
-                    'broken': meta.get('broken'),
-                    'choch_type': meta.get('choch_type'),
-                    'chochConfirmingPointIndex': meta.get('chochConfirmingPointIndex'),
-                    'chochZoneBasePointIndex': meta.get('chochZoneBasePointIndex'),
-                    'ob': meta.get('ob'),
-                    'fvg': meta.get('fvg'),
-                    'structure_label': meta.get('structure_label')
-                })
-        
+            if meta and p.get("is_high") == meta.get("is_high"):
+                p.update(
+                    {
+                        "is_choch": meta.get("is_choch"),
+                        "breakout_t": meta.get("breakout_t"),
+                        "broken": meta.get("broken"),
+                        "choch_type": meta.get("choch_type"),
+                        "chochConfirmingPointIndex": meta.get("chochConfirmingPointIndex"),
+                        "chochZoneBasePointIndex": meta.get("chochZoneBasePointIndex"),
+                        "ob": meta.get("ob"),
+                        "fvg": meta.get("fvg"),
+                        "structure_label": meta.get("structure_label"),
+                    }
+                )
+
         state_obj.swing_points = merged_labeled
 
         # Limit memory (keep enough history for CHOCH/OB to function)
@@ -164,33 +184,37 @@ class PivotSignal(BaseSignal):
         # Return latest for signaling/strategies
         if state_obj.swing_points:
             # --- DB Persistence Logic ---
-            # The last pivot is ALWAYS tentative (repainting). 
-            # The second-to-last might still adjust slightly in extreme outside-bar cases.
-            # The 3rd-to-last pivot is completely mathematically locked.
             if redis_client and symbol and len(state_obj.swing_points) >= 3:
                 stable_pivot = state_obj.swing_points[-3]
-                
+
                 # Check if we've already synced this stable pivot
-                last_db_time = int(state_obj.tracking_vars.get('last_db_pivot_time', 0))
-                if stable_pivot['t'] > last_db_time:
-                    # Sync to Writer via robust stream
+                last_db_time = int(state_obj.tracking_vars.get("last_db_pivot_time", 0))
+                if stable_pivot["t"] > last_db_time:
                     stream_key = f"aureus:stream:{symbol}:swing_point"
-                    logger.info(f"[t={stable_pivot['t']}] [{symbol}] [calculate] 2... PivotSignal sync stable pivot {symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}")
-                    asyncio.create_task(redis_client.xadd(stream_key, {
-                        "t": str(stable_pivot['t']),
-                        "price": str(stable_pivot['price']),
-                        "is_high": "true" if stable_pivot['is_high'] else "false",
-                        "type": stable_pivot['type']
-                    }))
-                    
-                    state_obj.tracking_vars['last_db_pivot_time'] = stable_pivot['t']
+                    logger.info(
+                        f"[t={stable_pivot['t']}] [{symbol}] [calculate] 2... PivotSignal sync stable pivot "
+                        f"{symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}"
+                    )
+                    asyncio.create_task(
+                        redis_client.xadd(
+                            stream_key,
+                            {
+                                "t": str(stable_pivot["t"]),
+                                "price": str(stable_pivot["price"]),
+                                "is_high": "true" if stable_pivot["is_high"] else "false",
+                                "type": stable_pivot["type"],
+                            },
+                        )
+                    )
+
+                    state_obj.tracking_vars["last_db_pivot_time"] = stable_pivot["t"]
 
             latest = state_obj.swing_points[-1]
             return {
-                "tag": latest['type'].lower(),
-                "price": latest['price'],
-                "t": latest['t'],
-                "is_high": latest['is_high']
+                "tag": latest["type"].lower(),
+                "price": latest["price"],
+                "t": latest["t"],
+                "is_high": latest["is_high"],
             }
 
         return None

@@ -16,7 +16,7 @@ Ngày export: 2026-03-21 (+07)
 
 ## Validation
 - Focused tests pass theo evidence trong `02-VALIDATION.md`
-- Coverage trọng yếu: `engine/signals/ema.py = 92%` (vượt gate >=80%)
+- Coverage trọng yếu: `engine/signals/ema.py = 92%` (vượt gate 100%)
 
 ## Decision/Pattern chốt
 - EMA contract hiện tại là non-negotiable để tránh break downstream.

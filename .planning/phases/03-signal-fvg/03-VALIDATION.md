@@ -33,5 +33,5 @@ updated: 2026-03-20
 - [x] Dedicated FVG unit test file exists and passes.
 - [x] Dedicated FVG helper integration test exists and passes.
 - [x] Runtime-path integration test validates non-masked factory wiring.
-- [x] Coverage for changed FVG scope is `>=80%`.
+- [x] Coverage for changed FVG scope is `100%`.
 - [x] Phase closure only after all gates are green.

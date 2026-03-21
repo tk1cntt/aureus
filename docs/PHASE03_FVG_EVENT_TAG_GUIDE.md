@@ -16,7 +16,7 @@ Ngày lưu: 2026-03-21 01:00 (+07)
   - `test_fvg_integration_execute_signals_for_candle.py`
   - `test_fvg_integration_live_engine.py`
   - `test_signal_contract_normalization.py` (FVG contract assertions)
-- Validation pass: các gate xanh, coverage tổng FVG scope ~`87%` (>=80%).
+- Validation pass: các gate xanh, coverage tổng FVG scope ~`87%` (100%).
 
 ## 2) Event vs Tag khác nhau thế nào
 

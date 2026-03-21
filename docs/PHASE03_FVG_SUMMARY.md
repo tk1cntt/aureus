@@ -20,7 +20,7 @@ Ngày export: 2026-03-21 (+07)
 
 ## Validation
 - Focused validation xanh (9 passed)
-- Combined coverage cho FVG modules ~`87%` (vượt gate >=80%)
+- Combined coverage cho FVG modules ~`87%` (vượt gate 100%)
 
 ## Decision/Pattern chốt
 - Giữ **dual compatibility**:

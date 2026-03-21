@@ -593,7 +593,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 # Future enhancement: Strategy SL/TP hits could be tracked here without full signal re-computation.
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
-
+                            
+                            '''
                             is_allowed, gate_reason = evaluate_closed_candle_gate(msg_type, stream_key, data)
                             if not is_allowed:
                                 logger.warning(
@@ -617,6 +618,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 )
                                 await r.xack(stream_key, group_name, entry_id)
                                 continue
+                            '''
 
                             ts_ms = int(data.get('t', 0))
                             ts_unix = ts_ms // 1000 if ts_ms > 1e12 else ts_ms

@@ -72,7 +72,7 @@ completed: 2026-03-20
 
 ## Decisions Made
 - Preserved both transient structural keys and strategy-facing tags to avoid downstream regressions.
-- Enforced an explicit phase coverage gate (`>=80%`) for FVG scope.
+- Enforced an explicit phase coverage gate (`100%`) for FVG scope.
 
 ## Deviations from Plan
 

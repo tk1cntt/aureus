@@ -65,7 +65,7 @@
 
 **Steps:**
 1. Chạy test unit + integration.
-2. Chạy coverage cho scope phase (>=80%).
+2. Chạy coverage cho scope phase (100%).
 3. Cập nhật evidence command + output.
 4. Đánh dấu phase done trong roadmap.
 

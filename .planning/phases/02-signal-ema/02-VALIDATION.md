@@ -62,7 +62,7 @@ updated: 2026-03-20T23:21:13+07:00
 - [x] All tasks have automated verification commands.
 - [x] Sampling continuity is maintained across all tasks.
 - [x] No watch-mode flags are used.
-- [x] Coverage gate (`>=80%`) is proven in command output.
+- [x] Coverage gate (`100%`) is proven in command output.
 - [x] Phase closure condition met for unit + integration + coverage checks.
 
 **Approval:** approved
