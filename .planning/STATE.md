@@ -6,7 +6,7 @@ status: unknown
 last_updated: "2026-03-21T13:50:49.906Z"
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 10
   total_plans: 7
   completed_plans: 6
 ---
@@ -24,6 +24,10 @@ Plan: 1 of 2
 - Phase 01 evidence is isolated under `.planning/phases/01-signal-atr/`.
 - Phase 02 evidence is completed under `.planning/phases/02-signal-ema/`.
 - Root planning files (`ROADMAP.md`, `REQUIREMENTS.md`, `STATE.md`) act as high-level trackers.
+- Per- **Phase 8 (Volume SMA)**: [COMPLETED]
+- **Phase 9 (Structure)**: [COMPLETED]
+- **Phase 10 (Sweep Targets)**: [IN_PROGRESS]
+- **Phase 11 (Daily Signal GC)**: [COMPLETED] 0.5 Day — Timer 1500 candle reset được nhúng vào Engine.
 - Per-phase documentation policy active: each phase must keep its own `RESEARCH.md`, `PLAN.md`, `VALIDATION.md`, `SUMMARY.md`.
 
 ### Roadmap Evolution

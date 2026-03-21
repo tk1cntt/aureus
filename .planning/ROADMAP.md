@@ -20,6 +20,7 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo quyết định từ CONTEXT. (completed 2026-03-21)
 - [x] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1. (completed 2026-03-21)
 - [ ] **Phase 10: Phân tích và tối ưu sweep_targets trong structure.py** - Optimize sweep targets in structure.py.
+- [x] **Phase 11: System GC - Daily Signal Recalculation** - Tự động dọn RAM 5AM GMT+7 mỗi ngày bằng 1500 nến. (completed 2026-03-22)
 
 ## Phase Details
 
@@ -153,6 +154,19 @@ Plans:
 Plans:
 - [ ] 10-01: Plan sẽ được tạo sau `gsd-discuss-phase 10` hoặc `gsd-plan-phase 10`.
 
+### Phase 11: System GC - Daily Signal Recalculation
+**Goal**: Xây dựng cơ chế dọn rác System RAM bằng cách tự động gọi `recalculate_all_signals` lúc 5h sáng (0:00 UTC).
+**Depends on**: Phase 10
+**Requirements**: [SIG-11, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. Engine tự động trigger loop check đúng 0:00 UTC mỗi ngày.
+  2. Dữ liệu RAM được renew thay vì phình to vô hạn.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [x] 11-01: Tạo Background Task hẹn giờ Reset trong Live Engine.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -167,3 +181,4 @@ Plans:
 | 8. Signal Volume SMA Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 9. Signal Structure Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 10. Phân tích và tối ưu sweep_targets trong structure.py | v1.1 | 0/1 | Not started | - |
+| 11. System GC - Daily Signal Recalculation | v1.1 | 1/1 | Complete | 2026-03-22 |

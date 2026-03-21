@@ -452,6 +452,25 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
             
     asyncio.create_task(news_refresh_loop())
     
+    # --- Daily GC Loop (5AM GMT+7 / 0:00 UTC) ---
+    async def daily_gc_loop():
+        last_gc_date = None
+        while True:
+            now = datetime.now(timezone.utc)
+            if now.hour == 0 and now.minute == 0 and now.date() != last_gc_date:
+                logger.info("[GLOBAL] [daily_gc_loop] 1... Triggering Daily Signal Recalculation (1500 candles GC) for all symbols")
+                for s in symbols_list:
+                    window_manager.set_backfill_status(s, "NOT_READY", reason="DAILY_GC_REQUESTED", updated_at=time.time())
+                    asyncio.create_task(
+                        recalculate_all_signals(s, db_pool, r, window_manager, symbol_signals[s], symbol_strategies[s], symbol_locks[s])
+                    )
+                last_gc_date = now.date()
+                
+            # Sleep for 30 seconds to avoid missing the 00:00 window
+            await asyncio.sleep(30)
+
+    asyncio.create_task(daily_gc_loop())
+    
     streams_subscription = {f"aureus:stream:{s}:candle": ">" for s in symbols_list}
     candle_count = 0
 
