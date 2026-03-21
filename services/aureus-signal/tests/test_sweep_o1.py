@@ -15,7 +15,7 @@ class _DummyState:
     def __init__(self):
         self.symbol = "XAUUSD"
         self.market_regime = "SIDEWAYS"
-        self.sweep_targets: list[Any] = []
+        self.obs: list[Any] = []
         self.signal_history: list[dict[str, Any]] = []
         self.transient_signals: dict[str, Any] = {}
         self.ai_events: list[str] = []
@@ -45,13 +45,9 @@ class TestSweepSignalBehavior(unittest.TestCase):
 
     def test_bullish_sweep_emits_payload_transient_and_consumes_target(self):
         state = _DummyState()
-        state.sweep_targets = [
+        state.obs = [
             {
-                "side": "BULLISH",
-                "price": 1999.5,
-                "type": "liquidity_low",
-                "t_source": 1700000000,
-                "fidelity": 0.9,
+                "ob_type": "BULLISH", "bottom": 1999.5, "top": 2000.0, "t_start": 1700000000, "status": "PENDING"
             }
         ]
         df = self._df([
@@ -63,13 +59,13 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["tag"], "sweep_bull")
         self.assertIn("sweep_bull", state.transient_signals)
-        self.assertEqual(state.sweep_targets, [])
+        self.assertEqual(state.obs[0]["status"], "SWEPT")
         self.assertIn("STOP_HUNT", state.ai_events)
 
     def test_bearish_sweep_respects_trend_dn_filter(self):
         state = _DummyState()
         state.market_regime = "TREND_DN"
-        state.sweep_targets = [{"side": "BEARISH", "price": 2010.0, "type": "liquidity_high"}]
+        state.obs = [{"ob_type": "BEARISH", "bottom": 2009.0, "top": 2010.0, "t_start": 1700000000, "status": "PENDING"}]
         df = self._df([
             {"t": 1700000120, "o": 2008.0, "h": 2011.5, "l": 2007.4, "c": 2008.4},
         ])
@@ -82,7 +78,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
 
     def test_dedup_skips_existing_history_same_tag_price_and_time(self):
         state = _DummyState()
-        state.sweep_targets = [{"side": "BULLISH", "price": "1999.5", "type": "liquidity_low"}]
+        state.obs = [{"ob_type": "BULLISH", "bottom": 1999.5, "top": 2000.0, "t_start": 1700000000, "status": "PENDING"}]
         state.signal_history = [
             {"tag": "sweep_bull", "price_swept": 1999.5, "t": 1700000180},
         ]
@@ -93,15 +89,15 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNone(result)
-        self.assertEqual(len(state.sweep_targets), 1)
+        self.assertEqual(len(state.obs), 1)
         self.assertNotIn("sweep_bull", state.transient_signals)
 
     def test_ignores_malformed_targets_without_raising(self):
         state = _DummyState()
-        state.sweep_targets = [
+        state.obs = [
             "not-a-dict",
-            {"side": "BULLISH", "price": "bad"},
-            {"side": None, "price": 2000.0},
+            {"ob_type": "BULLISH", "bottom": "bad"},
+            {"ob_type": None, "bottom": 2000.0},
         ]
         df = self._df([
             {"t": 1700000240, "o": 2000.0, "h": 2000.8, "l": 1999.2, "c": 1999.9},
@@ -111,7 +107,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(state.transient_signals, {})
-        self.assertEqual(len(state.sweep_targets), 3)
+        self.assertEqual(len(state.obs), 1)
 
 
 if __name__ == "__main__":

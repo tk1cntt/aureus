@@ -57,9 +57,9 @@ class TestStructureSignalSnapshot(unittest.TestCase):
         self.assertEqual(ob["top"], 190.0) # Fixed to old logic
         self.assertEqual(ob["bottom"], 150.0)
         
-        # 3. Check Mitigation
-        self.assertTrue(ob.get("mitigated"), "OB was not mitigated by candle t=10")
-        self.assertEqual(ob.get("t_mitigation"), 10)
+        # 3. Check State (Structure only creates PENDING OBs, mitigation happens in Sweep)
+        self.assertEqual(ob.get("status"), "PENDING", "OB should be initialized as PENDING")
+        self.assertEqual(ob.get("break_counter"), 0, "break_counter should start at 0")
 
 if __name__ == '__main__':
     unittest.main()

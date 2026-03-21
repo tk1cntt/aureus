@@ -40,13 +40,9 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         }
         df, state = self._push_candle(candle)
         state.market_regime = "SIDEWAYS"
-        state.sweep_targets = [
+        state.obs = [
             {
-                "side": "BULLISH",
-                "price": 1999.0,
-                "type": "liquidity_low",
-                "t_source": 1701999940,
-                "fidelity": 0.7,
+                "ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"
             }
         ]
 
@@ -69,7 +65,7 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         }
         df, state = self._push_candle(candle)
         state.market_regime = "SIDEWAYS"
-        state.sweep_targets = [{"side": "BULLISH", "price": 1999.0, "type": "liquidity_low"}]
+        state.obs = [{"ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"}]
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
@@ -86,7 +82,7 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
 
         # Re-seed same target in the same candle: dedup should suppress processor emission.
         state.transient_signals = {}
-        state.sweep_targets = [{"side": "BULLISH", "price": 1999.0, "type": "liquidity_low"}]
+        state.obs = [{"ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"}]
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
         after_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep_bull"])
@@ -105,7 +101,7 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         }
         df, state = self._push_candle(candle)
         state.market_regime = "TREND_DN"
-        state.sweep_targets = [{"side": "BEARISH", "price": 2011.0, "type": "liquidity_high"}]
+        state.obs = [{"ob_type": "BEARISH", "top": 2011.0, "bottom": 2010.0, "t_start": 1701999940, "status": "PENDING"}]
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 

@@ -233,19 +233,8 @@ class SymbolState:
         low = float(candle['l'])
         close = float(candle['c'])
         t = int(candle['t'])
-        
-        # 1. Update OBs
-        for ob in self.obs:
-            if ob.get('mitigated'): continue
-            
-            is_bullish_ob = (ob['ob_type'] == 'BULLISH')
-            # Hard Break: Price closes beyond the zone
-            if (is_bullish_ob and close < ob['bottom']) or (not is_bullish_ob and close > ob['top']):
-                ob['mitigated'] = True
-                ob['t_mitigation'] = t
-                ob['broken'] = True # Keep flag for metadata if needed
 
-        # 2. Update FVGs
+        # 1. Update FVGs
         for fvg in self.fvgs:
             if fvg['state'] == 'BROKEN': continue
             

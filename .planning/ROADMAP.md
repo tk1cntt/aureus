@@ -19,6 +19,7 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu. (completed 2026-03-21)
 - [x] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo quyết định từ CONTEXT. (completed 2026-03-21)
 - [x] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1. (completed 2026-03-21)
+- [ ] **Phase 10: Phân tích và tối ưu sweep_targets trong structure.py** - Optimize sweep targets in structure.py.
 
 ## Phase Details
 
@@ -139,6 +140,19 @@ Plans:
 Plans:
 - [x] 09-01: Tối ưu và verify tín hiệu `structure`.
 
+### Phase 10: Phân tích và tối ưu sweep_targets trong structure.py
+**Goal**: Phân tích logic vạch sweep_targets đa cực, tìm hướng tối ưu hiệu năng mà không làm rách contract O1.
+**Depends on**: Phase 9
+**Requirements**: [SIG-10, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `sweep_targets` hoạt động ổn định và chính xác theo logic MQL5.
+  2. Đo đạc được Performance Baseline và tối ưu O(1) nếu có thể.
+  3. Coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 10-01: Plan sẽ được tạo sau `gsd-discuss-phase 10` hoặc `gsd-plan-phase 10`.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -152,3 +166,4 @@ Plans:
 | 7. Signal Trend Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 8. Signal Volume SMA Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 9. Signal Structure Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
+| 10. Phân tích và tối ưu sweep_targets trong structure.py | v1.1 | 0/1 | Not started | - |

@@ -62,15 +62,6 @@ class StructureSignal(BaseSignal):
                     if not is_duplicate and isinstance(transient, dict):
                         transient[tag] = signal
 
-        self._verify_mitigations(df, state_obj)
-
-        # Soft Garbage Collection: Prevent memory leak from endless OB array
-        if hasattr(state_obj, 'obs') and isinstance(state_obj.obs, list) and len(state_obj.obs) > 200:
-            unmitigated = [ob for ob in state_obj.obs if not ob.get('mitigated')]
-            mitigated = [ob for ob in state_obj.obs if ob.get('mitigated')]
-            if len(mitigated) > 50:
-                state_obj.obs = sorted(unmitigated + mitigated[-50:], key=lambda x: x.get('t_start', 0))
-
         # Traceability v1.1: Export explicit ob_state to transient_signals for Factory consumption
         if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
             state_obj.transient_signals["ob_state"] = {
@@ -80,7 +71,8 @@ class StructureSignal(BaseSignal):
                         "bottom": ob.get("bottom"),
                         "ob_type": ob.get("ob_type"),
                         "t_start": ob.get("t_start"),
-                        "mitigated": ob.get("mitigated", False)
+                        "status": ob.get("status", "PENDING"),
+                        "break_counter": ob.get("break_counter", 0)
                     } for ob in getattr(state_obj, 'obs', [])
                 ]
             }
@@ -89,114 +81,6 @@ class StructureSignal(BaseSignal):
             return new_signals[-1]
             
         return None
-
-    def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any):
-        """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""
-        if not hasattr(state_obj, 'obs') or not state_obj.obs:
-            return
-            
-        latest_t = int(df.iloc[-1]['t'])
-        
-        for ob in state_obj.obs:
-            if ob.get('mitigated'): continue
-            
-            t_breakout = ob.get('t_breakout', 0)
-            last_checked_t = ob.get('_last_checked_t', t_breakout)
-            
-            if latest_t <= last_checked_t: continue
-            
-            # Optimized Sweep: Find only the candles AFTER the last checked time
-            search_df = df[df['t'] > last_checked_t]
-            if search_df.empty: 
-                continue
-            
-            is_bullish = (ob['ob_type'] == 'BULLISH')
-            mitigated_in_this_run = False
-            
-            for _, candle in search_df.iterrows():
-                c_t = int(candle['t'])
-                c_h = float(candle['h'])
-                c_l = float(candle['l'])
-                
-                if is_bullish:
-                    if c_l <= ob['top']:
-                        ob['mitigated'] = True
-                        ob['t_mitigation'] = c_t
-                        
-                        # Rejection Quality (Wicking)
-                        ob_zone_height = ob['top'] - ob['bottom']
-                        penetration = ob['top'] - c_l
-                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
-                        # Evaluation: Closed out of zone? (Rejection strength)
-                        is_rejection = candle['c'] > ob['top']
-                        
-                        log_actor = getattr(state_obj, 'log_actor', None)
-                        if callable(log_actor):
-                            log_actor(c_t, {
-                                "type": "OB_TOUCH",
-                                "ob_type": "BULLISH",
-                                "ob_start": ob['t_start'],
-                                "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
-                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                                "candle": {
-                                    "o": float(candle['o']), "h": float(candle['h']),
-                                    "l": float(candle['l']), "c": float(candle['c'])
-                                }
-                            })
-
-                        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-                        logger.debug(f"[t={c_t}] [{symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        request_ai_update = getattr(state_obj, 'request_ai_update', None)
-                        if c_t == latest_t and callable(request_ai_update):
-                            request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                        # Story 3.5: Emit event for Event-Driven Sparse Storage
-                        transient = getattr(state_obj, 'transient_signals', None)
-                        if c_t == latest_t and isinstance(transient, dict):
-                            transient['ob_bull_mitigated'] = ob
-                        mitigated_in_this_run = True
-                        break
-                else: # BEARISH
-                    if c_h >= ob['bottom']:
-                        ob['mitigated'] = True
-                        ob['t_mitigation'] = c_t
-
-                        # Rejection Quality
-                        ob_zone_height = ob['top'] - ob['bottom']
-                        penetration = c_h - ob['bottom']
-                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-
-                        is_rejection = candle['c'] < ob['bottom']
-
-                        log_actor = getattr(state_obj, 'log_actor', None)
-                        if callable(log_actor):
-                            log_actor(c_t, {
-                                "type": "OB_TOUCH",
-                                "ob_type": "BEARISH",
-                                "ob_start": ob['t_start'],
-                                "is_hard_break": candle['c'] > ob['top'], # Closed above zone
-                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                                "candle": {
-                                    "o": float(candle['o']), "h": float(candle['h']),
-                                    "l": float(candle['l']), "c": float(candle['c'])
-                                }
-                            })
-
-                        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-                        logger.debug(f"[t={c_t}] [{symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
-                        request_ai_update = getattr(state_obj, 'request_ai_update', None)
-                        if c_t == latest_t and callable(request_ai_update):
-                            request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                        # Story 3.5: Emit event for Event-Driven Sparse Storage
-                        transient = getattr(state_obj, 'transient_signals', None)
-                        if c_t == latest_t and isinstance(transient, dict):
-                            transient['ob_bear_mitigated'] = ob
-                        mitigated_in_this_run = True
-                        break
-                        
-            if not mitigated_in_this_run:
-                # If we scanned everything and found no mitigation, update the checkpoint
-                ob['_last_checked_t'] = int(search_df.iloc[-1]['t'])
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""
@@ -308,96 +192,7 @@ class StructureSignal(BaseSignal):
         return None
 
     def _register_sweep_targets(self, state_obj: Any, current_ob: Dict[str, Any], current_pivot: Dict[str, Any]):
-        """Implements Institutional Sweep Selection logic with same-color pairing."""
-        obs = getattr(state_obj, 'obs', [])
-        
-        # 1. Filter OBs by color
-        bull_obs = [o for o in obs if o['ob_type'] == "BULLISH"]
-        bear_obs = [o for o in obs if o['ob_type'] == "BEARISH"]
-
-        # Helper to process a pair of same-color OBs
-        def get_best_target(pair_obs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-            if len(pair_obs) < 2:
-                # Strong Trend Filter: If < 2 same-color OBs, don't register target
-                # User: "Nếu k tìm được 2 ob cùng màu hiện tại chứng tỏ trend xu hướng ngược lại đang mạnh"
-                return None
-            
-            ob1 = pair_obs[-2] # Older
-            ob2 = pair_obs[-1] # Newer
-            is_bullish = ob2['ob_type'] == "BULLISH"
-            
-            # Check for FVG Gap (No touch)
-            has_gap = False
-            if is_bullish:
-                if ob1['bottom'] > ob2['top']: has_gap = True
-            else:
-                if ob1['top'] < ob2['bottom']: has_gap = True
-                
-            # Check for Overlap (Intersection of ranges)
-            is_overlap = max(ob1['bottom'], ob2['bottom']) < min(ob1['top'], ob2['top'])
-                
-            if has_gap:
-                # FVG Rule: Select NEWEST (ob2)
-                target_price = ob2['bottom'] if is_bullish else ob2['top']
-                return {
-                    "price": target_price,
-                    "type": "ST_FVG_PAIR",
-                    "fidelity": 1.0,
-                    "side": ob2['ob_type'],
-                    "t_source": ob2['t_start']
-                }
-            elif is_overlap:
-                # Overlap Rule: Select OLDER (ob1)
-                target_price = ob1['bottom'] if is_bullish else ob1['top']
-                return {
-                    "price": target_price,
-                    "type": "ST_OVERLAP",
-                    "fidelity": 0.7,
-                    "side": ob1['ob_type'],
-                    "t_source": ob1['t_start']
-                }
-            else:
-                # Generic: Default to newest if neither rule applies strictly
-                target_price = ob2['bottom'] if is_bullish else ob2['top']
-                return {
-                    "price": target_price,
-                    "type": "ST_GENERIC",
-                    "fidelity": 0.5,
-                    "side": ob2['ob_type'],
-                    "t_source": ob2['t_start']
-                }
-
-        # 2. Register Targets for each color
-        new_targets = []
-        
-        bull_target = get_best_target(bull_obs)
-        if bull_target: new_targets.append(bull_target)
-        
-        bear_target = get_best_target(bear_obs)
-        if bear_target: new_targets.append(bear_target)
-
-        # 3. CHOCH Origin as a "Failure" Sweep point
-        new_targets.append({
-            "price": current_pivot['price'],
-            "type": "CHOCH_ORIGIN",
-            "side": "BULLISH" if current_pivot['is_high'] else "BEARISH",
-            "t_source": current_pivot['t']
-        })
-        
-        # Merge with existing targets (keeping unique ones by price/source_t)
-        existing_targets_raw = getattr(state_obj, 'sweep_targets', [])
-        existing_targets: List[Dict[str, Any]] = existing_targets_raw if isinstance(existing_targets_raw, list) else []
-        for nt in new_targets:
-            if not any(et['price'] == nt['price'] and et['t_source'] == nt['t_source'] for et in existing_targets):
-                existing_targets.append(nt)
-
-        # Keep only the most recent targets to avoid over-calculating
-        if len(existing_targets) > 10:
-            existing_targets = existing_targets[-10:]
-
-        state_obj.sweep_targets = existing_targets
-        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-        logger.debug(f"[GLOBAL] [{symbol}] [_register_sweep_targets] 1... Updated Sweep Targets for {symbol}. Active count: {len(existing_targets)}")
+        pass
 
     def _process_ob(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with the updated OB Logic: Find extreme candle between pivot and breakout."""
@@ -463,6 +258,8 @@ class StructureSignal(BaseSignal):
                 "pivot_t": int(pivot_t),
                 "t_breakout": int(breakout_t),
                 "quality": quality,
+                "status": "PENDING",
+                "break_counter": 0,
                 "body_ratio": round(body_ratio, 2),
                 "ohlc": {
                     "o": float(ext_candle['o']), "h": float(ext_candle['h']),
