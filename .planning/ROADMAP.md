@@ -14,8 +14,8 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 2: Signal EMA Optimization** - Hoàn tất tối ưu `ema` và đóng toàn bộ gate verification phase.
 - [ ] **Phase 3: Signal FVG Optimization** - Tối ưu `fvg` với guardrails và contract ổn định.
 - [ ] **Phase 4: Signal Pivots Optimization** - Tối ưu `pivots` và giữ tương thích pipeline hiện tại.
-- [ ] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn.
-- [ ] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects.
+- [x] **Phase 5: Signal Session Optimization** - Tối ưu `session` với test/coverage gate chuẩn. (completed 2026-03-21)
+- [x] **Phase 6: Signal Sweep Optimization** - Tối ưu `sweep` và kiểm soát side effects. (completed 2026-03-21)
 - [ ] **Phase 7: Signal Trend Optimization** - Tối ưu `trend` với tiêu chí ổn định tín hiệu.
 - [ ] **Phase 8: Signal Volume SMA Optimization** - Tối ưu `volume_sma` theo chuẩn phase.
 - [ ] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1.
@@ -85,7 +85,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: Tối ưu và verify tín hiệu `session`.
+- [x] 05-01: Tối ưu và verify tín hiệu `session`.
 
 ### Phase 6: Signal Sweep Optimization
 **Goal**: Tối ưu `sweep` với kiểm soát an toàn trạng thái.
@@ -98,7 +98,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: Tối ưu và verify tín hiệu `sweep`.
+- [x] 06-01: Tối ưu và verify tín hiệu `sweep`.
 
 ### Phase 7: Signal Trend Optimization
 **Goal**: Tối ưu `trend` và đảm bảo tương thích contract.
@@ -147,8 +147,8 @@ Plans:
 | 2. Signal EMA Optimization | 1/1 | Complete | 2026-03-20 |
 | 3. Signal FVG Optimization | 0/1 | Not started | - |
 | 4. Signal Pivots Optimization | 0/1 | Not started | - |
-| 5. Signal Session Optimization | 0/1 | Not started | - |
-| 6. Signal Sweep Optimization | 0/1 | Not started | - |
+| 5. Signal Session Optimization | 0/1 | Complete    | 2026-03-21 |
+| 6. Signal Sweep Optimization | 0/1 | Complete    | 2026-03-21 |
 | 7. Signal Trend Optimization | 0/1 | Not started | - |
 | 8. Signal Volume SMA Optimization | 0/1 | Not started | - |
 | 9. Signal Structure Optimization | 0/1 | Not started | - |
