@@ -8,20 +8,23 @@ A planning control document for the current Aureus milestone. It defines the act
 - Prevent regression through explicit integration contracts and layered tests.
 - Optimize performance only after correctness parity is preserved.
 
-## Current Milestone: v1.2 Strategy Sequence Engine
+## Current State
+**Latest shipped:** v1.2 Strategy Sequence Engine (2026-03-22)
 
-**Goal:** Overhaul the Strategy Engine to rely purely on config-driven sequences, deprecating hardcoded logic and implementing robust state-aware sequence matching.
+All strategy evaluation now runs through `TemplateStrategy` with JSON-driven config (context_filters, sequence, trade_execution). Legacy hardcoded strategies are fully deprecated.
 
-**Target features:**
-- Production-ready sequence evaluation in TemplateStrategy.
-- Support for complex time and reset constraints.
-- Migration of legacy hard-coded strategies into unified `sequence` structures.
+## Next Milestone Goals
+_To be defined via `/gsd-new-milestone`._
+
+Candidates from deferred ideas:
+- **Backtesting & Measurement Engine** — Simulate historical data, mock order execution, output performance reports
 
 ## Archived Milestones
-**v1.1 Signal Optimization (Shipped 2026-03-22)**
-- Toàn bộ tín hiệu lõi đã được Modular hóa.
-- Cover 100% bằng Unit tests và Integration tests.
-- Hệ thống phòng thủ OOM (Garbage Collection 1500 nến) hoạt động minh bạch 5h sáng hàng ngày.
+
+**v1.2 Strategy Sequence Engine (Shipped 2026-03-22)**
+- O(1) state machine sequence engine in TemplateStrategy
+- 3-pillar strategy framework (What/When/How)
+- Legacy strategy deprecation and registry unification
 
 <details>
 <summary><b>Archived: v1.1 Signal Optimization</b></summary>
@@ -35,11 +38,11 @@ A planning control document for the current Aureus milestone. It defines the act
 </details>
 
 ## Requirements
-- Source of truth: `.planning/REQUIREMENTS.md` (To be created)
+- Source of truth: `.planning/REQUIREMENTS.md` (created per milestone)
 - Roadmap and phase mapping: `.planning/ROADMAP.md`
 
 ## Notes
 - This milestone was initialized from a research-first pass over `services/aureus-signal/engine/signals/*` and current signal tests.
 - Existing `.planning` directory had spec files but no prior milestone lifecycle documents.
 
-_Last updated: 2026-03-20_
+_Last updated: 2026-03-22_

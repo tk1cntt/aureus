@@ -8,7 +8,13 @@ from .base import BaseStrategy
 
 
 class TemplateStrategy(BaseStrategy):
-    """Advanced strategy based on a weighted sequence of signal tags."""
+    """Advanced strategy based on a weighted sequence of signal tags.
+
+    Answers 3 pillars of a complete strategy:
+      1. WHAT (context_filters)  — Pre-conditions on market state
+      2. WHEN (sequence)         — Ordered tag events that trigger entry
+      3. HOW  (trade_execution)  — Risk sizing, SL, TP, trailing, early exits
+    """
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(
@@ -19,6 +25,84 @@ class TemplateStrategy(BaseStrategy):
         self.min_score = config.get("min_score_threshold", 10.0)
         self.sequence = config.get("sequence", [])  # List of {tag, weight, required}
         self.exit_config = config.get("exit_config", {})
+        self.context_filters = config.get("context_filters", [])  # Pillar 1: WHAT
+        self.trade_execution = config.get("trade_execution", {})  # Pillar 3: HOW
+
+    # ------------------------------------------------------------------ #
+    # Pillar 1: WHAT — Context Pre-condition Evaluator
+    # ------------------------------------------------------------------ #
+    def _evaluate_context(self, state_obj: Any) -> Dict[str, Any]:
+        """Evaluate all context_filters against the current state.
+
+        Returns {"passed": bool, "failed_filters": [...], "details": [...]}
+        """
+        if not self.context_filters:
+            return {"passed": True, "failed_filters": [], "details": []}
+
+        failed: List[str] = []
+        details: List[str] = []
+
+        for f in self.context_filters:
+            f_type = f.get("type", "")
+
+            if f_type == "trend_alignment":
+                required = f.get("required_trend", "BULLISH")
+                actual = getattr(state_obj, "htf_trend", "NEUTRAL")
+                if actual != required:
+                    failed.append(f"trend_alignment:{required}")
+                    details.append(f"Trend mismatch: need {required}, got {actual}")
+                else:
+                    details.append(f"Trend OK: {actual}")
+
+            elif f_type == "session_active":
+                allowed = f.get("allowed", [])
+                actual = getattr(state_obj, "current_session", "UNKNOWN")
+                if actual not in allowed:
+                    failed.append(f"session_active:{actual}")
+                    details.append(f"Session rejected: {actual} not in {allowed}")
+                else:
+                    details.append(f"Session OK: {actual}")
+
+            elif f_type == "ob_imbalance":
+                min_ratio = f.get("min_ratio", 3.0)
+                obs = getattr(state_obj, "obs", [])
+                lookback = f.get("lookback", 10)
+                recent = obs[-lookback:] if obs else []
+                bull = sum(1 for ob in recent if ob.get("ob_type") == "BULLISH")
+                bear = sum(1 for ob in recent if ob.get("ob_type") == "BEARISH")
+                if bear == 0 and bull > 0:
+                    ratio = float(bull)
+                elif bull == 0 and bear > 0:
+                    ratio = float(bear)
+                elif bull > 0 and bear > 0:
+                    ratio = max(bull, bear) / min(bull, bear)
+                else:
+                    ratio = 0.0
+                if ratio < min_ratio:
+                    failed.append(f"ob_imbalance:{ratio:.1f}<{min_ratio}")
+                    details.append(f"OB imbalance too low: {ratio:.1f} < {min_ratio}")
+                else:
+                    details.append(f"OB imbalance OK: {ratio:.1f}")
+
+            elif f_type == "ema_alignment":
+                required_slope = f.get("required_slope", "POSITIVE")
+                period = f.get("period", 21)
+                emas = getattr(state_obj, "emas", {})
+                ema_data = emas.get(period, {})
+                slope_val = ema_data.get("slope", 0) if isinstance(ema_data, dict) else 0
+                slope_ok = (required_slope == "POSITIVE" and slope_val > 0) or \
+                           (required_slope == "NEGATIVE" and slope_val < 0)
+                if not slope_ok:
+                    failed.append(f"ema_alignment:period={period}")
+                    details.append(f"EMA({period}) slope mismatch: need {required_slope}, slope={slope_val}")
+                else:
+                    details.append(f"EMA({period}) slope OK: {slope_val}")
+
+        return {
+            "passed": len(failed) == 0,
+            "failed_filters": failed,
+            "details": details,
+        }
 
     def _evaluate_sequence(self, df: pd.DataFrame, state_obj: Any) -> Dict[str, Any]:
         if not hasattr(state_obj, "strategy_progress"):
@@ -205,8 +289,18 @@ class TemplateStrategy(BaseStrategy):
                 "t": bar_ts,
             }
 
+        # Pillar 1: Evaluate context pre-conditions FIRST
+        ctx = self._evaluate_context(state_obj)
+
         core = self._evaluate_sequence(df, state_obj)
-        reason_code = "OK" if (not core["missing_required"] and core["score"] >= self.min_score) else "SEQUENCE_NOT_MATCHED"
+
+        # Determine reason_code: context must pass AND sequence must match
+        if not ctx["passed"]:
+            reason_code = "CONTEXT_FILTER_FAILED"
+        elif core["missing_required"] or core["score"] < self.min_score:
+            reason_code = "SEQUENCE_NOT_MATCHED"
+        else:
+            reason_code = "OK"
 
         return {
             "intent_id": f"{self.name}:{self.strategy_id}:{bar_ts}",
@@ -219,6 +313,11 @@ class TemplateStrategy(BaseStrategy):
             "score": core["score"],
             "origin_timestamp": core["origin_timestamp"],
             "evaluated_rules": [
+                {
+                    "rule": "CONTEXT_FILTER",
+                    "passed": ctx["passed"],
+                    "failed_filters": ctx["failed_filters"],
+                },
                 {
                     "rule": "SEQUENCE_MATCH",
                     "passed": not core["missing_required"],
@@ -234,6 +333,7 @@ class TemplateStrategy(BaseStrategy):
             "evidence_refs": [
                 {"type": "strategy_progress", "ref": self.name},
                 {"type": "sequence", "value": core["progress_data"].get("sequence", [])},
+                {"type": "context_details", "value": ctx["details"]},
             ],
             "legacy_result": self.evaluate(df, context.get("signals", {}), state_obj),
             "exit_config": self.exit_config,
@@ -276,19 +376,41 @@ class TemplateStrategy(BaseStrategy):
         }
 
     def build_order_plan(self, intent: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Pillar 3: HOW — Build order plan from trade_execution config + exit_config fallback."""
         exit_config = intent.get("exit_config") or self.exit_config or {}
+        te = self.trade_execution  # trade_execution takes priority
         size_from_env = float(os.getenv("SIGNAL_ORDER_SIZE", "1.0"))
+
+        # Size: trade_execution > exit_config > env
+        size = float(te.get("size", exit_config.get("size", size_from_env)))
+
+        # SL: trade_execution > exit_config
+        sl = te.get("sl") or exit_config.get("sl")
+
+        # TP: trade_execution > exit_config
+        tp = te.get("tp") or exit_config.get("tp")
+
+        # Trailing: trade_execution > exit_config
+        trailing = te.get("trailing") or exit_config.get("trailing")
+
+        # Early exits (force close tags)
+        early_exits = te.get("early_exits", [])
+
+        # Capital risk percentage (for downstream position sizing)
+        capital_risk_pct = te.get("capital_risk_pct")
 
         return {
             "intent_id": intent.get("intent_id"),
-            "entry_type": exit_config.get("entry_type", "MARKET"),
-            "entry_policy": exit_config.get("entry_policy", "IMMEDIATE"),
+            "entry_type": te.get("entry_type", exit_config.get("entry_type", "MARKET")),
+            "entry_policy": te.get("entry_policy", exit_config.get("entry_policy", "IMMEDIATE")),
             "direction": intent.get("direction", "BUY"),
-            "size": float(exit_config.get("size", size_from_env)),
-            "sl": exit_config.get("sl"),
-            "tp": exit_config.get("tp"),
-            "trailing": exit_config.get("trailing"),
-            "expiry": exit_config.get("expiry"),
+            "size": size,
+            "sl": sl,
+            "tp": tp,
+            "trailing": trailing,
+            "early_exits": early_exits,
+            "capital_risk_pct": capital_risk_pct,
+            "expiry": te.get("expiry", exit_config.get("expiry")),
             "reason_code": intent.get("reason_code", "OK"),
             "evaluated_rules": [{"rule": "ORDER_PLAN_BUILT", "passed": True}],
             "evidence_refs": intent.get("evidence_refs", []),

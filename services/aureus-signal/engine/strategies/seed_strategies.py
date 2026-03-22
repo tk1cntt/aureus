@@ -15,36 +15,76 @@ async def seed_system_strategies(pool):
     strategies = [
         {
             "name": "TREND_CONT",
-            "description": "High-probability SMC Trend Continuation. Requires HTF alignment and pull-back sweep.",
+            "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
             "min_score": 6.5,
             "config": {
-                "allowed_sessions": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"],
-                "session_bonus": 1.5,
-                "lookback_candles": 20,
-                "ema_alignment_bonus": 0.5,
-                "min_score_threshold": 60
+                "min_score_threshold": 6.5,
+                "context_filters": [
+                    {"type": "trend_alignment", "required_trend": "BULLISH"},
+                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]},
+                    {"type": "ema_alignment", "required_slope": "POSITIVE", "period": 21}
+                ],
+                "sequence": [
+                    {"tag": "choch_bull", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_bear"]},
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_bear"]},
+                    {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10}
+                ],
+                "trade_execution": {
+                    "size": 2.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 15},
+                    "tp": {"type": "RR_RATIO", "value": 3.0},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 20},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_bear"]
+                }
             }
         },
         {
             "name": "SESSION_SWEEP",
-            "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps.",
+            "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps with tighter stops.",
             "min_score": 6.0,
             "config": {
-                "allowed_sessions": ["LONDON", "NEW_YORK"],
-                "session_bonus": 2.0,
-                "lookback_candles": 15,
-                "ema_alignment_bonus": 0.3,
-                "min_score_threshold": 55
+                "min_score_threshold": 6.0,
+                "context_filters": [
+                    {"type": "trend_alignment", "required_trend": "BULLISH"},
+                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK"]}
+                ],
+                "sequence": [
+                    {"tag": "choch_bull", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_bear"]}
+                ],
+                "trade_execution": {
+                    "size": 1.5,
+                    "sl": {"type": "FIXED_PIPS", "value": 10},
+                    "tp": {"type": "RR_RATIO", "value": 2.5},
+                    "trailing": {"type": "BREAKEVEN", "activation_pips": 15},
+                    "capital_risk_pct": 0.5,
+                    "early_exits": ["choch_bear"]
+                }
             }
         },
         {
             "name": "ORDER_FLOW_DOM",
-            "description": "Dominance-based strategy. Massive imbalance in Bullish/Bearish OBs with trend alignment.",
+            "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
             "min_score": 7.0,
             "config": {
-                "min_ob_ratio": 3.0,
-                "lookback_obs": 10,
-                "min_score_threshold": 65
+                "min_score_threshold": 7.0,
+                "context_filters": [
+                    {"type": "trend_alignment", "required_trend": "BULLISH"},
+                    {"type": "ob_imbalance", "min_ratio": 3.0, "lookback": 10},
+                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]}
+                ],
+                "sequence": [
+                    {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]}
+                ],
+                "trade_execution": {
+                    "size": 3.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 12},
+                    "tp": {"type": "RR_RATIO", "value": 4.0},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 15},
+                    "capital_risk_pct": 1.5,
+                    "early_exits": ["choch_bear"]
+                }
             }
         }
     ]

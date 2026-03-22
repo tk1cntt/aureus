@@ -1,6 +1,6 @@
 import logging
 from engine.logging_common import get_logger
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseStrategy
 
@@ -121,18 +121,10 @@ class StrategyRegistry:
         """
         Loads strategies by their template IDs, regardless of 'active' status for the symbol.
         Uses template defaults if no symbol-specific override is found.
+        All strategies are unified under TemplateStrategy (Phase 15).
         """
-        from .order_flow_dominance import OrderFlowDominanceStrategy
         from .template import TemplateStrategy
-        from .trend_continuation import TrendContinuationStrategy
         import json
-
-        # Mapping of Template Name to Strategy Class
-        strategy_map: Dict[str, Type[BaseStrategy]] = {
-            "TREND_CONT": TrendContinuationStrategy,
-            "SESSION_SWEEP": TrendContinuationStrategy,
-            "ORDER_FLOW_DOM": OrderFlowDominanceStrategy,
-        }
 
         if not strategy_ids:
             self.clear()
@@ -155,9 +147,7 @@ class StrategyRegistry:
             config["name"] = name
             config["min_score_threshold"] = r["min_score"]
 
-            # Select class based on map, fallback to TemplateStrategy
-            strat_class = strategy_map.get(name, TemplateStrategy)
-            strat = strat_class(config)
+            strat = TemplateStrategy(config)
             self.register(strat)
 
         logger.info(
