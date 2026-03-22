@@ -8,16 +8,20 @@ A planning control document for the current Aureus milestone. It defines the act
 - Prevent regression through explicit integration contracts and layered tests.
 - Optimize performance only after correctness parity is preserved.
 
+## Current Milestone: v1.3 Backtesting & Measurement Engine
+
+**Goal:** Build a backtesting engine to simulate strategy execution on historical data, validate SL/TP logic against candle H/L, and output measurable performance metrics (Win Rate, PnL, Drawdown).
+
+**Target features:**
+- Historical candle simulation engine
+- Mock order execution with SL/TP/trailing evaluation
+- Strategy performance reports (Win Rate, PnL, Drawdown, Sharpe)
+- Integration with existing TemplateStrategy pipeline
+
 ## Current State
 **Latest shipped:** v1.2 Strategy Sequence Engine (2026-03-22)
 
 All strategy evaluation now runs through `TemplateStrategy` with JSON-driven config (context_filters, sequence, trade_execution). Legacy hardcoded strategies are fully deprecated.
-
-## Next Milestone Goals
-_To be defined via `/gsd-new-milestone`._
-
-Candidates from deferred ideas:
-- **Backtesting & Measurement Engine** — Simulate historical data, mock order execution, output performance reports
 
 ## Archived Milestones
 
@@ -38,11 +42,24 @@ Candidates from deferred ideas:
 </details>
 
 ## Requirements
-- Source of truth: `.planning/REQUIREMENTS.md` (created per milestone)
+- Source of truth: `.planning/REQUIREMENTS.md`
 - Roadmap and phase mapping: `.planning/ROADMAP.md`
 
-## Notes
-- This milestone was initialized from a research-first pass over `services/aureus-signal/engine/signals/*` and current signal tests.
-- Existing `.planning` directory had spec files but no prior milestone lifecycle documents.
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 _Last updated: 2026-03-22_
