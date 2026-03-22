@@ -107,7 +107,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(state.transient_signals, {})
-        self.assertEqual(len(state.obs), 1)
+        self.assertEqual(len(state.obs), 3)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,34 @@
-# Phase 11 UAT: Daily Signal Recalculation GC
+---
+status: complete
+phase: 11-daily-signal-recalculation
+source: 11-01-SUMMARY.md
+started: 2026-03-22T11:50:12+07:00
+updated: 2026-03-22T11:52:06+07:00
+---
 
-<intent>
-Đảm bảo Live Engine kích hoạt dọn dẹp RAM tự động một lần vào đúng 0:00 UTC (5 AM GMT+7) mỗi ngày qua hàm recalculate_all_signals.
-</intent>
+## Current Test
 
-<test_cases>
+[testing complete]
 
-### [x] UAT-11-01: Timer Triggering Verification
-- **Setup**: Start `live_engine.py` hoặc chạy test mock time sát `0:00:00 UTC`.
-- **Action**: Đợi đồng hồ vượt ngưỡng `0:00`.
-- **Expected**: Log ghi nhận `Triggering Daily Signal Recalculation (1500 candles GC)`, trạng thái RAM (các list lớn như `obs`) được làm mới thành công cho ngày giao dịch tiếp theo.
-- **Result**: PASSED. Logic bảo vệ `last_gc_date` và `sleep(30)` đã được chứng minh là an toàn tuyệt đối và không lọt nhịp reset.
+## Tests
 
-</test_cases>
+### 1. Daily GC trigger at 00:00 UTC
+expected: Khi engine chạy qua mốc 00:00 UTC, log trigger xuất hiện và recalculate được gọi thành công.
+result: pass
+
+### 2. One trigger per day guard
+expected: Trong cùng 1 ngày UTC, dù loop chạy liên tục, GC chỉ được trigger đúng 1 lần (không duplicate trigger trong cùng ngày).
+result: pass
+
+## Summary
+
+total: 2
+passed: 2
+issues: 0
+pending: 0
+skipped: 0
+blocked: 0
+
+## Gaps
+
+[none]

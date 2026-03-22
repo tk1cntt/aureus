@@ -24,6 +24,7 @@ class StructureSignal(BaseSignal):
         if not isinstance(points, list) or not points:
             return None
 
+        points = state_obj.swing_points
         nPoints = len(points)
         
         # --- Performance Optimization ---
@@ -61,7 +62,6 @@ class StructureSignal(BaseSignal):
                     )
                     if not is_duplicate and isinstance(transient, dict):
                         transient[tag] = signal
-
         # Traceability v1.1: Export explicit ob_state to transient_signals for Factory consumption
         if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
             state_obj.transient_signals["ob_state"] = {
@@ -72,15 +72,107 @@ class StructureSignal(BaseSignal):
                         "ob_type": ob.get("ob_type"),
                         "t_start": ob.get("t_start"),
                         "status": ob.get("status", "PENDING"),
-                        "break_counter": ob.get("break_counter", 0)
+                        "break_counter": ob.get("break_counter", 0),
+                        "mitigated": ob.get("mitigated", False),
+                        "t_mitigation": ob.get("t_mitigation", 0)
                     } for ob in getattr(state_obj, 'obs', [])
                 ]
             }
+
+        self._verify_mitigations(df, state_obj)
 
         if new_signals:
             return new_signals[-1]
             
         return None
+
+    def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any):
+        """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""
+        if not hasattr(state_obj, 'obs') or not state_obj.obs:
+            return
+            
+        latest_t = int(df.iloc[-1]['t'])
+        
+        for ob in state_obj.obs:
+            if ob.get('mitigated'): continue
+            
+            t_breakout = ob.get('t_breakout', 0)
+            if latest_t <= t_breakout: continue
+            
+            # Historical Sweep: Find the first candle AFTER breakout that touches the OB
+            search_df = df[df['t'] > t_breakout]
+            if search_df.empty: continue
+            
+            is_bullish = (ob['ob_type'] == 'BULLISH')
+            
+            for _, candle in search_df.iterrows():
+                c_t = int(candle['t'])
+                c_h = float(candle['h'])
+                c_l = float(candle['l'])
+                
+                if is_bullish:
+                    if c_l <= ob['top']:
+                        ob['mitigated'] = True
+                        ob['t_mitigation'] = c_t
+                        
+                        # Rejection Quality (Wicking)
+                        ob_zone_height = ob['top'] - ob['bottom']
+                        penetration = ob['top'] - c_l
+                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
+                        
+                        # Evaluation: Closed out of zone? (Rejection strength)
+                        is_rejection = candle['c'] > ob['top']
+                        
+                        state_obj.log_actor(c_t, {
+                            "type": "OB_TOUCH",
+                            "ob_type": "BULLISH",
+                            "ob_start": ob['t_start'],
+                            "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
+                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                            "candle": {
+                                "o": float(candle['o']), "h": float(candle['h']),
+                                "l": float(candle['l']), "c": float(candle['c'])
+                            }
+                        })
+
+                        # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        if c_t == latest_t:
+                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
+                            # Story 3.5: Emit event for Event-Driven Sparse Storage
+                            if hasattr(state_obj, 'transient_signals'):
+                                state_obj.transient_signals['ob_bull_mitigated'] = ob
+                        break
+                else: # BEARISH
+                    if c_h >= ob['bottom']:
+                        ob['mitigated'] = True
+                        ob['t_mitigation'] = c_t
+                        
+                        # Rejection Quality
+                        ob_zone_height = ob['top'] - ob['bottom']
+                        penetration = c_h - ob['bottom']
+                        pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
+                        
+                        is_rejection = candle['c'] < ob['bottom']
+
+                        state_obj.log_actor(c_t, {
+                            "type": "OB_TOUCH",
+                            "ob_type": "BEARISH",
+                            "ob_start": ob['t_start'],
+                            "is_hard_break": candle['c'] > ob['top'], # Closed above zone
+                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                            "candle": {
+                                "o": float(candle['o']), "h": float(candle['h']),
+                                "l": float(candle['l']), "c": float(candle['c'])
+                            }
+                        })
+
+                        # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
+                        if c_t == latest_t:
+                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
+                            # Story 3.5: Emit event for Event-Driven Sparse Storage
+                            if hasattr(state_obj, 'transient_signals'):
+                                state_obj.transient_signals['ob_bear_mitigated'] = ob
+                        break
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""
@@ -175,15 +267,15 @@ class StructureSignal(BaseSignal):
 
                     tag = self.TAG_CHOCH_UP if is_bullish else self.TAG_CHOCH_DN
                     # Determine if we already logged this to avoid spamming
-                    already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
-                    if not already_logged:
-                        logger.debug(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
+                    # already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
+                    # if not already_logged:
+                    #     logger.debug(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
 
                     request_ai_update = getattr(state_obj, 'request_ai_update', None)
                     if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged and callable(request_ai_update):
                         request_ai_update("CHOCH")
-                        
-                    self._register_sweep_targets(state_obj, ob, points[pivot_idx])
+
+                    # self._register_sweep_targets(state_obj, ob, points[pivot_idx])
                     
                     return {"tag": tag, "t": int(candle['t']), "price": pivot_price, "breakout_t": breakout_t, "ob": ob}
                 

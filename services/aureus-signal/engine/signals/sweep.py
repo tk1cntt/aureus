@@ -103,12 +103,6 @@ class SweepSignal(BaseSignal):
                     elif c_h >= ob_bottom:
                         ob["status"] = "TOUCHED"
 
-            # Proxy sync cho Backward Compatibility Dashboard (UI tô màu và chốt điểm End-time)
-            is_mitigated = ob.get("status") in ["TOUCHED", "SWEPT", "BROKEN_PENDING", "DEAD"]
-            if is_mitigated and not ob.get("mitigated"):
-                ob["t_mitigation"] = c_t
-            ob["mitigated"] = is_mitigated
-
         # Garbage Collection đã bị gỡ bỏ hoàn toàn.
         # Engine dựa vào chu kì Daily Reset (5h sáng GMT+7) thông qua lệnh RECALCULATE
         # để dọn rác 1 lần/ngày. Đảm bảo Dashboard lưu giữ toàn bộ OB màu xám lịch sử.
@@ -175,7 +169,7 @@ class SweepSignal(BaseSignal):
                             "market_regime": regime,
                         }
                         logger.info(
-                            f"[t={c_t}] [{symbol}] [calculate] 4... SWEEP DETECTED (Candle Close): {tag} @ {target_price}"
+                            f"[t={c_t}] [{symbol}] [calculate] 4... SWEEP DETECTED: {ob['status']} (Candle Close): {tag} @ {target_price}"
                         )
 
                         transient = getattr(state_obj, "transient_signals", None)

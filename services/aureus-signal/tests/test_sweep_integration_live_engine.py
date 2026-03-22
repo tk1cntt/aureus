@@ -21,14 +21,16 @@ class _SeedSweepTargetsSignal(BaseSignal):
         super().__init__("Seed Sweep Targets")
 
     def calculate(self, df, state_obj, **kwargs):
-        if not getattr(state_obj, "sweep_targets", None):
-            state_obj.sweep_targets = [
+        if not getattr(state_obj, "obs", None):
+            # SẾP ƠI: Nếu dùng sweep_targets, state.obs sẽ rỗng, vòng lặp 'for ob in obs' ở file sweep sẽ Skip.
+            # Do đó sweep_bull sẽ không bao giờ được trigger. Bắt buộc phải dùng obs:
+            state_obj.obs = [
                 {
-                    "side": "BULLISH",
-                    "price": 1999.0,
-                    "type": "runtime_seed",
-                    "t_source": int(df.iloc[-1]["t"]),
-                    "fidelity": 0.8,
+                    "ob_type": "BULLISH",
+                    "bottom": 1999.0,
+                    "top": 1999.5,
+                    "t_start": int(df.iloc[-1]["t"]),
+                    "status": "PENDING"
                 }
             ]
         return None
