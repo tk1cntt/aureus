@@ -1,6 +1,6 @@
 # Requirements — v1.3 Backtesting & Measurement Engine
 
-> **Source docs:** `docs/backtest/` (Phases A-F), user scoping session
+> **Source docs:** `docs/backtest/` (Phases A-F), user scoping session, party mode review (2026-03-22)
 
 ## Schema & Infrastructure
 - [ ] **SCHEMA-01**: Create `aureus_signal_snapshots` hypertable (time, symbol, atr, ema_21..ema_200, vol_sma_20, htf_trend, market_regime, session, events JSONB, active_obs JSONB, swing_label)
@@ -29,6 +29,9 @@
 - [ ] **ENGINE-03**: Rebuild `signal_history` + `SymbolState` (atr, emas, trend, regime, session, obs) từ snapshots
 - [ ] **ENGINE-04**: Strategy evaluation per-candle — pluggable, bất kỳ BaseStrategy subclass
 - [ ] **ENGINE-05**: Order management — SL/TP evaluated against H/L, position close on SL/TP/SESSION_END
+- [ ] **ENGINE-06**: SL/TP priority rule — deterministic behavior when same candle hits both SL and TP (worst-case-first: assume SL hit if both possible)
+- [ ] **ENGINE-07**: Warm-up period handling — skip first N candles for EMA/ATR stabilization, exclude from metrics
+- [ ] **ENGINE-08**: Adapter layer for `on_bar_close()` — mock context (no Redis/live data) compatible with live engine interface
 
 ## Trade Logging
 - [ ] **TRADE-01**: Per-trade record: entry_time, exit_time, entry_price, exit_price, direction, pnl, exit_reason
@@ -44,6 +47,16 @@
 - [ ] **METRIC-07**: Output JSON + Markdown report
 - [ ] **METRIC-08**: Per-trade log with timestamps, prices, direction, outcome
 - [ ] **QUALITY-01**: Signal Quality Calculator — per signal tag: count, win_rate, avg_pips, trade_rate, quality_grade
+
+## Parity & Correctness
+- [ ] **PARITY-01**: Parity validation protocol — backtest engine MUST produce identical results to live engine on same data (same signals, same intents, same order plans)
+- [ ] **PARITY-02**: Automated parity test — run N candles through both engines, diff signal_history + strategy intents, fail on ANY divergence
+- [ ] **PARITY-03**: Sample trade set with expected metrics — known inputs → known outputs for metrics validation
+
+## Measurement Integrity
+- [ ] **MEASURE-01**: Spread/commission deduction in PnL calculation (configurable per symbol)
+- [ ] **MEASURE-02**: Buy-and-hold benchmark baseline — compare strategy PnL vs passive hold for same period
+- [ ] **MEASURE-03**: Walk-forward analysis — train on window X, test on window Y, roll forward to detect overfitting
 
 ## API Endpoints
 - [ ] **API-01**: `POST /api/v1/backtest/v2` — trigger backtest
@@ -63,15 +76,20 @@
 - [ ] **UI-07**: Pre-compute trigger button + progress bar UI
 - [ ] **UI-08**: Click signal type → filter/highlight markers on chart
 
-## Future Requirements
-- [ ] **ORDER-F01**: Realistic order simulation — slippage, spread, partial fills
-- [ ] **MULTI-F01**: Multi-strategy comparison in single run
+## Future Requirements (v1.4+)
+- [ ] **ORDER-F01**: Realistic order simulation — slippage, partial fills, time delay
+- [ ] **MULTI-F01**: Multi-strategy comparison / A/B test in single run
 - [ ] **OPT-F01**: Strategy parameter optimization / auto-tuning sweep
+- [ ] **MULTI-F02**: Multi-symbol concurrent backtest
+- [ ] **CONFIG-F01**: Strategy config versioning — backtest with historical config snapshots
+- [ ] **DATA-F01**: Auto-refresh pre-computed data (scheduled re-compute)
 
 ## Out of Scope
 - Live trading execution (simulation only)
 - Real-time data streaming (batch only)
 - Paper trading mode
+- Strategy auto-optimization / parameter sweep
+- Multi-symbol concurrent in v1.3 (deferred to v1.4)
 
 ## Traceability
 | Requirement | Phase |
@@ -80,6 +98,7 @@
 | COMPUTE-01→04 | 17 |
 | LIVE-01→03 | 18 |
 | RECOV-01→03 | 19 |
-| ENGINE-01→05, TRADE-01→02, QUALITY-01 | 20 |
-| METRIC-01→08, API-01→06 | 21 |
+| ENGINE-01→08, TRADE-01→02, QUALITY-01 | 20 |
+| PARITY-01→03 | 20 |
+| METRIC-01→08, MEASURE-01→03, API-01→06 | 21 |
 | UI-01→08 | 22 |

@@ -88,31 +88,38 @@ Canonical refs: `docs/backtest/phase-d-recovery/PLAN.md`
 ---
 
 ## Phase 20: Backtest Engine Core
-**Requirements:** ENGINE-01→05, TRADE-01→02, QUALITY-01
-**Goal:** `BacktestRunnerV2` reads pre-computed snapshots, rebuilds state, runs strategies, manages orders (SL/TP), logs trades, calculates signal quality.
+**Requirements:** ENGINE-01→08, TRADE-01→02, QUALITY-01, PARITY-01→03
+**Goal:** `BacktestRunnerV2` reads pre-computed snapshots, rebuilds state, runs strategies, manages orders (SL/TP), logs trades, calculates signal quality. Includes parity validation against live engine.
 
 **Success Criteria:**
 1. Backtest 2 weeks (~20,160 candles) completes < 15s
 2. State rebuilt correctly from snapshots (atr, emas, trend, obs, events)
 3. Strategy triggers occur (not empty like old engine)
-4. SL/TP evaluated against H/L correctly
-5. Per-trade log: entry/exit time/price, direction, pnl, exit_reason
-6. Signal quality scorecard per tag
+4. SL/TP evaluated against H/L correctly, **deterministic SL/TP priority rule** when both hit same candle
+5. **Warm-up period** (first N candles) excluded from metrics
+6. **Adapter layer** for `on_bar_close()` — no Redis/live dependencies
+7. Per-trade log: entry/exit time/price, direction, pnl, exit_reason
+8. Signal quality scorecard per tag
+9. **Parity test passes** — same data through backtest vs live engine produces identical signals/intents
+10. Sample trade set with known expected metrics validates calculator
 
 Canonical refs: `docs/backtest/phase-e-backtest-engine/PLAN.md`
 
 ---
 
 ## Phase 21: Metrics, API & Reporting
-**Requirements:** METRIC-01→08, API-01→06
-**Goal:** Calculate all metrics from trade log, persist results, expose via REST API.
+**Requirements:** METRIC-01→08, MEASURE-01→03, API-01→06
+**Goal:** Calculate all metrics from trade log, persist results, expose via REST API. Includes spread/commission, benchmark, and walk-forward analysis.
 
 **Success Criteria:**
 1. Win Rate, PnL, Max Drawdown, Sharpe, Profit Factor, Avg R:R correct
-2. JSON + Markdown reports generated
-3. Results persisted in `aureus_backtest_runs`
-4. All 6 API endpoints functional
-5. Pre-compute trigger + status endpoints work
+2. **Spread/commission** deducted from PnL (configurable per symbol)
+3. **Buy-and-hold benchmark** comparison included in report
+4. **Walk-forward analysis** — train/test window rolling to detect overfitting
+5. JSON + Markdown reports generated
+6. Results persisted in `aureus_backtest_runs`
+7. All 6 API endpoints functional
+8. Pre-compute trigger + status endpoints work
 
 Canonical refs: `docs/backtest/phase-e-backtest-engine/PLAN.md` (Steps 2-4)
 
