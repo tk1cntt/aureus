@@ -13,56 +13,123 @@ See `.planning/archive/` for full archives.
 
 ## Current Milestone: v1.3 Backtesting & Measurement Engine
 
-**Goal:** Build a backtesting engine to simulate strategy execution on historical data, validate SL/TP logic, and output measurable performance metrics.
-**Phases:** 3
+**Goal:** Build full backtest infrastructure from schema → signal pre-computation → live alignment → recovery → engine → metrics → chart UI.
+**Phases:** 7
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 16 | Data Loading & Candle Replay | DATA-01, DATA-02, DATA-03 | NOT STARTED |
-| 17 | Order Simulation & Trade Log | STRAT-01, STRAT-02, STRAT-03, ORDER-01, ORDER-02, ORDER-03, ORDER-04 | NOT STARTED |
-| 18 | Metrics Engine & Reporting | METRIC-01 → METRIC-08 | NOT STARTED |
+| 16 | Schema & Migration | SCHEMA-01→03 | NOT STARTED |
+| 17 | Signal Pre-computation (Offline) | COMPUTE-01→04 | NOT STARTED |
+| 18 | Live System Alignment | LIVE-01→03 | NOT STARTED |
+| 19 | Recovery Enhancement | RECOV-01→03 | NOT STARTED |
+| 20 | Backtest Engine Core | ENGINE-01→05, TRADE-01→02, QUALITY-01 | NOT STARTED |
+| 21 | Metrics, API & Reporting | METRIC-01→08, API-01→06 | NOT STARTED |
+| 22 | Chart UI & Dashboard | UI-01→08 | NOT STARTED |
+
+Canonical refs: `docs/backtest/` (Phase A→F plans)
 
 ---
 
-## Phase 16: Data Loading & Candle Replay
-**Requirements:** DATA-01, DATA-02, DATA-03
-**Goal:** Build data loaders (DB + CSV/JSON) that produce a standardized candle DataFrame, validate continuity, and replay candles one-by-one through a strategy's `on_bar_close` pipeline.
+## Phase 16: Schema & Migration
+**Requirements:** SCHEMA-01, SCHEMA-02, SCHEMA-03
+**Goal:** Create TimescaleDB tables `aureus_signal_snapshots` (hypertable) and `aureus_backtest_runs`. Zero live impact.
 
 **Success Criteria:**
-1. `CandleLoader` loads candles from PostgreSQL with symbol/timeframe/date range filters.
-2. `CandleLoader` loads candles from CSV/JSON files with the same output format.
-3. Validation rejects datasets with gaps or duplicate timestamps.
-4. Replay loop feeds candles sequentially, building state progressively (mimicking live engine).
+1. `aureus_signal_snapshots` exists as hypertable with UNIQUE(time, symbol)
+2. `aureus_backtest_runs` exists with JSONB columns for stats/trades/equity_curve
+3. Index for query performance, ON CONFLICT DO UPDATE works
+4. Existing live tables unaffected
 
-Canonical refs: `services/aureus-signal/engine/strategies/template.py`, `services/aureus-signal/engine/strategies/base.py`
+Canonical refs: `docs/backtest/phase-a-schema/PLAN.md`
 
 ---
 
-## Phase 17: Order Simulation & Trade Log
-**Requirements:** STRAT-01, STRAT-02, STRAT-03, ORDER-01, ORDER-02, ORDER-03, ORDER-04
-**Goal:** Build a mock order executor that opens positions from strategy intents, evaluates SL/TP against candle H/L, and logs every trade with full detail.
+## Phase 17: Signal Pre-computation (Offline)
+**Requirements:** COMPUTE-01, COMPUTE-02, COMPUTE-03, COMPUTE-04
+**Goal:** Standalone `signal_computer.py` that replays historical candles, calculates all 18 signals per candle, and batch-inserts snapshots. Shared `create_signal_set()` factory and `build_snapshot()` utility.
 
 **Success Criteria:**
-1. Any `BaseStrategy` subclass can be plugged into the backtester (not hard-coded to TemplateStrategy).
-2. Strategy's `on_bar_close` → `build_order_plan` pipeline produces intents identical to live engine.
-3. Mock executor opens position at entry price, tracks SL/TP/trailing per subsequent candle.
-4. Each trade logged: entry_time, exit_time, entry_price, exit_price, direction, pnl, exit_reason (SL/TP/SESSION_END).
-5. Context filters and sequence matching produce identical results to live engine.
+1. `create_signal_set()` factory reusable from both live engine and signal_computer
+2. `build_snapshot()` + `batch_insert_snapshots()` shared utilities work
+3. Pre-compute 1 day (~1440 candles) completes < 10s
+4. ON CONFLICT re-run produces no duplicates
+5. Progress tracking via Redis key
 
-Canonical refs: `services/aureus-signal/engine/strategies/template.py`, `services/aureus-signal/engine/strategies/base.py`
+Canonical refs: `docs/backtest/phase-b-signal-computer/PLAN.md`
 
 ---
 
-## Phase 18: Metrics Engine & Reporting
-**Requirements:** METRIC-01 → METRIC-08
-**Goal:** Calculate performance metrics from the trade log and output comprehensive reports in JSON + markdown format.
+## Phase 18: Live System Alignment
+**Requirements:** LIVE-01, LIVE-02, LIVE-03
+**Goal:** Live Signal Engine writes signal snapshots every candle (async, fire-and-forget). Seamless data continuity between pre-computed and live data.
 
 **Success Criteria:**
-1. Win Rate calculated correctly (winning / total trades).
-2. Total PnL reflects sum of all trade PnLs.
-3. Max Drawdown measured as peak-to-trough equity decline.
-4. Sharpe Ratio calculated using trade returns and risk-free rate.
-5. Profit Factor = gross profit / gross loss.
-6. Average R:R = average (actual reward / planned risk) per trade.
-7. JSON report contains all metrics + per-trade log.
-8. Markdown report is human-readable with summary table + trade detail.
+1. Snapshot written every new candle (async, < 2ms latency impact)
+2. DB error does NOT crash live system
+3. Snapshot format identical to Phase 17 (shared build_snapshot)
+4. Dashboard and Redis state unaffected
+
+Canonical refs: `docs/backtest/phase-c-live-alignment/PLAN.md`
+
+---
+
+## Phase 19: Recovery Enhancement
+**Requirements:** RECOV-01, RECOV-02, RECOV-03
+**Goal:** Fix `recalculate_all_signals()` to run signals per-candle (not just last). Add snapshot gap detection to GapDetector.
+
+**Success Criteria:**
+1. Recalc runs signals per-candle with signal_history accumulation
+2. Recalc 2000 candles completes < 30s
+3. `find_snapshot_gaps()` detects missing snapshots
+4. Auto-recovery fills snapshot gaps automatically
+
+Canonical refs: `docs/backtest/phase-d-recovery/PLAN.md`
+
+---
+
+## Phase 20: Backtest Engine Core
+**Requirements:** ENGINE-01→05, TRADE-01→02, QUALITY-01
+**Goal:** `BacktestRunnerV2` reads pre-computed snapshots, rebuilds state, runs strategies, manages orders (SL/TP), logs trades, calculates signal quality.
+
+**Success Criteria:**
+1. Backtest 2 weeks (~20,160 candles) completes < 15s
+2. State rebuilt correctly from snapshots (atr, emas, trend, obs, events)
+3. Strategy triggers occur (not empty like old engine)
+4. SL/TP evaluated against H/L correctly
+5. Per-trade log: entry/exit time/price, direction, pnl, exit_reason
+6. Signal quality scorecard per tag
+
+Canonical refs: `docs/backtest/phase-e-backtest-engine/PLAN.md`
+
+---
+
+## Phase 21: Metrics, API & Reporting
+**Requirements:** METRIC-01→08, API-01→06
+**Goal:** Calculate all metrics from trade log, persist results, expose via REST API.
+
+**Success Criteria:**
+1. Win Rate, PnL, Max Drawdown, Sharpe, Profit Factor, Avg R:R correct
+2. JSON + Markdown reports generated
+3. Results persisted in `aureus_backtest_runs`
+4. All 6 API endpoints functional
+5. Pre-compute trigger + status endpoints work
+
+Canonical refs: `docs/backtest/phase-e-backtest-engine/PLAN.md` (Steps 2-4)
+
+---
+
+## Phase 22: Chart UI & Dashboard
+**Requirements:** UI-01→08
+**Goal:** Redesign backtest page with interactive chart (signal markers, trade markers, tooltips), quality scorecard, equity curve, and pre-compute controls.
+
+**Success Criteria:**
+1. BacktestChart renders candles + signal event markers (CHOCH/BOS/Sweep)
+2. Hover tooltip shows metadata + context + outcome (glassmorphism)
+3. Trade entry/exit markers + SL/TP dashed lines
+4. SignalQualityCard with color-coded win_rate bars + letter grades
+5. EquityCurve via lightweight-charts with drawdown shading
+6. Pre-compute trigger + progress bar functional
+7. Click signal type → filter markers on chart
+8. Responsive layout
+
+Canonical refs: `docs/backtest/phase-f-chart-ui/PLAN.md`
