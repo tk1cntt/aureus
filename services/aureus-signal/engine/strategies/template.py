@@ -21,92 +21,127 @@ class TemplateStrategy(BaseStrategy):
         self.exit_config = config.get("exit_config", {})
 
     def _evaluate_sequence(self, df: pd.DataFrame, state_obj: Any) -> Dict[str, Any]:
-        total_score = 0.0
-        details: List[str] = []
-        last_found_index = -1
-        missing_required = False
+        if not hasattr(state_obj, "strategy_progress"):
+            state_obj.strategy_progress = {}
+        
+        state = state_obj.strategy_progress.get(self.name, {})
+        current_step_index = state.get("current_step_index", 0)
+        origin_timestamp = state.get("origin_timestamp", None)
+        matched_timestamps = state.get("matched_timestamps", [])
+        sequence_progress = state.get("sequence", [])
+        last_matched_candle_idx = state.get("last_matched_candle_idx", -1)
+        last_processed_index = state.get("last_processed_index", -1)
+        internal_candle_counter = state.get("internal_candle_counter", 0)
+        
+        if not sequence_progress:
+            for step in self.sequence:
+                sequence_progress.append({
+                    "tag": step["tag"],
+                    "weight": step["weight"],
+                    "required": step.get("required", False),
+                    "max_wait": step.get("max_wait", 0),
+                    "reset_signals": step.get("reset_signals", []),
+                    "status": "waiting" if step.get("required", False) else "missed",
+                    "time": None,
+                })
+
+        internal_candle_counter += 1
+
+        # 1. Global Timeout Check
+        if 0 < current_step_index < len(self.sequence):
+            step = self.sequence[current_step_index]
+            max_wait = step.get("max_wait", 0)
+            if max_wait > 0 and last_matched_candle_idx != -1:
+                # Difference in processed candles
+                if (internal_candle_counter - last_matched_candle_idx) > max_wait:
+                    current_step_index = 0
+                    origin_timestamp = None
+                    matched_timestamps = []
+                    last_matched_candle_idx = -1
+                    for s in sequence_progress:
+                        s["status"] = "waiting" if s.get("required", False) else "missed"
+                        s["time"] = None
 
         history = getattr(state_obj, "signal_history", [])
-        sequence_progress = []
+        current_history_idx = len(history) - 1
+
+        # 2. Process new signals
+        if history and current_history_idx > last_processed_index:
+            for index in range(last_processed_index + 1, current_history_idx + 1):
+                latest_signal = history[index]
+                latest_tag = latest_signal["tag"]
+                latest_time = latest_signal["t"]
+                
+                # Check for matching steps
+                while current_step_index < len(self.sequence):
+                    step = self.sequence[current_step_index]
+                    tag = step["tag"]
+                    reset_tags = step.get("reset_signals", [])
+                    required = step.get("required", False)
+
+                    # Reset condition has priority
+                    if latest_tag in reset_tags:
+                        current_step_index = 0
+                        origin_timestamp = None
+                        matched_timestamps = []
+                        last_matched_candle_idx = -1
+                        for s in sequence_progress:
+                            s["status"] = "waiting" if s.get("required", False) else "missed"
+                            s["time"] = None
+                        break  # Halt matching loop, start fresh
+
+                    # Match condition
+                    if latest_tag == tag:
+                        if current_step_index == 0:
+                            origin_timestamp = latest_time
+                        
+                        matched_timestamps.append(latest_time)
+                        last_matched_candle_idx = internal_candle_counter
+                        sequence_progress[current_step_index]["status"] = "matched"
+                        sequence_progress[current_step_index]["time"] = latest_time
+                        current_step_index += 1
+                        break  # Consumed the signal
+                    else:
+                        if not required:
+                            sequence_progress[current_step_index]["status"] = "missed"
+                            current_step_index += 1
+                            continue # Try next step with the SAME signal
+                        else:
+                            break # Step is required, wait for next event
+            
+            last_processed_index = current_history_idx
+
+        # Compute results
         matched_steps = 0
-        origin_timestamp = None
+        missing_required = False
+        total_score = 0.0
+        details = []
 
-        last_seen_index = {}
-        for i, item in enumerate(history):
-            last_seen_index[item["tag"]] = i
-
-        for i, step in enumerate(self.sequence):
-            tag = step["tag"]
-            weight = step["weight"]
-            required = step.get("required", False)
-            max_wait = step.get("max_wait", 0)
-            reset_tags = step.get("reset_signals", [])
-
-            found = False
-            found_time = None
-            search_ptr = last_found_index + 1
-
-            while search_ptr < len(history):
-                if history[search_ptr]["tag"] == tag:
-                    is_reset = False
-                    if reset_tags:
-                        for rt in reset_tags:
-                            if last_seen_index.get(rt, -1) > search_ptr:
-                                is_reset = True
-                                break
-
-                    if is_reset:
-                        search_ptr += 1
-                        continue
-
-                    if max_wait > 0 and last_found_index != -1:
-                        last_time = history[last_found_index]["t"]
-                        current_time = history[search_ptr]["t"]
-                        candle_diff = (current_time - last_time) / 60
-                        if candle_diff > max_wait:
-                            search_ptr += 1
-                            continue
-
-                    found = True
-                    last_found_index = search_ptr
-                    total_score += weight
-                    details.append(f"Found {tag}")
-                    found_time = history[search_ptr]["t"]
-                    matched_steps += 1
-                    if i == 0:
-                        origin_timestamp = found_time
-                    break
-
-                search_ptr += 1
-
-            step_status = {
-                "tag": tag,
-                "weight": weight,
-                "required": required,
-                "max_wait": max_wait,
-                "reset_signals": step.get("reset_signals", []),
-                "status": "matched" if found else ("waiting" if required else "missed"),
-                "time": found_time,
-            }
-            sequence_progress.append(step_status)
-
-            if not found:
-                if required:
-                    missing_required = True
-                    break
-                details.append(f"Missing {tag}")
-
+        for i, s in enumerate(sequence_progress):
+            if s["status"] == "matched":
+                matched_steps += 1
+                total_score += s["weight"]
+                details.append(f"Found {s['tag']}")
+            elif s["required"] and current_step_index <= i:
+                missing_required = True
+                details.append(f"Missing {s['tag']}")
+        
         progress_data = {
             "strategy": self.name,
             "strategy_id": self.strategy_id,
             "progress_pct": (matched_steps / len(self.sequence)) * 100 if self.sequence else 0,
             "origin_timestamp": origin_timestamp,
             "sequence": sequence_progress,
-            "t": int(df.iloc[-1]["t"]),
+            "t": int(df.iloc[-1]["t"]) if df is not None and not df.empty else 0,
+            
+            # State elements to persist
+            "current_step_index": current_step_index,
+            "matched_timestamps": matched_timestamps,
+            "last_matched_candle_idx": last_matched_candle_idx,
+            "last_processed_index": last_processed_index,
+            "internal_candle_counter": internal_candle_counter
         }
-
-        if not hasattr(state_obj, "strategy_progress"):
-            state_obj.strategy_progress = {}
+        
         state_obj.strategy_progress[self.name] = progress_data
 
         return {
