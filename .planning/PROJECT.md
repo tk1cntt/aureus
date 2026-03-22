@@ -8,14 +8,20 @@ A planning control document for the current Aureus milestone. It defines the act
 - Prevent regression through explicit integration contracts and layered tests.
 - Optimize performance only after correctness parity is preserved.
 
-## Current State
+## Current Milestone: v1.2 Strategy Sequence Engine
+
+**Goal:** Overhaul the Strategy Engine to rely purely on config-driven sequences, deprecating hardcoded logic and implementing robust state-aware sequence matching.
+
+**Target features:**
+- Production-ready sequence evaluation in TemplateStrategy.
+- Support for complex time and reset constraints.
+- Migration of legacy hard-coded strategies into unified `sequence` structures.
+
+## Archived Milestones
 **v1.1 Signal Optimization (Shipped 2026-03-22)**
 - Toàn bộ tín hiệu lõi đã được Modular hóa.
 - Cover 100% bằng Unit tests và Integration tests.
 - Hệ thống phòng thủ OOM (Garbage Collection 1500 nến) hoạt động minh bạch 5h sáng hàng ngày.
-
-## Next Milestone Goals
-**Quyết định Milestone v1.2:** Cần được định hình thông qua lệnh `/gsd-new-milestone`.
 
 <details>
 <summary><b>Archived: v1.1 Signal Optimization</b></summary>
