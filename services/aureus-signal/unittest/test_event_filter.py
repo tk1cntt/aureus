@@ -40,6 +40,10 @@ class TestEventFilter(unittest.TestCase):
         self.c_state.transient_signals = {'ob_bull_new': {'ob_type': 'BULLISH'}}
         self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
 
+    def test_ob_bull_mitigated_triggers(self):
+        self.c_state.transient_signals = {'ob_bull_mitigated': {'ob_type': 'BULLISH'}}
+        self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
+
     def test_ob_bear_mitigated_triggers(self):
         self.c_state.transient_signals = {'ob_bear_mitigated': {'ob_type': 'BEARISH'}}
         self.assertTrue(has_structural_event(self.c_state, self.trade_manager))

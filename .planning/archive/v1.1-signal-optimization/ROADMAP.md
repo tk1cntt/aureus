@@ -21,6 +21,7 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [x] **Phase 9: Signal Structure Optimization** - Tối ưu `structure` và hoàn tất traceability v1.1. (completed 2026-03-21)
 - [ ] **Phase 10: Phân tích và tối ưu sweep_targets trong structure.py** - Optimize sweep targets in structure.py.
 - [x] **Phase 11: System GC - Daily Signal Recalculation** - Tự động dọn RAM 5AM GMT+7 mỗi ngày bằng 1500 nến. (completed 2026-03-22)
+- [ ] **Phase 12: Handle Multi-OB Mitigation Events** - Chống mất dữ liệu khi nhiều OB bị mitigated trong cùng một candle và giữ backward compatibility event contract.
 
 ## Phase Details
 
@@ -167,6 +168,19 @@ Plans:
 Plans:
 - [x] 11-01: Tạo Background Task hẹn giờ Reset trong Live Engine.
 
+### Phase 12: Handle Multi-OB Mitigation Events
+**Goal**: Chuẩn hóa hành vi mitigation khi nhiều OB chạm cùng candle theo semantics deterministic `last-event-wins`, giữ nguyên legacy contract đang chạy production.
+**Depends on**: Phase 11
+**Requirements**: [SIG-12, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. Khi nhiều OB cùng bị mitigation trong một candle, `ob_bull_mitigated`/`ob_bear_mitigated` luôn chứa event cuối cùng một cách deterministic.
+  2. Không thêm schema aggregate key mới; downstream hiện tại vẫn hoạt động bằng legacy event keys.
+  3. Unit + integration tests liên quan `structure`/`event_filter` pass và coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [x] 12-01: Enforce deterministic last-event-wins semantics for OB mitigation events.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -182,3 +196,4 @@ Plans:
 | 9. Signal Structure Optimization | v1.1 | 1/1 | Complete | 2026-03-21 |
 | 10. Phân tích và tối ưu sweep_targets trong structure.py | v1.1 | 0/1 | Not started | - |
 | 11. System GC - Daily Signal Recalculation | v1.1 | 1/1 | Complete | 2026-03-22 |
+| 12. Handle Multi-OB Mitigation Events | v1.1 | 0/1 | Not started | - |

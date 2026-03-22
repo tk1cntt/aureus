@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 #   - sweep.py: sweep_bull/bear
 STRUCTURAL_TAGS = {
     "choch_up", "choch_down",
+    "bos_up", "bos_down",
     "sweep_bull", "sweep_bear",
     "fvg_bull_new", "fvg_bear_new",
     "fvg_bull_mitigated", "fvg_bear_mitigated",

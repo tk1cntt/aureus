@@ -90,39 +90,45 @@ class StructureSignal(BaseSignal):
         """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""
         if not hasattr(state_obj, 'obs') or not state_obj.obs:
             return
-            
+
         latest_t = int(df.iloc[-1]['t'])
-        
+
+        latest_bull_mitigation = None
+        latest_bear_mitigation = None
+
         for ob in state_obj.obs:
-            if ob.get('mitigated'): continue
-            
+            if ob.get('mitigated'):
+                continue
+
             t_breakout = ob.get('t_breakout', 0)
-            if latest_t <= t_breakout: continue
-            
+            if latest_t <= t_breakout:
+                continue
+
             # Historical Sweep: Find the first candle AFTER breakout that touches the OB
             search_df = df[df['t'] > t_breakout]
-            if search_df.empty: continue
-            
+            if search_df.empty:
+                continue
+
             is_bullish = (ob['ob_type'] == 'BULLISH')
-            
+
             for _, candle in search_df.iterrows():
                 c_t = int(candle['t'])
                 c_h = float(candle['h'])
                 c_l = float(candle['l'])
-                
+
                 if is_bullish:
                     if c_l <= ob['top']:
                         ob['mitigated'] = True
                         ob['t_mitigation'] = c_t
-                        
+
                         # Rejection Quality (Wicking)
                         ob_zone_height = ob['top'] - ob['bottom']
                         penetration = ob['top'] - c_l
                         pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
+
                         # Evaluation: Closed out of zone? (Rejection strength)
                         is_rejection = candle['c'] > ob['top']
-                        
+
                         state_obj.log_actor(c_t, {
                             "type": "OB_TOUCH",
                             "ob_type": "BULLISH",
@@ -138,20 +144,18 @@ class StructureSignal(BaseSignal):
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
                             state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bull_mitigated'] = ob
+                            latest_bull_mitigation = ob
                         break
                 else: # BEARISH
                     if c_h >= ob['bottom']:
                         ob['mitigated'] = True
                         ob['t_mitigation'] = c_t
-                        
+
                         # Rejection Quality
                         ob_zone_height = ob['top'] - ob['bottom']
                         penetration = c_h - ob['bottom']
                         pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
-                        
+
                         is_rejection = candle['c'] < ob['bottom']
 
                         state_obj.log_actor(c_t, {
@@ -169,10 +173,14 @@ class StructureSignal(BaseSignal):
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
                             state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
-                            # Story 3.5: Emit event for Event-Driven Sparse Storage
-                            if hasattr(state_obj, 'transient_signals'):
-                                state_obj.transient_signals['ob_bear_mitigated'] = ob
+                            latest_bear_mitigation = ob
                         break
+
+        if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
+            if latest_bull_mitigation is not None:
+                state_obj.transient_signals['ob_bull_mitigated'] = latest_bull_mitigation
+            if latest_bear_mitigation is not None:
+                state_obj.transient_signals['ob_bear_mitigated'] = latest_bear_mitigation
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""
@@ -267,7 +275,13 @@ class StructureSignal(BaseSignal):
 
                     tag = self.TAG_CHOCH_UP if is_bullish else self.TAG_CHOCH_DN
                     # Determine if we already logged this to avoid spamming
-                    # already_logged = any(s.get('tag') == tag and s.get('t') == breakout_t for s in getattr(state_obj, 'signal_history', []))
+                    signal_history = getattr(state_obj, 'signal_history', [])
+                    already_logged = any(
+                        isinstance(s, dict)
+                        and s.get('tag') == tag
+                        and int(s.get('t', -1)) == breakout_t
+                        for s in signal_history
+                    )
                     # if not already_logged:
                     #     logger.debug(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
 
