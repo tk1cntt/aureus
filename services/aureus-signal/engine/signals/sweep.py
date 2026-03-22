@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 class SweepSignal(BaseSignal):
     """
     Monitors identified liquidity levels (OBs) for stop hunts.
-    Implements State Machine for OBs (PENDING, TOUCHED, SWEPT, BROKEN_PENDING, DEAD)
+    Implements State Machine for OBs (PENDING, TOUCHED, SWEEP, BROKEN_PENDING, STOP_HUNT, DEAD)
     and Regime-based filtering (Trend vs Sideways).
     """
 
@@ -63,9 +63,9 @@ class SweepSignal(BaseSignal):
                         if ob["break_counter"] >= 2:
                             ob["status"] = "DEAD"
                     else:
-                        # Touches the OB again -> Trap!
+                        # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
-                        ob["status"] = "SWEPT"
+                        ob["status"] = "STOP_HUNT"
                         ob["_just_swept"] = True  # Flag to trigger signal this tick
                 else:
                     # Not broken yet. Check if it penetrates the bottom
@@ -74,7 +74,7 @@ class SweepSignal(BaseSignal):
                             ob["status"] = "BROKEN_PENDING"
                             ob["_just_swept"] = True # It broke, but it's a sweep attempt
                         else:
-                            ob["status"] = "SWEPT"
+                            ob["status"] = "SWEEP"
                             ob["_just_swept"] = True
                     elif c_l <= ob_top:
                         ob["status"] = "TOUCHED"
@@ -87,9 +87,9 @@ class SweepSignal(BaseSignal):
                         if ob["break_counter"] >= 2:
                             ob["status"] = "DEAD"
                     else:
-                        # Touches the OB again -> Trap!
+                        # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
-                        ob["status"] = "SWEPT"
+                        ob["status"] = "STOP_HUNT"
                         ob["_just_swept"] = True
                 else:
                     # Check if it penetrates the top
@@ -98,7 +98,7 @@ class SweepSignal(BaseSignal):
                             ob["status"] = "BROKEN_PENDING"
                             ob["_just_swept"] = True
                         else:
-                            ob["status"] = "SWEPT"
+                            ob["status"] = "SWEEP"
                             ob["_just_swept"] = True
                     elif c_h >= ob_bottom:
                         ob["status"] = "TOUCHED"
@@ -139,49 +139,51 @@ class SweepSignal(BaseSignal):
                 continue
                 
             if ob.pop("_just_swept", False):
-                # Generates a signal
                 is_bullish = ob.get("ob_type") == "BULLISH"
-                tag = self.TAG_BULL if is_bullish else self.TAG_BEAR
+                current_status = str(ob.get("status", "")).strip().upper()
+                suffix = "bull" if is_bullish else "bear"
+                status_tag = f"sweep_{current_status.lower()}_{suffix}" if current_status else None
                 target_price = ob.get("bottom") if is_bullish else ob.get("top")
-                
+
                 # Regime Check
                 valid = False
-                if is_bullish and regime in ["TREND_UP", "SIDEWAYS"]: valid = True
-                if not is_bullish and regime in ["TREND_DN", "SIDEWAYS"]: valid = True
+                if is_bullish and regime in ["TREND_UP", "SIDEWAYS"]:
+                    valid = True
+                if not is_bullish and regime in ["TREND_DN", "SIDEWAYS"]:
+                    valid = True
 
-                if valid:
+                if valid and status_tag:
                     already_swept = any(
                         isinstance(s, dict)
-                        and s.get("tag") == tag
+                        and s.get("tag") == status_tag
                         and self._to_float(s.get("price_swept")) == target_price
                         and int(s.get("t", -1)) == c_t
                         for s in history
                     )
-                    
+
                     if not already_swept:
                         triggered_sweep = {
-                            "tag": tag,
+                            "tag": status_tag,
                             "t": c_t,
                             "price_swept": target_price,
                             "source_type": "OB_" + ob.get("ob_type", "UNKNOWN"),
                             "source_t": ob.get("t_start"),
                             "fidelity": 0.8,
                             "market_regime": regime,
+                            "status": current_status,
                         }
                         logger.info(
-                            f"[t={c_t}] [{symbol}] [calculate] 4... SWEEP DETECTED: {ob['status']} (Candle Close): {tag} @ {target_price}"
+                            f"[t={c_t}] [{symbol}] [calculate] 4... SWEEP DETECTED: {current_status} (Candle Close): {status_tag} @ {target_price}"
                         )
 
                         transient = getattr(state_obj, "transient_signals", None)
                         if isinstance(transient, dict):
-                            transient[tag] = triggered_sweep
-                            transient["ob_state"] = state_obj.obs # Emit OBs to Redis
+                            transient[status_tag] = triggered_sweep
+                            transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
 
-                        request_ai_update = getattr(state_obj, "request_ai_update", None)
-                        if callable(request_ai_update):
-                            request_ai_update("STOP_HUNT")
-                            request_ai_update("OB_STATE_CHANGE")
+                        # AI update is orchestrated centrally in runtime engine policy.
+                        # Sweep signal layer only emits domain events to transient_signals.
                         # Emitting only ONE sweep signal max per tick to match old parity
-                        break 
+                        break
 
         return triggered_sweep

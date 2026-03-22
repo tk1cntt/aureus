@@ -185,7 +185,7 @@ class TestSweepEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
 
         state = json.loads(state_payload)
         tags = [item.get("tag") for item in state.get("signal_history", [])]
-        self.assertIn("sweep_bull", tags)
+        self.assertIn("sweep_sweep_bull", tags)
 
 
 if __name__ == "__main__":

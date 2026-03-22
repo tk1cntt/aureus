@@ -36,6 +36,18 @@ class TestEventFilter(unittest.TestCase):
         self.c_state.transient_signals = {'sweep_bear': {'tag': 'sweep_bear', 't': 1000}}
         self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
 
+    def test_sweep_swept_alias_triggers(self):
+        self.c_state.transient_signals = {'sweep_swept_bull': {'tag': 'sweep_swept_bull', 'status': 'SWEPT', 't': 1000}}
+        self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
+
+    def test_sweep_stop_hunt_alias_triggers(self):
+        self.c_state.transient_signals = {'sweep_stop_hunt_bull': {'tag': 'sweep_stop_hunt_bull', 'status': 'STOP_HUNT', 't': 1000}}
+        self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
+
+    def test_sweep_dead_alias_triggers(self):
+        self.c_state.transient_signals = {'sweep_dead_bull': {'tag': 'sweep_dead_bull', 'status': 'DEAD', 't': 1000}}
+        self.assertTrue(has_structural_event(self.c_state, self.trade_manager))
+
     def test_ob_bull_new_triggers(self):
         self.c_state.transient_signals = {'ob_bull_new': {'ob_type': 'BULLISH'}}
         self.assertTrue(has_structural_event(self.c_state, self.trade_manager))

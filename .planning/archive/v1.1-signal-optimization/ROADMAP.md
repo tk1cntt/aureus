@@ -22,6 +22,7 @@ Roadmap này chuẩn hóa 9 phase tối ưu tín hiệu theo hướng accuracy-f
 - [ ] **Phase 10: Phân tích và tối ưu sweep_targets trong structure.py** - Optimize sweep targets in structure.py.
 - [x] **Phase 11: System GC - Daily Signal Recalculation** - Tự động dọn RAM 5AM GMT+7 mỗi ngày bằng 1500 nến. (completed 2026-03-22)
 - [ ] **Phase 12: Handle Multi-OB Mitigation Events** - Chống mất dữ liệu khi nhiều OB bị mitigated trong cùng một candle và giữ backward compatibility event contract.
+- [ ] **Phase 13: Sweep Event Improvement** - Chuẩn hóa state/event semantics cho sweep theo thế đánh và loại bỏ `OB_STATE_CHANGE`.
 
 ## Phase Details
 
@@ -181,6 +182,19 @@ Plans:
 Plans:
 - [x] 12-01: Enforce deterministic last-event-wins semantics for OB mitigation events.
 
+### Phase 13: Sweep Event Improvement
+**Goal**: Chuẩn hóa lại state machine và event contract của `sweep` theo mô hình mỗi trạng thái là một thế đánh riêng, loại bỏ hoàn toàn `OB_STATE_CHANGE`.
+**Depends on**: Phase 12
+**Requirements**: [SIG-13, TST-01, TST-02, TST-03, TST-04, VAL-01, VAL-02]
+**Success Criteria** (what must be TRUE):
+  1. `sweep` sử dụng bộ trạng thái chuẩn (`PENDING`, `TOUCHED`, `SWEEP`, `BROKEN_PENDING`, `STOP_HUNT`, `DEAD`) với transition deterministic.
+  2. Event phát ra theo format `{STATUS}_EVENT`, không còn `OB_STATE_CHANGE`.
+  3. Unit + integration tests cho `sweep` pass và coverage phase >= 80%.
+**Plans**: 1 plan
+
+Plans:
+- [ ] 13-01: Plan sẽ được tạo sau `gsd-discuss-phase 13` hoặc `gsd-plan-phase 13`.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -197,3 +211,4 @@ Plans:
 | 10. Phân tích và tối ưu sweep_targets trong structure.py | v1.1 | 0/1 | Not started | - |
 | 11. System GC - Daily Signal Recalculation | v1.1 | 1/1 | Complete | 2026-03-22 |
 | 12. Handle Multi-OB Mitigation Events | v1.1 | 0/1 | Not started | - |
+| 13. Sweep Event Improvement | v1.1 | 0/1 | Not started | - |

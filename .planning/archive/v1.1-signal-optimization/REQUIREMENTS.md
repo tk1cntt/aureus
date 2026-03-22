@@ -14,6 +14,8 @@
 - [x] **SIG-09**: Optimize and validate `structure` signal without changing trading intent.
 - [x] **SIG-10**: Optimize and sweep_targets within structure efficiently.
 - [x] **SIG-11**: System GC via Daily Signal Recalculation loop.
+- [ ] **SIG-12**: Deterministic multi-OB mitigation event handling with legacy contract compatibility.
+- [ ] **SIG-13**: Standardize sweep status/event semantics with per-status strategy contract.
 
 ### Test Quality Gates (`TST`)
 - [x] **TST-01**: For each signal phase, create/maintain a dedicated **unit test file** for that signal.
@@ -59,9 +61,11 @@
 | SIG-09 | 9 | P9-C1, P9-C2 |
 | SIG-10 | 10 | P10-C1, P10-C2 |
 | SIG-11 | 11 | GC Daily Loop |
-| TST-01 | 1-11 | Px-C3 |
-| TST-02 | 1-11 | Px-C4 |
-| TST-03 | 1-11 | Px-C5 |
-| TST-04 | 1-11 | Px-C6 |
-| VAL-01 | 1-11 | roadmap structure |
-| VAL-02 | 1-11 | traceability tables |
+| SIG-12 | 12 | P12-C1, P12-C2 |
+| SIG-13 | 13 | P13-C1, P13-C2 |
+| TST-01 | 1-13 | Px-C3 |
+| TST-02 | 1-13 | Px-C4 |
+| TST-03 | 1-13 | Px-C5 |
+| TST-04 | 1-13 | Px-C6 |
+| VAL-01 | 1-13 | roadmap structure |
+| VAL-02 | 1-13 | traceability tables |

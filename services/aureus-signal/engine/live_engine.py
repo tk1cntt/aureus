@@ -34,6 +34,7 @@ from engine.ai_validator import AIValidator
 from engine.signals.news_provider import NewsProvider
 from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
+from engine.event_policy import evaluate_ai_trigger_events
 
 logger = get_logger(__name__)
 def load_symbols_config(path="symbols.json"):
@@ -656,21 +657,24 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
 
                             # Trigger Event-Driven AI Pulse Analysis (Aggregated for this candle)
+                            for ai_event in evaluate_ai_trigger_events(state.transient_signals):
+                                state.request_ai_update(ai_event)
+
                             if state.ai_update_pending:
                                 now_pulse = time.time()
                                 is_fresh = ts_unix > (now_pulse - 300) # Only trigger AI if candle is < 5m old (Live context)
                                 last_pulse = state.tracking_vars.get('last_pulse_t', 0)
-                                
+
                                 # Process only if FRESH and not in cooldown (60s)
                                 if is_fresh and (now_pulse - last_pulse >= 60):
                                     event_list = ", ".join(state.ai_trigger_events)
                                     logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 Event-Driven AI Analysis triggered by: {event_list}")
-                                    
+
                                     await queue_periodic_ai_analysis(
                                         ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
                                     )
                                     state.tracking_vars['last_pulse_t'] = now_pulse
-                                
+
                                 # Reset trigger and aggregation list for next candle regardless of pulse firing
                                 state.ai_update_pending = False
                                 state.ai_trigger_events = []

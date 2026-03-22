@@ -143,7 +143,6 @@ class StructureSignal(BaseSignal):
 
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
                             latest_bull_mitigation = ob
                         break
                 else: # BEARISH
@@ -172,7 +171,6 @@ class StructureSignal(BaseSignal):
 
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
-                            state_obj.request_ai_update("OB_INTERACTION") # Trigger AI ONLY if it just happened
                             latest_bear_mitigation = ob
                         break
 
@@ -285,9 +283,7 @@ class StructureSignal(BaseSignal):
                     # if not already_logged:
                     #     logger.debug(f"[t={breakout_t}] [{symbol}] [_process_choch] 1... {tag} detected at {breakout_t} (Level: {pivot_price})")
 
-                    request_ai_update = getattr(state_obj, 'request_ai_update', None)
-                    if int(candle['t']) == int(df.iloc[-1]['t']) and not already_logged and callable(request_ai_update):
-                        request_ai_update("CHOCH")
+                    # AI trigger orchestration moved to live_engine event policy.
 
                     # self._register_sweep_targets(state_obj, ob, points[pivot_idx])
                     

@@ -59,8 +59,10 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["tag"], "sweep_bull")
         self.assertIn("sweep_bull", state.transient_signals)
+        self.assertIn("sweep_swept", state.transient_signals)
+        self.assertEqual(state.transient_signals["sweep_swept"]["status"], "SWEPT")
         self.assertEqual(state.obs[0]["status"], "SWEPT")
-        self.assertIn("STOP_HUNT", state.ai_events)
+        self.assertEqual(state.ai_events, [])
 
     def test_bearish_sweep_respects_trend_dn_filter(self):
         state = _DummyState()

@@ -83,7 +83,6 @@ class TestStructureExecuteSignalsForCandleIntegration(unittest.TestCase):
         self.assertEqual(state.transient_signals["ob_bull_mitigated"]["t_start"], 2)
         self.assertNotIn("ob_bull_mitigated_events", state.transient_signals)
         self.assertNotIn("ob_bear_mitigated_events", state.transient_signals)
-        self.assertEqual(state.ai_trigger_events, ["OB_INTERACTION"])
-
+        self.assertEqual(state.ai_trigger_events, [])
 if __name__ == "__main__":
     unittest.main()
