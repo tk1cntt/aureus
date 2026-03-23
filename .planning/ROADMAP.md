@@ -19,7 +19,7 @@ See `.planning/archive/` for full archives.
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 15.5 | Strategy Quality Assurance | STRATQA-01→05 | NOT STARTED |
+| 15.5 | 0/4 | Planned    |  |
 | 16 | Schema & Data Loader | SCHEMA-01→04 | NOT STARTED |
 | 17 | Signal Actor & Strategy Adapter | NAUTILUS-01→06, PARITY-01→03 | NOT STARTED |
 | 18 | Metrics & Result Persistence | METRIC-01→08, QUALITY-01, MEASURE-01→03 | NOT STARTED |
