@@ -32,8 +32,8 @@ TREND_CONT_CONFIG = {
         {"type": "ema_alignment", "required_slope": "POSITIVE", "period": 21},
     ],
     "sequence": [
-        {"tag": "choch_bull", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_bear"]},
-        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_bear"]},
+        {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]},
         {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10},
     ],
     "trade_execution": {
@@ -52,8 +52,8 @@ SESSION_SWEEP_CONFIG = {
         {"type": "session_active", "allowed": ["LONDON", "NEW_YORK"]},
     ],
     "sequence": [
-        {"tag": "choch_bull", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
-        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_bear"]},
+        {"tag": "choch_up", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
+        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
         "size": 1.5,
@@ -72,7 +72,7 @@ ORDER_FLOW_DOM_CONFIG = {
         {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]},
     ],
     "sequence": [
-        {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
+        {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
         "size": 3.0,
@@ -105,7 +105,7 @@ def _create_mock_df(t_val=1000):
 def _make_bullish_signal_history():
     """Return a signal history that triggers TREND_CONT and SESSION_SWEEP."""
     return [
-        {"tag": "choch_bull", "t": 900},
+        {"tag": "choch_up", "t": 900},
         {"tag": "sweep_bull", "t": 960},
         {"tag": "fvg_bull", "t": 980},
     ]
@@ -153,7 +153,7 @@ class TestTrendContDeterminism(unittest.TestCase):
 class TestSessionSweepDeterminism(unittest.TestCase):
     def test_determinism(self):
         signal_history = [
-            {"tag": "choch_bull", "t": 900},
+            {"tag": "choch_up", "t": 900},
             {"tag": "sweep_bull", "t": 960},
         ]
 

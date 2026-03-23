@@ -38,6 +38,21 @@ class SimulatedTradeManager:
                 continue # Already processed this setup
 
             order_plan_snapshot = self._build_order_plan_snapshot(t)
+
+            # 1. Calculate SL/TP first so completeness validation can use computed levels.
+            exit_config = t.get('exit_config', {})
+            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
+
+            if sl is None or tp is None:
+                logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
+                continue
+
+            # Enrich order-plan snapshot with concrete computed levels when missing.
+            if order_plan_snapshot.get("sl_value") in (None, ""):
+                order_plan_snapshot["sl_value"] = sl
+            if order_plan_snapshot.get("tp_value") in (None, ""):
+                order_plan_snapshot["tp_value"] = tp
+
             missing_order_plan_keys = self._missing_order_plan_keys(order_plan_snapshot)
             if missing_order_plan_keys:
                 reason_payload = {
@@ -61,25 +76,13 @@ class SimulatedTradeManager:
                     },
                 )
                 logger.warning(
-                    f"[{symbol}] [process_triggers] Error: Incomplete order plan for {trace_id}. "
+                    f"[{symbol}] [process_triggers] Trigger {t['strategy']}: Incomplete order plan for {trace_id}. "
                     f"Missing keys: {missing_order_plan_keys}"
                 )
                 continue
 
             # It's a NEW trade!
-            logger.info(f"[{symbol}] [process_triggers] 1... NEW Simulated Trade Triggered: {trace_id}")
-            
-            # 1. Calculate SL/TP
-            exit_config = t.get('exit_config', {})
-            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
-            
-            if sl is None or tp is None:
-                logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
-                continue
-
-            # Enrich order-plan snapshot with concrete computed levels for persistence.
-            order_plan_snapshot["sl_value"] = sl
-            order_plan_snapshot["tp_value"] = tp
+            logger.info(f"[{symbol}] [process_triggers] NEW Simulated Trade Triggered: {trace_id}")
                 
             # 2. Determine Side
             side = t.get('side')

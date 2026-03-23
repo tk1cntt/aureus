@@ -258,7 +258,7 @@ class PivotSignal(BaseSignal):
                 last_db_time = int(state_obj.tracking_vars.get("last_db_pivot_time", 0))
                 if stable_pivot["t"] > last_db_time:
                     stream_key = f"aureus:stream:{symbol}:swing_point"
-                    logger.info(
+                    logger.debug(
                         f"[t={stable_pivot['t']}] [{symbol}] [calculate] 2... PivotSignal sync stable pivot "
                         f"{symbol} t={stable_pivot['t']} price={stable_pivot['price']} type={stable_pivot.get('type')}"
                     )

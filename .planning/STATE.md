@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Backtesting & Measurement Engine
 status: unknown
-last_updated: "2026-03-23T10:02:46.682Z"
+last_updated: "2026-03-23T15:02:48.747Z"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -28,6 +28,10 @@ Plan: 1 of 4
 - Existing infra leveraged: `aureus-nautilus-node`, `aureus-nautilus-bridge`, TimescaleDB, Grafana, Prometheus
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 21 added: Update SWEEP detected rules for OB states and analyze sentiment mapping via _AI_TAG_TO_TRIGGER
 
 - v1.1 Signal Optimization: Toàn bộ tín hiệu lõi modular hóa, 100% test coverage
 - v1.2 Strategy Sequence Engine: O(1) state machine, 3-pillar framework, legacy deprecated

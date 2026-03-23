@@ -30,8 +30,8 @@ TREND_CONT_CONFIG = {
         {"type": "ema_alignment", "required_slope": "POSITIVE", "period": 21},
     ],
     "sequence": [
-        {"tag": "choch_bull", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_bear"]},
-        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_bear"]},
+        {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]},
         {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10},
     ],
     "trade_execution": {
@@ -50,8 +50,8 @@ SESSION_SWEEP_CONFIG = {
         {"type": "session_active", "allowed": ["LONDON", "NEW_YORK"]},
     ],
     "sequence": [
-        {"tag": "choch_bull", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
-        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_bear"]},
+        {"tag": "choch_up", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
+        {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
         "size": 1.5,
@@ -70,7 +70,7 @@ ORDER_FLOW_DOM_CONFIG = {
         {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]},
     ],
     "sequence": [
-        {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
+        {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
         "size": 3.0,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -11,9 +12,13 @@ DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 DEFAULT_WHEN = "midnight"
 DEFAULT_INTERVAL = 1
 DEFAULT_BACKUP_COUNT = 14
+DEFAULT_RELOAD_INTERVAL_SECONDS = 5
 SETTINGS_FILENAME = "log_setting.txt"
 _AUREUS_CONFIGURED_ATTR = "_aureus_logging_configured"
 _AUREUS_SETTINGS_ATTR = "_aureus_logging_settings"
+_AUREUS_LOG_PATH_ATTR = "_aureus_logging_log_path"
+_AUREUS_SETTINGS_MTIME_ATTR = "_aureus_logging_settings_mtime"
+_AUREUS_LAST_CHECK_ATTR = "_aureus_logging_last_check_ts"
 
 
 @dataclass
@@ -101,20 +106,19 @@ def resolve_logging_settings() -> LoggingSettings:
     return settings
 
 
-def configure_logging(app_name: str) -> LoggingSettings:
-    root_logger = logging.getLogger()
-    existing_settings = getattr(root_logger, _AUREUS_SETTINGS_ATTR, None)
-    if getattr(root_logger, _AUREUS_CONFIGURED_ATTR, False) and isinstance(existing_settings, LoggingSettings):
-        return existing_settings
-
-    settings = resolve_logging_settings()
+def _resolve_log_path(settings: LoggingSettings, app_name: str | None) -> Path:
     explicit_log_file = (os.getenv("LOG_FILE") or "").strip()
     if explicit_log_file:
         log_path = Path(explicit_log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        log_path = settings.log_dir / f"{app_name}.log"
+        app_label = (app_name or "aureus-signal").strip() or "aureus-signal"
+        log_path = settings.log_dir / f"{app_label}.log"
 
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return log_path
+
+
+def _apply_logging_settings(root_logger: logging.Logger, settings: LoggingSettings, log_path: Path) -> None:
     formatter = logging.Formatter(settings.fmt)
 
     console_handler = logging.StreamHandler()
@@ -130,14 +134,73 @@ def configure_logging(app_name: str) -> LoggingSettings:
     )
     file_handler.setFormatter(formatter)
 
+    old_handlers = list(root_logger.handlers)
     root_logger.handlers.clear()
-    root_logger.setLevel(settings.level)
+    for handler in old_handlers:
+        try:
+            handler.close()
+        except Exception:
+            pass
+
+    root_logger.setLevel(getattr(logging, settings.level.upper(), logging.DEBUG))
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
     setattr(root_logger, _AUREUS_CONFIGURED_ATTR, True)
     setattr(root_logger, _AUREUS_SETTINGS_ATTR, settings)
+    setattr(root_logger, _AUREUS_LOG_PATH_ATTR, str(log_path))
 
+    settings_path = _settings_file_path(settings.log_dir)
+    try:
+        mtime = settings_path.stat().st_mtime if settings_path.exists() else None
+    except OSError:
+        mtime = None
+    setattr(root_logger, _AUREUS_SETTINGS_MTIME_ATTR, mtime)
+
+
+def configure_logging(app_name: str) -> LoggingSettings:
+    root_logger = logging.getLogger()
+    existing_settings = getattr(root_logger, _AUREUS_SETTINGS_ATTR, None)
+    if getattr(root_logger, _AUREUS_CONFIGURED_ATTR, False) and isinstance(existing_settings, LoggingSettings):
+        return existing_settings
+
+    settings = resolve_logging_settings()
+    log_path = _resolve_log_path(settings, app_name)
+    _apply_logging_settings(root_logger, settings, log_path)
+    setattr(root_logger, _AUREUS_LAST_CHECK_ATTR, 0.0)
     return settings
+
+
+def refresh_logging_settings_if_needed(*, force: bool = False, interval_seconds: float = DEFAULT_RELOAD_INTERVAL_SECONDS) -> bool:
+    root_logger = logging.getLogger()
+    current_settings = getattr(root_logger, _AUREUS_SETTINGS_ATTR, None)
+    if not isinstance(current_settings, LoggingSettings):
+        return False
+
+    now = time.time()
+    last_check = float(getattr(root_logger, _AUREUS_LAST_CHECK_ATTR, 0.0) or 0.0)
+    if not force and (now - last_check) < max(float(interval_seconds), 0.0):
+        return False
+    setattr(root_logger, _AUREUS_LAST_CHECK_ATTR, now)
+
+    settings_path = _settings_file_path(current_settings.log_dir)
+    try:
+        current_mtime = settings_path.stat().st_mtime if settings_path.exists() else None
+    except OSError:
+        return False
+
+    previous_mtime = getattr(root_logger, _AUREUS_SETTINGS_MTIME_ATTR, None)
+    if not force and current_mtime == previous_mtime:
+        return False
+
+    new_settings = resolve_logging_settings()
+    if not force and new_settings == current_settings:
+        setattr(root_logger, _AUREUS_SETTINGS_MTIME_ATTR, current_mtime)
+        return False
+
+    current_log_path = getattr(root_logger, _AUREUS_LOG_PATH_ATTR, "")
+    log_path = Path(current_log_path) if str(current_log_path).strip() else _resolve_log_path(new_settings, app_name=None)
+    _apply_logging_settings(root_logger, new_settings, log_path)
+    return True
 
 
 def get_logger(name: str | None = None) -> logging.Logger:

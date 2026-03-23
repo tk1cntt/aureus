@@ -59,9 +59,8 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["tag"], "sweep_bull")
         self.assertIn("sweep_bull", state.transient_signals)
-        self.assertIn("sweep_swept", state.transient_signals)
-        self.assertEqual(state.transient_signals["sweep_swept"]["status"], "SWEPT")
-        self.assertEqual(state.obs[0]["status"], "SWEPT")
+        self.assertEqual(state.transient_signals["sweep_bull"]["status"], "SWEEP")
+        self.assertEqual(state.obs[0]["status"], "SWEEP")
         self.assertEqual(state.ai_events, [])
 
     def test_bearish_sweep_respects_trend_dn_filter(self):
@@ -110,6 +109,76 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(state.transient_signals, {})
         self.assertEqual(len(state.obs), 3)
+
+    def test_touched_status_emits_only_when_unmitigated(self):
+        state = _DummyState()
+        state.obs = [
+            {
+                "ob_type": "BULLISH",
+                "bottom": 1999.0,
+                "top": 2000.0,
+                "t_start": 1700000000,
+                "status": "TOUCHED",
+                "_just_swept": True,
+                "mitigated": False,
+            }
+        ]
+        df = self._df([
+            {"t": 1700000300, "o": 2000.3, "h": 2001.0, "l": 1999.6, "c": 2000.2},
+        ])
+
+        result = self.signal.calculate(df, state)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["tag"], "sweep_touched_bull")
+        self.assertIn("sweep_touched_bull", state.transient_signals)
+
+    def test_mitigated_non_touched_emits_when_mitigation_age_under_five_minutes(self):
+        state = _DummyState()
+        state.obs = [
+            {
+                "ob_type": "BULLISH",
+                "bottom": 1999.0,
+                "top": 2000.0,
+                "t_start": 1700000000,
+                "status": "SWEEP",
+                "_just_swept": True,
+                "mitigated": True,
+                "t_mitigation": 1700000205,
+            }
+        ]
+        df = self._df([
+            {"t": 1700000300, "o": 2000.1, "h": 2000.9, "l": 1998.9, "c": 2000.0},
+        ])
+
+        result = self.signal.calculate(df, state)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["tag"], "sweep_bull")
+        self.assertIn("sweep_bull", state.transient_signals)
+
+    def test_mitigated_non_touched_skips_when_mitigation_age_over_five_minutes(self):
+        state = _DummyState()
+        state.obs = [
+            {
+                "ob_type": "BULLISH",
+                "bottom": 1999.0,
+                "top": 2000.0,
+                "t_start": 1700000000,
+                "status": "SWEEP",
+                "_just_swept": True,
+                "mitigated": True,
+                "t_mitigation": 1699999999,
+            }
+        ]
+        df = self._df([
+            {"t": 1700000300, "o": 2000.1, "h": 2000.9, "l": 1998.9, "c": 2000.0},
+        ])
+
+        result = self.signal.calculate(df, state)
+
+        self.assertIsNone(result)
+        self.assertNotIn("sweep_bull", state.transient_signals)
 
 
 if __name__ == "__main__":

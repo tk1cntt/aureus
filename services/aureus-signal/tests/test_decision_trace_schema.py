@@ -173,8 +173,8 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
         rejection = state.order_rejections[0]
         self.assertEqual(rejection["reason_code"], "ORDER_PLAN_INCOMPLETE")
         self.assertIn("size_value", rejection["missing_order_plan_keys"])
-        self.assertIn("sl_value", rejection["missing_order_plan_keys"])
-        self.assertIn("tp_value", rejection["missing_order_plan_keys"])
+        self.assertNotIn("sl_value", rejection["missing_order_plan_keys"])
+        self.assertNotIn("tp_value", rejection["missing_order_plan_keys"])
         self.assertEqual(len(state.simulated_orders), 0)
         self.assertEqual(len(fake_redis.stream_events), 1)
         self.assertEqual(fake_redis.stream_events[0][1]["type"], "ORDER_REJECTED")

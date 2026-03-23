@@ -4,8 +4,8 @@
 
 | Version | Name | Phases | Status |
 |---------|------|--------|--------|
-| v1.1 | Signal Optimization | 07-13 | ✅ Shipped 2026-03-22 |
-| v1.2 | Strategy Sequence Engine | 14-15 | ✅ Shipped 2026-03-22 |
+| v1.1 | Signal Optimization | 07-13 | ✅ Shipped 2021-03-22 |
+| v1.2 | Strategy Sequence Engine | 14-15 | ✅ Shipped 2021-03-22 |
 
 See `.planning/archive/` for full archives.
 
@@ -95,6 +95,18 @@ Canonical refs: existing `aureus-nautilus-node/` as adapter pattern reference
 7. Results persisted to `aureus_backtest_runs`, `aureus_backtest_trades`, `aureus_backtest_equity`, `aureus_backtest_signal_quality`
 8. JSON + Markdown report generation
 
+### Phase 15.6: Update SWEEP detected rules for OB states and analyze sentiment mapping via _AI_TAG_TO_TRIGGER
+
+**Goal:** Ổn định chất lượng trigger event cho sweep lifecycle và chốt rõ vai trò của sentiment AI để tránh sửa sai hướng.
+**Requirements**: Internal stabilization (sweep/event-policy/logging observability)
+**Depends on:** Phase 15.5
+**Plans:** 3/3 completed
+
+Plans:
+- [x] Cập nhật rule `SWEEP DETECTED` theo OB states và verify bằng test
+- [x] Điều tra warning `missing origin_timestamp` trong live path và chốt root-cause
+- [x] Phân tích mapping sentiment qua `_AI_TAG_TO_TRIGGER`, xác nhận sentiment là dự đoán AI nên không thay đổi logic
+
 ---
 
 ## Phase 19: Custom UI & Dashboard
@@ -111,8 +123,6 @@ Canonical refs: existing `aureus-nautilus-node/` as adapter pattern reference
 6. EquityCurve with drawdown shading
 7. All 6 API endpoints functional (trigger backtest, list runs, chart data, snapshot detail, pre-compute trigger/status)
 8. Responsive layout
-
----
 
 ## Phase 20: Grafana Dashboards & Live Alignment
 

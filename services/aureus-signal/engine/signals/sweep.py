@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 class SweepSignal(BaseSignal):
     """
     Monitors identified liquidity levels (OBs) for stop hunts.
-    Implements State Machine for OBs (PENDING, TOUCHED, SWEEP, BROKEN_PENDING, STOP_HUNT, DEAD)
+    Implements State Machine for OBs (PENDING, TOUCHED, SWEEP, BROKEN_PENDING, STOP_HUNT, CLEAN_BREAKOUT)
     and Regime-based filtering (Trend vs Sideways).
     """
 
@@ -39,7 +39,7 @@ class SweepSignal(BaseSignal):
         for ob in state_obj.obs:
             if not isinstance(ob, dict):
                 continue
-            if ob.get("status") == "DEAD":
+            if ob.get("status") == "CLEAN_BREAKOUT":
                 continue
 
             # Ensure fields exist
@@ -61,7 +61,7 @@ class SweepSignal(BaseSignal):
                     if c_h < ob_bottom:
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
-                            ob["status"] = "DEAD"
+                            ob["status"] = "CLEAN_BREAKOUT"
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
@@ -85,7 +85,7 @@ class SweepSignal(BaseSignal):
                     if c_l > ob_top:
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
-                            ob["status"] = "DEAD"
+                            ob["status"] = "CLEAN_BREAKOUT"
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
@@ -134,16 +134,44 @@ class SweepSignal(BaseSignal):
         triggered_sweep = None
 
         obs = getattr(state_obj, "obs", [])
-        for ob in obs:
+        for ob_idx, ob in enumerate(obs):
             if not isinstance(ob, dict):
                 continue
                 
             if ob.pop("_just_swept", False):
                 is_bullish = ob.get("ob_type") == "BULLISH"
                 current_status = str(ob.get("status", "")).strip().upper()
+                mitigated = bool(ob.get("mitigated"))
+                mitigated_status = "MITIGATED" if mitigated else "NOT_MITIGATED"
                 suffix = "bull" if is_bullish else "bear"
-                status_tag = f"sweep_{current_status.lower()}_{suffix}" if current_status else None
+                status_tag_by_state = {
+                    "TOUCHED": f"sweep_touched_{suffix}",
+                    "SWEEP": f"sweep_{suffix}",
+                    "BROKEN_PENDING": f"sweep_broken_pending_{suffix}",
+                    "STOP_HUNT": f"stop_hunt_{suffix}",
+                    "CLEAN_BREAKOUT": f"clean_breakout_{suffix}",
+                }
+                status_tag = status_tag_by_state.get(current_status)
                 target_price = ob.get("bottom") if is_bullish else ob.get("top")
+
+                # Rule gate: If mitigated, event valid only when c_t - t_mitigation <= 300 seconds
+                mitigation_age = 0
+                if mitigated:
+                    t_mitigation = ob.get("t_mitigation")
+                    try:
+                        t_mitigation_int = int(t_mitigation)
+                    except (TypeError, ValueError):
+                        logger.debug(
+                            f"[t={c_t}] [{symbol}] [calculate] Skip sweep emit: missing/invalid t_mitigation"
+                        )
+                        continue
+
+                    mitigation_age = c_t - t_mitigation_int
+                    if mitigation_age <= 0 or mitigation_age > 300:
+                        logger.debug(
+                            f"[t={c_t}] [{symbol}] [calculate] Skip sweep emit: mitigated age={mitigation_age}s outside <= 300s"
+                        )
+                        continue
 
                 # Regime Check
                 valid = False
@@ -173,7 +201,7 @@ class SweepSignal(BaseSignal):
                             "status": current_status,
                         }
                         logger.info(
-                            f"[t={c_t}] [{symbol}] [calculate] 4... SWEEP DETECTED: {current_status} (Candle Close): {status_tag} @ {target_price}"
+                            f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
                         )
 
                         transient = getattr(state_obj, "transient_signals", None)

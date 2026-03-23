@@ -14,7 +14,7 @@ import time
 import traceback
 from dotenv import load_dotenv
 
-from engine.logging_common import get_logger
+from engine.logging_common import get_logger, refresh_logging_settings_if_needed
 
 # --- Priority Constants ---
 PRIO_TRADE = 1
@@ -477,6 +477,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
     while True:
         try:
+            refresh_logging_settings_if_needed(interval_seconds=5)
             logger.debug(f"Waiting for messages on {group_name}...")
             messages = await r.xreadgroup(
                 group_name, consumer_name,
@@ -774,7 +775,7 @@ async def execute_pulse(payload, r, db_pool, validator):
         llm_latency, total_latency, context, analysis.get('raw_response'), 'PULSE'
         )
         
-        logger.info(f"[{symbol}] [execute_pulse] 1... AI Pulse Complete: {analysis['sentiment']} (ACI: {analysis['aci']}) | Latency: {llm_latency}ms / {total_latency}ms")
+        logger.info(f"[{symbol}] [execute_pulse] AI Pulse Complete: {analysis['sentiment']} (ACI: {analysis['aci']}) | Latency: {llm_latency}ms / {total_latency}ms")
     except Exception as e:
         logger.error(f"[{symbol}] [execute_pulse] Error: {e}")
 

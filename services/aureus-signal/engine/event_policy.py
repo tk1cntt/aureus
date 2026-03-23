@@ -10,30 +10,28 @@ _AI_TAG_TO_TRIGGER = {
     "bos_down": "BREAK_OF_STRUCTURE_BEARISH",
     
     # OBs
-    "ob_bull_new": "ORDER_BLOCK_BULLISH_NEW",
-    "ob_bear_new": "ORDER_BLOCK_BEARISH_NEW",
+    "ob_bull_new": "ORDER_BLOCK_BULLISH",
+    "ob_bear_new": "ORDER_BLOCK_BEARISH",
     "ob_bull_mitigated": "ORDER_BLOCK_BULLISH_MITIGATED",
     "ob_bear_mitigated": "ORDER_BLOCK_BEARISH_MITIGATED",
     
     # FVGs
-    "fvg_bull_new": "FAIR_VALUE_GAP_BULLISH_NEW",
-    "fvg_bear_new": "FAIR_VALUE_GAP_BEARISH_NEW",
+    "fvg_bull_new": "FAIR_VALUE_GAP_BULLISH",
+    "fvg_bear_new": "FAIR_VALUE_GAP_BEARISH",
     "fvg_bull_mitigated": "FAIR_VALUE_GAP_BULLISH_MITIGATED",
     "fvg_bear_mitigated": "FAIR_VALUE_GAP_BEARISH_MITIGATED",
     
     # Sweep States (Bull)
-    "sweep_touched_bull": "LIQUIDITY_SWEEP_TOUCHED_BULLISH",
-    "sweep_sweep_bull": "LIQUIDITY_SWEEP_BULLISH",
+    "sweep_bull": "LIQUIDITY_SWEEP_BULLISH",
     "sweep_broken_pending_bull": "LIQUIDITY_SWEEP_BROKEN_PENDING_BULLISH",
-    "sweep_stop_hunt_bull": "LIQUIDITY_STOP_HUNT_BULLISH",
-    "sweep_dead_bull": "LIQUIDITY_SWEEP_DEAD_BULLISH",
+    "stop_hunt_bull": "LIQUIDITY_STOP_HUNT_BULLISH",
+    "clean_breakout_bull": "CLEAN_BREAKOUT_BULLISH",
     
     # Sweep States (Bear)
-    "sweep_touched_bear": "LIQUIDITY_SWEEP_TOUCHED_BEARISH",
-    "sweep_sweep_bear": "LIQUIDITY_SWEEP_BEARISH",
+    "sweep_bear": "LIQUIDITY_SWEEP_BEARISH",
     "sweep_broken_pending_bear": "LIQUIDITY_SWEEP_BROKEN_PENDING_BEARISH",
-    "sweep_stop_hunt_bear": "LIQUIDITY_STOP_HUNT_BEARISH",
-    "sweep_dead_bear": "LIQUIDITY_SWEEP_DEAD_BEARISH",
+    "stop_hunt_bear": "LIQUIDITY_STOP_HUNT_BEARISH",
+    "clean_breakout_bear": "CLEAN_BREAKOUT_BEARISH",
 }
 
 
@@ -56,12 +54,12 @@ _TRIGGER_PRIORITY = (
     "FAIR_VALUE_GAP_BEARISH_MITIGATED",
     "LIQUIDITY_SWEEP_TOUCHED_BULLISH",
     "LIQUIDITY_SWEEP_TOUCHED_BEARISH",
-    "ORDER_BLOCK_BULLISH_NEW",
-    "ORDER_BLOCK_BEARISH_NEW",
-    "FAIR_VALUE_GAP_BULLISH_NEW",
-    "FAIR_VALUE_GAP_BEARISH_NEW",
-    "LIQUIDITY_SWEEP_DEAD_BULLISH",
-    "LIQUIDITY_SWEEP_DEAD_BEARISH",
+    "ORDER_BLOCK_BULLISH",
+    "ORDER_BLOCK_BEARISH",
+    "FAIR_VALUE_GAP_BULLISH",
+    "FAIR_VALUE_GAP_BEARISH",
+    "CLEAN_BREAKOUT_BULLISH",
+    "CLEAN_BREAKOUT_BEARISH",
 )
 
 

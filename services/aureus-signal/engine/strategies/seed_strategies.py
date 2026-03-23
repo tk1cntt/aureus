@@ -25,8 +25,8 @@ async def seed_system_strategies(pool):
                     {"type": "ema_alignment", "required_slope": "POSITIVE", "period": 21}
                 ],
                 "sequence": [
-                    {"tag": "choch_bull", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_bear"]},
-                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_bear"]},
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]},
                     {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10}
                 ],
                 "trade_execution": {
@@ -35,7 +35,7 @@ async def seed_system_strategies(pool):
                     "tp": {"type": "RR_RATIO", "value": 3.0},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 20},
                     "capital_risk_pct": 1.0,
-                    "early_exits": ["choch_bear"]
+                    "early_exits": ["choch_down"]
                 }
             }
         },
@@ -50,8 +50,8 @@ async def seed_system_strategies(pool):
                     {"type": "session_active", "allowed": ["LONDON", "NEW_YORK"]}
                 ],
                 "sequence": [
-                    {"tag": "choch_bull", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]},
-                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_bear"]}
+                    {"tag": "choch_up", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
                     "size": 1.5,
@@ -59,7 +59,7 @@ async def seed_system_strategies(pool):
                     "tp": {"type": "RR_RATIO", "value": 2.5},
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 15},
                     "capital_risk_pct": 0.5,
-                    "early_exits": ["choch_bear"]
+                    "early_exits": ["choch_down"]
                 }
             }
         },
@@ -75,7 +75,7 @@ async def seed_system_strategies(pool):
                     {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]}
                 ],
                 "sequence": [
-                    {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_bear"]}
+                    {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
                     "size": 3.0,
@@ -83,7 +83,7 @@ async def seed_system_strategies(pool):
                     "tp": {"type": "RR_RATIO", "value": 4.0},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 15},
                     "capital_risk_pct": 1.5,
-                    "early_exits": ["choch_bear"]
+                    "early_exits": ["choch_down"]
                 }
             }
         }
