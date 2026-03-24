@@ -37,6 +37,7 @@ from engine.event_filter import has_structural_event
 from engine.event_policy import evaluate_ai_trigger_events
 
 logger = get_logger(__name__)
+PIPELINE_LOG_PREFIX = "[PIPELINE]"
 def load_symbols_config(path="symbols.json"):
     try:
         if not os.path.exists(path):
@@ -580,6 +581,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
 
+                            accepted_count = len(strategy_results) if strategy_results else 0
+                            rejection_count = len(registry_rejections) if registry_rejections else 0
+                            logger.info(
+                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
+                                f"t={ts_unix} accepted={accepted_count} rejections={rejection_count}"
+                            )
+
                             normalized_snapshot = None
                             if strategy_results or registry_rejections:
                                 normalized_snapshot = build_normalized_signal_snapshot(signals, state)
@@ -591,6 +599,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 )
 
                             if registry_rejections:
+                                logger.warning(
+                                    f"{PIPELINE_LOG_PREFIX}[{symbol}][D][post_evaluate_all][emit_rejections] "
+                                    f"t={ts_unix} count={len(registry_rejections)}"
+                                )
                                 enriched_rejections = enrich_registry_rejections_with_contract_metadata(
                                     symbol=symbol,
                                     rejections=registry_rejections,
@@ -603,6 +615,10 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 await trade_manager.update_orders(symbol, data, state)
                             
                             if strategy_results:
+                                logger.info(
+                                    f"{PIPELINE_LOG_PREFIX}{symbol}[to_process_triggers] "
+                                    f"t={ts_unix} accepted_count={len(strategy_results)}"
+                                )
                                 pending_order = await trade_manager.process_triggers(
                                     symbol,
                                     strategy_results,
@@ -610,12 +626,21 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     ai_validator,
                                     execution_mode=execution_mode,
                                 )
+                                logger.info(
+                                    f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][process_triggers_done] "
+                                    f"t={ts_unix} pending_ai={bool(pending_order)}"
+                                )
                                 if pending_order:
                                     await queue_ai_audit_task(ai_queue, ai_validator, symbol, df, state, pending_order)
                                 
                                 for res in strategy_results:
                                     logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
                                     state.log_signal(f"strat:{res['strategy']}", res['t'])
+                            else:
+                                logger.debug(
+                                    f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][no_accepted] "
+                                    f"t={ts_unix}"
+                                )
 
                             await r.xack(stream_key, group_name, entry_id)
 

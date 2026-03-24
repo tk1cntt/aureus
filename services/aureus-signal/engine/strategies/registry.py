@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import BaseStrategy
 
 logger = get_logger(__name__)
+PIPELINE_LOG_PREFIX = "[PIPELINE]"
 class StrategyRegistry:
     """Registry for managing and executing trading strategies.
 
@@ -163,11 +164,13 @@ class StrategyRegistry:
         """
         accepted: List[Dict[str, Any]] = []
         bar_ts = int(df.iloc[-1]["t"]) if df is not None and len(df) > 0 and "t" in df.columns else 0
+        symbol = str(getattr(state_obj, "symbol", "UNKNOWN") or "UNKNOWN")
         context = {
             "df": df,
             "signals": signals,
             "state": state_obj,
             "bar_ts": bar_ts,
+            "symbol": symbol,
         }
 
         for name, strategy in self._strategies.items():
@@ -182,15 +185,87 @@ class StrategyRegistry:
                         reason_code=reason_code or "UNKNOWN_REJECTION",
                         details=details,
                     )
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=compatibility "
+                        f"reason_code={reason_code or 'UNKNOWN_REJECTION'} bar_t={bar_ts}"
+                    )
                     continue
 
+                logger.debug(
+                    f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][start] "
+                    f"strategy={name} strategy_id={strategy_id} bar_t={bar_ts}"
+                )
                 intent = strategy.on_bar_close(context)
                 if not intent:
+                    logger.info(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][no_intent] "
+                        f"strategy={name} strategy_id={strategy_id} bar_t={bar_ts}"
+                    )
+                    logger.info(
+                        f"{PIPELINE_LOG_PREFIX}[SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=on_bar_close "
+                        f"reason_code=NO_INTENT bar_t={bar_ts}"
+                    )
                     # No trigger is not a rejection; strategy simply did not emit intent.
+                    continue
+
+                logger.info(
+                    f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent] "
+                    f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                    f"reason_code={intent.get('reason_code', 'N/A')} "
+                    f"is_actionable={intent.get('is_actionable', 'N/A')} "
+                    f"score={intent.get('score', 'N/A')} t={intent.get('t', bar_ts)}"
+                )
+
+                if intent.get("is_actionable") is False:
+                    intent_reason = str(intent.get("reason_code", "NON_ACTIONABLE_INTENT")).strip().upper() or "NON_ACTIONABLE_INTENT"
+                    diagnostics = intent.get("sequence_diagnostics", {}) if isinstance(intent.get("sequence_diagnostics"), dict) else {}
+                    reject_diag = {}
+                    if intent_reason == "SEQUENCE_NOT_MATCHED":
+                        reject_diag = {
+                            "mismatch_reason": diagnostics.get("mismatch_reason"),
+                            "missing_required_tags": diagnostics.get("missing_required_tags", []),
+                            "current_step_index": diagnostics.get("current_step_index"),
+                            "matched_steps": diagnostics.get("matched_steps"),
+                            "total_steps": diagnostics.get("total_steps"),
+                        }
+
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][reject] "
+                        f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                        f"reason_code={intent_reason} diagnostics={reject_diag if reject_diag else 'N/A'}"
+                    )
+                    self._record_rejection(
+                        strategy_name=name,
+                        strategy_id=strategy_id,
+                        phase="on_bar_close",
+                        reason_code=intent_reason,
+                        details={
+                            "symbol": symbol,
+                            "intent_id": intent.get("intent_id"),
+                            "evaluated_rules": intent.get("evaluated_rules", []),
+                            "evidence_refs": intent.get("evidence_refs", []),
+                            "sequence_diagnostics_summary": reject_diag,
+                            "t": intent.get("t", bar_ts),
+                        },
+                    )
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=on_bar_close "
+                        f"intent_id={intent.get('intent_id')} reason_code={intent_reason} "
+                        f"bar_t={intent.get('t', bar_ts)}"
+                    )
                     continue
 
                 validation = strategy.validate_entry(intent, context)
                 if not validation.get("is_valid", False):
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][B][validate_entry][reject] "
+                        f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                        f"reason_code={validation.get('reason_code', 'VALIDATION_REJECTED')} "
+                        f"failed_rules={validation.get('failed_rules', [])}"
+                    )
                     self._record_rejection(
                         strategy_name=name,
                         strategy_id=strategy_id,
@@ -203,10 +278,22 @@ class StrategyRegistry:
                             "t": intent.get("t", bar_ts),
                         },
                     )
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=validate_entry "
+                        f"intent_id={intent.get('intent_id')} "
+                        f"reason_code={validation.get('reason_code', 'VALIDATION_REJECTED')} "
+                        f"bar_t={intent.get('t', bar_ts)}"
+                    )
                     continue
 
                 order_plan = strategy.build_order_plan(intent, context)
                 if not isinstance(order_plan, dict):
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][C][build_order_plan][invalid_shape] "
+                        f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                        f"returned_type={type(order_plan).__name__}"
+                    )
                     self._record_rejection(
                         strategy_name=name,
                         strategy_id=strategy_id,
@@ -217,10 +304,20 @@ class StrategyRegistry:
                             "returned_type": type(order_plan).__name__,
                         },
                     )
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=build_order_plan "
+                        f"intent_id={intent.get('intent_id')} reason_code=ORDER_PLAN_INVALID_SHAPE bar_t={bar_ts}"
+                    )
                     continue
 
                 plan_reason = str(order_plan.get("reason_code", "OK")).strip().upper()
                 if plan_reason not in {"", "OK"}:
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][C][build_order_plan][reject] "
+                        f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                        f"reason_code={plan_reason}"
+                    )
                     self._record_rejection(
                         strategy_name=name,
                         strategy_id=strategy_id,
@@ -231,7 +328,18 @@ class StrategyRegistry:
                             "evaluated_rules": order_plan.get("evaluated_rules", []),
                         },
                     )
+                    logger.warning(
+                        f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
+                        f"strategy={name} strategy_id={strategy_id} phase=build_order_plan "
+                        f"intent_id={intent.get('intent_id')} reason_code={plan_reason} bar_t={bar_ts}"
+                    )
                     continue
+
+                logger.debug(
+                    f"{PIPELINE_LOG_PREFIX}[{symbol}][C][build_order_plan][ok] "
+                    f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                    f"entry_type={order_plan.get('entry_type')} entry_policy={order_plan.get('entry_policy')}"
+                )
 
                 accepted.append(
                     {
@@ -255,6 +363,11 @@ class StrategyRegistry:
                         "validation": validation,
                         "order_plan": order_plan,
                     }
+                )
+                logger.info(
+                    f"{PIPELINE_LOG_PREFIX}[{symbol}][C][accepted] "
+                    f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
+                    f"t={int(intent.get('t', bar_ts) or bar_ts)}"
                 )
             except Exception as e:
                 self._record_rejection(

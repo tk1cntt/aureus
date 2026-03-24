@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -37,13 +38,18 @@ class SessionSignal(BaseSignal):
 
         return dst_start <= dt < dst_end
 
-    def _classify_user_session(self, time_user: float) -> str:
-        """Classifies user-local time (GMT offset based) into session windows."""
-        if 7.0 <= time_user < 11.0:
+    def _classify_user_session(self, time_new_york: float) -> str:
+        """Classifies New York local time into trading session windows."""
+        # Windows expressed in America/New_York local time.
+        # These preserve the historical intent of prior GMT+7 windows:
+        #   - ASIA      ~ 19:00-23:00 NY
+        #   - LONDON    ~ 02:00-05:00 NY
+        #   - NEW_YORK  ~ 07:00-11:00 NY
+        if 19.0 <= time_new_york < 23.0:
             return "ASIA"
-        if 14.0 <= time_user < 17.0:
+        if 2.0 <= time_new_york < 5.0:
             return "LONDON"
-        if 19.0 <= time_user < 23.0:
+        if 7.0 <= time_new_york < 11.0:
             return "NEW_YORK"
         return "LUNCH_TIME"
 
@@ -75,12 +81,13 @@ class SessionSignal(BaseSignal):
         is_dst = self.is_broker_dst(dt_utc)
         broker_offset = 3 if is_dst else 2
 
-        # Calculate Broker Time & User Time (GMT+7 by default)
+        # Calculate broker/server time, user-local informational time, and New York classification time.
         dt_broker = dt_utc + timedelta(hours=broker_offset)
         dt_user = dt_utc + timedelta(hours=self.gmt_user)
+        dt_new_york = dt_utc.astimezone(ZoneInfo("America/New_York"))
 
-        time_user = dt_user.hour + (dt_user.minute / 60.0)
-        session = self._classify_user_session(time_user)
+        time_new_york = dt_new_york.hour + (dt_new_york.minute / 60.0)
+        session = self._classify_user_session(time_new_york)
 
         high = self._extract_last_float(df, "h")
         low = self._extract_last_float(df, "l")

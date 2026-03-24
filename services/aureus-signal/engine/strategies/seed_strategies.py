@@ -16,18 +16,12 @@ async def seed_system_strategies(pool):
         {
             "name": "TREND_CONT",
             "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
-            "min_score": 6.5,
+            "min_score": 3.0,
             "config": {
-                "min_score_threshold": 6.5,
-                "context_filters": [
-                    {"type": "trend_alignment", "required_trend": "BULLISH"},
-                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]},
-                    {"type": "ema_alignment", "required_slope": "POSITIVE", "period": 21}
-                ],
+                "min_score_threshold": 0,
+                "context_filters": [],
                 "sequence": [
-                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
-                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]},
-                    {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10}
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30 }
                 ],
                 "trade_execution": {
                     "size": 2.0,
@@ -45,10 +39,7 @@ async def seed_system_strategies(pool):
             "min_score": 6.0,
             "config": {
                 "min_score_threshold": 6.0,
-                "context_filters": [
-                    {"type": "trend_alignment", "required_trend": "BULLISH"},
-                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK"]}
-                ],
+                "context_filters": [],
                 "sequence": [
                     {"tag": "choch_up", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
                     {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]}
@@ -66,14 +57,10 @@ async def seed_system_strategies(pool):
         {
             "name": "ORDER_FLOW_DOM",
             "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
-            "min_score": 7.0,
+            "min_score": 6.0,
             "config": {
-                "min_score_threshold": 7.0,
-                "context_filters": [
-                    {"type": "trend_alignment", "required_trend": "BULLISH"},
-                    {"type": "ob_imbalance", "min_ratio": 3.0, "lookback": 10},
-                    {"type": "session_active", "allowed": ["LONDON", "NEW_YORK", "LONDON_NY_OVERLAP"]}
-                ],
+                "min_score_threshold": 6.0,
+                "context_filters": [],
                 "sequence": [
                     {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],

@@ -6,6 +6,7 @@ class MockState:
     def __init__(self):
         self.signal_history = []
         self.strategy_progress = {}
+        self.symbol = "XAUUSD"
 
 class PureState:
     pass
@@ -180,11 +181,17 @@ def test_on_bar_close_coverage():
     ctx["backfill_status"] = "READY"
     res = strategy.on_bar_close(ctx)
     assert res["reason_code"] == "SEQUENCE_NOT_MATCHED"
+    assert res["sequence_diagnostics"]["mismatch_reason"] == "MISSING_REQUIRED_AND_SCORE_BELOW_THRESHOLD"
+    assert res["sequence_diagnostics"]["missing_required_tags"] == ["T1"]
+    assert res["sequence_diagnostics"]["current_step_index"] == 0
+    assert res["sequence_diagnostics"]["step_status"][0]["tag"] == "T1"
+    assert res["sequence_diagnostics"]["step_status"][0]["status"] == "waiting"
     
     # Match OK
     state.signal_history.append({"tag": "T1", "t": 1000})
     res = strategy.on_bar_close(ctx)
     assert res["reason_code"] == "OK"
+    assert res["symbol"] == "XAUUSD"
 
 def test_validate_entry_coverage():
     strategy = TemplateStrategy({"name": "val_strat"})

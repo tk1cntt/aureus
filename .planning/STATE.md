@@ -31,7 +31,7 @@ Plan: Not started
 
 ### Roadmap Evolution
 
-- Phase 21 added: Update SWEEP detected rules for OB states and analyze sentiment mapping via _AI_TAG_TO_TRIGGER
+- Phase 15.7 added: Sequence enabled but no-entry trigger diagnosis
 
 - v1.1 Signal Optimization: Toàn bộ tín hiệu lõi modular hóa, 100% test coverage
 - v1.2 Strategy Sequence Engine: O(1) state machine, 3-pillar framework, legacy deprecated

@@ -4,7 +4,12 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from engine.logging_common import get_logger
+
 from .base import BaseStrategy
+
+logger = get_logger(__name__)
+PIPELINE_LOG_PREFIX = "[PIPELINE]"
 
 
 class TemplateStrategy(BaseStrategy):
@@ -257,11 +262,76 @@ class TemplateStrategy(BaseStrategy):
 
         return None
 
+    def _build_sequence_diagnostics(self, core: Dict[str, Any]) -> Dict[str, Any]:
+        progress_data = core.get("progress_data", {})
+        sequence_steps = progress_data.get("sequence", [])
+        current_step_index = int(progress_data.get("current_step_index", 0) or 0)
+        score = float(core.get("score", 0.0) or 0.0)
+        score_gap = max(0.0, float(self.min_score) - score)
+
+        step_statuses: List[Dict[str, Any]] = []
+        missing_required_tags: List[str] = []
+
+        for idx, step in enumerate(sequence_steps):
+            status = step.get("status", "unknown")
+            required = bool(step.get("required", False))
+            tag = str(step.get("tag", "UNKNOWN"))
+            if required and status != "matched":
+                missing_required_tags.append(tag)
+
+            step_statuses.append(
+                {
+                    "index": idx,
+                    "tag": tag,
+                    "required": required,
+                    "status": status,
+                    "is_matched": status == "matched",
+                    "is_current_expected": idx == current_step_index,
+                    "weight": step.get("weight", 0),
+                    "time": step.get("time"),
+                    "max_wait": step.get("max_wait", 0),
+                    "reset_signals": step.get("reset_signals", []),
+                }
+            )
+
+        missing_required = bool(core.get("missing_required", False))
+        score_below = score < float(self.min_score)
+
+        if missing_required and score_below:
+            mismatch_reason = "MISSING_REQUIRED_AND_SCORE_BELOW_THRESHOLD"
+        elif missing_required:
+            mismatch_reason = "MISSING_REQUIRED_STEP"
+        elif score_below:
+            mismatch_reason = "SCORE_BELOW_THRESHOLD"
+        elif not sequence_steps:
+            mismatch_reason = "NO_SEQUENCE_CONFIG"
+        else:
+            mismatch_reason = "UNKNOWN_SEQUENCE_MISMATCH"
+
+        return {
+            "mismatch_reason": mismatch_reason,
+            "missing_required": missing_required,
+            "missing_required_tags": missing_required_tags,
+            "score": score,
+            "min_score": float(self.min_score),
+            "score_gap": score_gap,
+            "current_step_index": current_step_index,
+            "matched_steps": int(core.get("matched_steps", 0) or 0),
+            "total_steps": len(sequence_steps),
+            "step_status": step_statuses,
+        }
+
     def on_bar_close(self, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         df = context.get("df")
         state_obj = context.get("state")
+        symbol = str(getattr(state_obj, "symbol", "UNKNOWN") or "UNKNOWN")
 
         if df is None or state_obj is None:
+            logger.warning(
+                f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][invalid_context] "
+                f"strategy={self.name} strategy_id={self.strategy_id} "
+                f"has_df={df is not None} has_state={state_obj is not None}"
+            )
             return {
                 "strategy": self.name,
                 "strategy_id": self.strategy_id,
@@ -276,6 +346,11 @@ class TemplateStrategy(BaseStrategy):
         bar_ts = int(df.iloc[-1]["t"])
         backfill_status = context.get("backfill_status", "READY")
         if backfill_status != "READY":
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][backfill_not_ready] "
+                f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
+                f"backfill_status={backfill_status}"
+            )
             return {
                 "intent_id": f"{self.name}:{self.strategy_id}:{bar_ts}",
                 "strategy": self.name,
@@ -293,6 +368,7 @@ class TemplateStrategy(BaseStrategy):
         ctx = self._evaluate_context(state_obj)
 
         core = self._evaluate_sequence(df, state_obj)
+        diagnostics = self._build_sequence_diagnostics(core)
 
         # Determine reason_code: context must pass AND sequence must match
         if not ctx["passed"]:
@@ -302,16 +378,30 @@ class TemplateStrategy(BaseStrategy):
         else:
             reason_code = "OK"
 
+        if reason_code != "OK":
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent_not_actionable] "
+                f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
+                f"reason_code={reason_code} score={core['score']} min_score={self.min_score} "
+                f"missing_required={core['missing_required']} failed_filters={ctx['failed_filters']} "
+                f"matched_steps={core['matched_steps']} mismatch_reason={diagnostics['mismatch_reason']} "
+                f"missing_required_tags={diagnostics['missing_required_tags']} "
+                f"current_step_index={diagnostics['current_step_index']} "
+                f"step_status={diagnostics['step_status']}"
+            )
+
         return {
             "intent_id": f"{self.name}:{self.strategy_id}:{bar_ts}",
             "strategy": self.name,
             "strategy_id": self.strategy_id,
             "strategy_version": self.strategy_version,
             "direction": "BUY",
+            "symbol": symbol,
             "reason_code": reason_code,
             "is_actionable": reason_code == "OK",
             "score": core["score"],
             "origin_timestamp": core["origin_timestamp"],
+            "sequence_diagnostics": diagnostics,
             "evaluated_rules": [
                 {
                     "rule": "CONTEXT_FILTER",
@@ -322,18 +412,24 @@ class TemplateStrategy(BaseStrategy):
                     "rule": "SEQUENCE_MATCH",
                     "passed": not core["missing_required"],
                     "matched_steps": core["matched_steps"],
+                    "missing_required_tags": diagnostics["missing_required_tags"],
+                    "current_step_index": diagnostics["current_step_index"],
+                    "step_status": diagnostics["step_status"],
+                    "mismatch_reason": diagnostics["mismatch_reason"],
                 },
                 {
                     "rule": "MIN_SCORE_THRESHOLD",
                     "passed": core["score"] >= self.min_score,
                     "score": core["score"],
                     "min_score": self.min_score,
+                    "score_gap": diagnostics["score_gap"],
                 },
             ],
             "evidence_refs": [
                 {"type": "strategy_progress", "ref": self.name},
                 {"type": "sequence", "value": core["progress_data"].get("sequence", [])},
                 {"type": "context_details", "value": ctx["details"]},
+                {"type": "sequence_diagnostics", "value": diagnostics},
             ],
             "legacy_result": self.evaluate(df, context.get("signals", {}), state_obj),
             "exit_config": self.exit_config,
@@ -342,6 +438,10 @@ class TemplateStrategy(BaseStrategy):
 
     def validate_entry(self, intent: Optional[Dict[str, Any]], context: Dict[str, Any]) -> Dict[str, Any]:
         if not intent:
+            logger.warning(
+                f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
+                f"strategy={self.name} strategy_id={self.strategy_id} reason_code=NO_INTENT"
+            )
             return {
                 "is_valid": False,
                 "failed_rules": ["INTENT_MISSING"],
@@ -349,7 +449,16 @@ class TemplateStrategy(BaseStrategy):
                 "evaluated_rules": [{"rule": "INTENT_PRESENT", "passed": False}],
             }
 
-        if intent.get("reason_code") == "BACKFILL_NOT_READY":
+        intent_id = intent.get("intent_id", "N/A")
+        intent_reason = intent.get("reason_code", "UNKNOWN")
+        bar_t = intent.get("t", 0)
+
+        if intent_reason == "BACKFILL_NOT_READY":
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
+                f"strategy={self.name} strategy_id={self.strategy_id} intent_id={intent_id} "
+                f"t={bar_t} reason_code=BACKFILL_NOT_READY"
+            )
             return {
                 "is_valid": False,
                 "failed_rules": ["BACKFILL_NOT_READY"],
@@ -358,11 +467,17 @@ class TemplateStrategy(BaseStrategy):
             }
 
         if not intent.get("is_actionable"):
+            propagated_reason = str(intent_reason or "NON_ACTIONABLE_INTENT").strip().upper() or "NON_ACTIONABLE_INTENT"
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
+                f"strategy={self.name} strategy_id={self.strategy_id} intent_id={intent_id} "
+                f"t={bar_t} reason_code={propagated_reason} failed_rules=['{propagated_reason}']"
+            )
             return {
                 "is_valid": False,
-                "failed_rules": ["SEQUENCE_NOT_MATCHED"],
-                "reason_code": "SEQUENCE_NOT_MATCHED",
-                "evaluated_rules": [{"rule": "SEQUENCE_MATCH", "passed": False}],
+                "failed_rules": [propagated_reason],
+                "reason_code": propagated_reason,
+                "evaluated_rules": [{"rule": "ACTIONABLE_INTENT", "passed": False}],
             }
 
         return {

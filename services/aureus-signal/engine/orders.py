@@ -6,6 +6,7 @@ from typing import Dict, List, Any
 from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS
 
 logger = get_logger(__name__)
+PIPELINE_LOG_PREFIX = "[PIPELINE]"
 class SimulatedTradeManager:
     """Manages creation, monitoring and closure of simulated trades."""
     
@@ -25,16 +26,31 @@ class SimulatedTradeManager:
         for t in triggers:
             strat_id = t.get('strategy_id', 0)
             origin_t = t.get('origin_timestamp')
+            strategy_name = t.get('strategy', 'UNKNOWN')
             
             if not origin_t:
-                logger.warning(f"[{symbol}] [process_triggers] Error: Trigger {t['strategy']} missing origin_timestamp, skipping order.")
+                logger.warning(
+                    f"{PIPELINE_LOG_PREFIX}[D][process_triggers][missing_origin_timestamp] "
+                    f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} "
+                    f"reason_code=MISSING_ORIGIN_TIMESTAMP"
+                )
+                logger.warning(f"[{symbol}] [process_triggers] Error: Trigger {strategy_name} missing origin_timestamp, skipping order.")
                 continue
 
             trace_id = f"{symbol}:{strat_id}:{origin_t}"
+            logger.debug(
+                f"{PIPELINE_LOG_PREFIX}[D][process_triggers][candidate] "
+                f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id}"
+            )
             
             # Check for existing TraceID in Redis
             history_key = f"aureus:orders:history:{symbol}"
             if await self.r.sismember(history_key, trace_id):
+                logger.debug(
+                    f"{PIPELINE_LOG_PREFIX}[D][process_triggers][duplicate_trace] "
+                    f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
+                    f"reason_code=DUPLICATE_TRACE_ID"
+                )
                 continue # Already processed this setup
 
             order_plan_snapshot = self._build_order_plan_snapshot(t)
@@ -44,6 +60,11 @@ class SimulatedTradeManager:
             sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
 
             if sl is None or tp is None:
+                logger.warning(
+                    f"{PIPELINE_LOG_PREFIX}[D][process_triggers][sl_tp_calc_failed] "
+                    f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
+                    f"reason_code=SL_TP_CALC_FAILED sl={sl} tp={tp}"
+                )
                 logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
                 continue
 
@@ -59,7 +80,7 @@ class SimulatedTradeManager:
                     "trace_id": trace_id,
                     "symbol": symbol,
                     "strategy_id": strat_id,
-                    "strategy_name": t.get("strategy", "UNKNOWN"),
+                    "strategy_name": strategy_name,
                     "decision_phase": "process_triggers",
                     "status": "REJECTED",
                     "reason_code": "ORDER_PLAN_INCOMPLETE",
@@ -76,12 +97,21 @@ class SimulatedTradeManager:
                     },
                 )
                 logger.warning(
-                    f"[{symbol}] [process_triggers] Trigger {t['strategy']}: Incomplete order plan for {trace_id}. "
+                    f"{PIPELINE_LOG_PREFIX}[D][process_triggers][order_plan_incomplete] "
+                    f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
+                    f"reason_code=ORDER_PLAN_INCOMPLETE missing_keys={missing_order_plan_keys}"
+                )
+                logger.warning(
+                    f"[{symbol}] [process_triggers] Trigger {strategy_name}: Incomplete order plan for {trace_id}. "
                     f"Missing keys: {missing_order_plan_keys}"
                 )
                 continue
 
             # It's a NEW trade!
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[D][process_triggers][new_trade] "
+                f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id}"
+            )
             logger.info(f"[{symbol}] [process_triggers] NEW Simulated Trade Triggered: {trace_id}")
                 
             # 2. Determine Side

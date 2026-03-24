@@ -78,6 +78,35 @@ class _PhasedRejectStrategy(BaseStrategy):
         }
 
 
+class _NonActionableSequenceStrategy(BaseStrategy):
+    def __init__(self):
+        super().__init__(name="NON_ACTIONABLE_SEQUENCE", strategy_id=505)
+
+    def evaluate(self, df, signals, state):
+        return None
+
+    def on_bar_close(self, context):
+        return {
+            "intent_id": "NON_ACTIONABLE_SEQUENCE:1",
+            "strategy": self.name,
+            "strategy_id": self.strategy_id,
+            "strategy_version": self.strategy_version,
+            "direction": "BUY",
+            "t": 1710000060,
+            "origin_timestamp": 1710000060,
+            "exit_config": {},
+            "reason_code": "SEQUENCE_NOT_MATCHED",
+            "is_actionable": False,
+            "sequence_diagnostics": {
+                "mismatch_reason": "MISSING_REQUIRED_STEP",
+                "missing_required_tags": ["CHOCH_BULL"],
+                "current_step_index": 0,
+                "matched_steps": 0,
+                "total_steps": 2,
+            },
+        }
+
+
 class TestStrategyContractV1(unittest.TestCase):
     def test_base_strategy_exposes_required_metadata_fields(self):
         strategy = _LegacyEvaluateStrategy()
@@ -244,6 +273,32 @@ class TestStrategyContractV1(unittest.TestCase):
         self.assertEqual(rejections[0]["strategy"], "PHASED_REJECT")
         self.assertEqual(rejections[0]["phase"], "validate_entry")
         self.assertEqual(rejections[0]["reason_code"], "VALIDATION_RULE_FAILED")
+
+    def test_registry_on_bar_close_rejection_includes_symbol_and_sequence_summary(self):
+        registry = StrategyRegistry(active_spec_version="v1")
+        registry.register(_NonActionableSequenceStrategy())
+
+        state_obj = SimpleNamespace(symbol="XAUUSD", signal_history=[])
+        df = pd.DataFrame([{"t": 1710000060, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
+
+        accepted = registry.evaluate_all(df=df, signals={}, state_obj=state_obj)
+        self.assertEqual(accepted, [])
+
+        rejections = registry.get_rejections()
+        self.assertEqual(len(rejections), 1)
+        rejection = rejections[0]
+        self.assertEqual(rejection["strategy"], "NON_ACTIONABLE_SEQUENCE")
+        self.assertEqual(rejection["phase"], "on_bar_close")
+        self.assertEqual(rejection["reason_code"], "SEQUENCE_NOT_MATCHED")
+        self.assertEqual(rejection["details"]["symbol"], "XAUUSD")
+        self.assertEqual(
+            rejection["details"]["sequence_diagnostics_summary"]["mismatch_reason"],
+            "MISSING_REQUIRED_STEP",
+        )
+        self.assertEqual(
+            rejection["details"]["sequence_diagnostics_summary"]["missing_required_tags"],
+            ["CHOCH_BULL"],
+        )
 
 
 if __name__ == "__main__":

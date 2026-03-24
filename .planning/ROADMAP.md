@@ -15,11 +15,13 @@ See `.planning/archive/` for full archives.
 
 **Goal:** Validate strategy quality independently → integrate NautilusTrader BacktestEngine → persist results → Custom UI + Grafana.
 
-**Phases:** 6
+**Phases:** 8
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 15.5 | 0/4 | Planned    |  |
+| 15.5 | Strategy Quality Assurance | STRATQA-01→05 | PLANNED |
+| 15.6 | Sweep rule & AI sentiment stabilization | Internal stabilization | ✅ COMPLETE |
+| 15.7 | Sequence enabled but no-entry trigger diagnosis | Internal strategy debug/instrumentation | PLANNED |
 | 16 | Schema & Data Loader | SCHEMA-01→04 | NOT STARTED |
 | 17 | Signal Actor & Strategy Adapter | NAUTILUS-01→06, PARITY-01→03 | NOT STARTED |
 | 18 | Metrics & Result Persistence | METRIC-01→08, QUALITY-01, MEASURE-01→03 | NOT STARTED |
@@ -106,6 +108,20 @@ Plans:
 - [x] Cập nhật rule `SWEEP DETECTED` theo OB states và verify bằng test
 - [x] Điều tra warning `missing origin_timestamp` trong live path và chốt root-cause
 - [x] Phân tích mapping sentiment qua `_AI_TAG_TO_TRIGGER`, xác nhận sentiment là dự đoán AI nên không thay đổi logic
+
+### Phase 15.7: Strategy sequences enabled nhưng không trigger vào lệnh
+
+**Goal:** Phân tích và xác định nguyên nhân tại sao strategy có sequence conditions đều bật/đạt nhưng không sinh trade intent hoặc không đi tới order submission.
+**Requirements**: Internal strategy debug/instrumentation (entry gating path observability)
+**Depends on:** Phase 15.6
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] Thảo luận và chốt giả thuyết nguyên nhân chính trên luồng `on_bar_close` → `validate_entry` → `build_order_plan`
+- [ ] Xác định điểm cần instrument/log để tách bạch lỗi do signal, context_filters, sequence matcher hay risk/execution guard
+- [ ] Tạo context đầu vào cho research/planning phase fix
+
+
 
 ---
 

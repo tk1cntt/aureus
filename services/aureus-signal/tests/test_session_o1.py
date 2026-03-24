@@ -38,33 +38,40 @@ class TestSessionSignalBehavior(unittest.TestCase):
     def test_classifies_gmt7_boundaries_as_expected(self):
         state = _DummyState()
 
-        asia_result = self.signal.calculate(
-            _df_from_row({"t": 1704067200, "o": 2050.0, "h": 2051.0, "l": 2049.0}),  # 07:00 GMT+7
-            state,
-        )
-        self.assertIsNotNone(asia_result)
-        self.assertEqual(asia_result["session"], "ASIA")
-
         london_result = self.signal.calculate(
-            _df_from_row({"t": 1704092400, "o": 2051.0, "h": 2052.0, "l": 2050.0}),  # 14:00 GMT+7
+            _df_from_row({"t": 1704092400, "o": 2051.0, "h": 2052.0, "l": 2050.0}),  # 02:00 New York (winter)
             state,
         )
         self.assertIsNotNone(london_result)
         self.assertEqual(london_result["session"], "LONDON")
 
         ny_result = self.signal.calculate(
-            _df_from_row({"t": 1704110400, "o": 2052.0, "h": 2053.0, "l": 2051.0}),  # 19:00 GMT+7
+            _df_from_row({"t": 1704110400, "o": 2052.0, "h": 2053.0, "l": 2051.0}),  # 07:00 New York (winter)
             state,
         )
         self.assertIsNotNone(ny_result)
         self.assertEqual(ny_result["session"], "NEW_YORK")
 
         lunch_result = self.signal.calculate(
-            _df_from_row({"t": 1704124800, "o": 2053.0, "h": 2054.0, "l": 2052.0}),  # 23:00 GMT+7
+            _df_from_row({"t": 1704128400, "o": 2053.0, "h": 2054.0, "l": 2052.0}),  # 12:00 New York (winter)
             state,
         )
         self.assertIsNotNone(lunch_result)
         self.assertEqual(lunch_result["session"], "LUNCH_TIME")
+
+        asia_result = self.signal.calculate(
+            _df_from_row({"t": 1704153600, "o": 2050.0, "h": 2051.0, "l": 2049.0}),  # 19:00 New York (winter)
+            state,
+        )
+        self.assertIsNotNone(asia_result)
+        self.assertEqual(asia_result["session"], "ASIA")
+
+        asia_dst_result = self.signal.calculate(
+            _df_from_row({"t": 1719874800, "o": 2050.0, "h": 2051.0, "l": 2049.0}),  # 19:00 New York (summer/EDT)
+            state,
+        )
+        self.assertIsNotNone(asia_dst_result)
+        self.assertEqual(asia_dst_result["session"], "ASIA")
 
     def test_updates_session_hlo_deterministically_within_same_session(self):
         state = _DummyState()
