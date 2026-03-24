@@ -100,7 +100,7 @@ Canonical refs: existing `aureus-nautilus-node/` as adapter pattern reference
 **Goal:** Ổn định chất lượng trigger event cho sweep lifecycle và chốt rõ vai trò của sentiment AI để tránh sửa sai hướng.
 **Requirements**: Internal stabilization (sweep/event-policy/logging observability)
 **Depends on:** Phase 15.5
-**Plans:** 3/3 completed
+**Plans:** 1/1 plans complete
 
 Plans:
 - [x] Cập nhật rule `SWEEP DETECTED` theo OB states và verify bằng test
