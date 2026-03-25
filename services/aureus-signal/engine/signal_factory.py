@@ -136,7 +136,7 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
     signal_set = {
         "vol_sma": VolumeSMASignal(20),
         "trend": TrendSignal(200),
-        "session": SessionSignal(gmt_user=7),
+        "session": SessionSignal(gmt_user=4),
         "pivots": pivots_sig,
         "structure_processor": StructureSignal(),
         "sweep_processor": SweepSignal(),

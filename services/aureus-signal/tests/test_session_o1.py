@@ -24,7 +24,7 @@ def _df_from_row(row):
 
 class TestSessionSignalBehavior(unittest.TestCase):
     def setUp(self):
-        self.signal = SessionSignal(gmt_user=7)
+        self.signal = SessionSignal(gmt_user=4)
 
     def test_calculate_returns_none_for_missing_required_columns(self):
         state = _DummyState()

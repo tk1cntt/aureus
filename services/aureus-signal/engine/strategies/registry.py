@@ -349,7 +349,7 @@ class StrategyRegistry:
                         "spec_version": self.active_spec_version,
                         "reason_code": "OK",
                         "t": int(intent.get("t", bar_ts) or bar_ts),
-                        "origin_timestamp": intent.get("origin_timestamp", intent.get("t", bar_ts)),
+                        "origin_timestamp": intent.get("origin_timestamp") or intent.get("t") or bar_ts,
                         "side": order_plan.get("direction", intent.get("direction", "BUY")),
                         "entry_type": order_plan.get("entry_type", "MARKET"),
                         "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),

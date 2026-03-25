@@ -78,6 +78,28 @@ class _PhasedRejectStrategy(BaseStrategy):
         }
 
 
+class _OriginNoneStrategy(BaseStrategy):
+    def __init__(self):
+        super().__init__(name="ORIGIN_NONE", strategy_id=606)
+
+    def evaluate(self, df, signals, state):
+        return None
+
+    def on_bar_close(self, context):
+        return {
+            "intent_id": "ORIGIN_NONE:1",
+            "strategy": self.name,
+            "strategy_id": self.strategy_id,
+            "strategy_version": self.strategy_version,
+            "direction": "BUY",
+            "t": 1710000120,
+            "origin_timestamp": None,
+            "exit_config": {},
+            "reason_code": "OK",
+            "is_actionable": True,
+        }
+
+
 class _NonActionableSequenceStrategy(BaseStrategy):
     def __init__(self):
         super().__init__(name="NON_ACTIONABLE_SEQUENCE", strategy_id=505)
@@ -273,6 +295,19 @@ class TestStrategyContractV1(unittest.TestCase):
         self.assertEqual(rejections[0]["strategy"], "PHASED_REJECT")
         self.assertEqual(rejections[0]["phase"], "validate_entry")
         self.assertEqual(rejections[0]["reason_code"], "VALIDATION_RULE_FAILED")
+
+    def test_registry_evaluate_all_falls_back_origin_timestamp_when_intent_origin_is_none(self):
+        registry = StrategyRegistry(active_spec_version="v1")
+        registry.register(_OriginNoneStrategy())
+
+        state_obj = SimpleNamespace(signal_history=[])
+        df = pd.DataFrame([{"t": 1710000120, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
+
+        accepted = registry.evaluate_all(df=df, signals={}, state_obj=state_obj)
+
+        self.assertEqual(len(accepted), 1)
+        self.assertEqual(accepted[0]["strategy"], "ORIGIN_NONE")
+        self.assertEqual(accepted[0]["origin_timestamp"], 1710000120)
 
     def test_registry_on_bar_close_rejection_includes_symbol_and_sequence_summary(self):
         registry = StrategyRegistry(active_spec_version="v1")

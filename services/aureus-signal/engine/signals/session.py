@@ -6,6 +6,11 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from engine.logging_common import get_logger
+from engine.time_normalization import (
+    broker_datetime_from_utc_seconds,
+    is_eu_dst_utc,
+    parse_epoch_seconds,
+)
 from .base import BaseSignal
 
 logger = get_logger(__name__)
@@ -13,43 +18,27 @@ logger = get_logger(__name__)
 
 class SessionSignal(BaseSignal):
     """
-    Identifies trading sessions based on Broker Server Time (Dynamic DST).
-    Winter: GMT+2 | Summer: GMT+3
+    Identifies trading sessions based on canonical UTC candle timestamp.
+    Broker display time uses dynamic broker DST:
+    Winter: GMT+3 | Summer: GMT+4
     Updates state_obj.current_session for Hybrid Judges.
     """
 
-    def __init__(self, gmt_user: int = 7):
+    def __init__(self, gmt_user: int = 4):
         super().__init__("Broker Session Monitor")
         self.gmt_user = gmt_user
 
     def is_broker_dst(self, dt: datetime) -> bool:
-        """
-        Detects if a date is in European DST (Last Sunday of March to Last Sunday of Oct).
-        Most Forex brokers follow this schedule (EET/EEST).
-        """
-        year = dt.year
-        # Last Sunday of March
-        dst_start = datetime(year, 3, 31, 1, tzinfo=timezone.utc)
-        dst_start -= timedelta(days=(dst_start.weekday() + 1) % 7)
+        """Backward-compatible wrapper for broker DST detection in UTC."""
+        return is_eu_dst_utc(dt)
 
-        # Last Sunday of October
-        dst_end = datetime(year, 10, 31, 1, tzinfo=timezone.utc)
-        dst_end -= timedelta(days=(dst_end.weekday() + 1) % 7)
-
-        return dst_start <= dt < dst_end
-
-    def _classify_user_session(self, time_new_york: float) -> str:
+    def _classify_user_session(self, time_user: float) -> str:
         """Classifies New York local time into trading session windows."""
-        # Windows expressed in America/New_York local time.
-        # These preserve the historical intent of prior GMT+7 windows:
-        #   - ASIA      ~ 19:00-23:00 NY
-        #   - LONDON    ~ 02:00-05:00 NY
-        #   - NEW_YORK  ~ 07:00-11:00 NY
-        if 19.0 <= time_new_york < 23.0:
+        if 7.0 <= time_user <= 11.0:
             return "ASIA"
-        if 2.0 <= time_new_york < 5.0:
+        if 14.0 <= time_user <= 17.0:
             return "LONDON"
-        if 7.0 <= time_new_york < 11.0:
+        if 19.0 <= time_user <= 23.0:
             return "NEW_YORK"
         return "LUNCH_TIME"
 
@@ -70,24 +59,22 @@ class SessionSignal(BaseSignal):
             return None
 
         try:
-            ts_unix = int(float(df["t"].iloc[-1]))
+            ts_unix = df["t"].iloc[-1]
         except Exception:
             logger.warning("[SessionSignal] Invalid candle timestamp; skipping session update")
             return None
 
         dt_utc = datetime.fromtimestamp(ts_unix, tz=timezone.utc)
 
-        # Determine Broker Offset (Winter GMT+2, Summer GMT+3)
-        is_dst = self.is_broker_dst(dt_utc)
-        broker_offset = 3 if is_dst else 2
+        # Calculate broker/server time dynamically from canonical UTC.
+        dt_broker, broker_offset = broker_datetime_from_utc_seconds(ts_unix)
+        is_dst = broker_offset == 4
 
-        # Calculate broker/server time, user-local informational time, and New York classification time.
-        dt_broker = dt_utc + timedelta(hours=broker_offset)
+        # Calculate user-local informational time and New York classification time.
         dt_user = dt_utc + timedelta(hours=self.gmt_user)
-        dt_new_york = dt_utc.astimezone(ZoneInfo("America/New_York"))
 
-        time_new_york = dt_new_york.hour + (dt_new_york.minute / 60.0)
-        session = self._classify_user_session(time_new_york)
+        time_user = dt_user.hour + (dt_user.minute / 60.0)
+        session = self._classify_user_session(time_user)
 
         high = self._extract_last_float(df, "h")
         low = self._extract_last_float(df, "l")
@@ -100,7 +87,7 @@ class SessionSignal(BaseSignal):
 
         previous_session = str(getattr(state_obj, "current_session", "OFF_MARKET"))
         if session != previous_session:
-            logger.info(f"[{state_obj.symbol}] [calculate] 1... Session Shift: {previous_session} -> {session}")
+            logger.info(f"[{state_obj.symbol}][{ts_unix}][{dt_user}] Session Shift {previous_session} -> {session}")
             # Reset session H/L tracking
             state_obj.tracking_vars["session_hlo"] = {
                 "session": session,

@@ -14,7 +14,7 @@ class TestSessionExecuteSignalsForCandleIntegration(unittest.TestCase):
     def setUp(self):
         self.symbol = "XAUUSD"
         self.window_manager = WindowManager(max_window=300)
-        self.signals = {"session": SessionSignal(gmt_user=7)}
+        self.signals = {"session": SessionSignal(gmt_user=4)}
 
     def _candle(self, ts_unix: int, idx: int) -> dict:
         return {
