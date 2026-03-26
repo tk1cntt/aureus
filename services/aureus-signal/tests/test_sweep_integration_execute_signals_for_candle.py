@@ -49,8 +49,10 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
         tags = [item.get("tag") for item in state.signal_history]
-        self.assertIn("sweep_bull", tags)
-        self.assertIn("sweep_bull", state.transient_signals)
+        values = [item.get("value") for item in state.signal_history]
+        self.assertIn("sweep", tags)
+        self.assertIn("sweep_bull", values)
+        self.assertIn("sweep", state.transient_signals)
 
     def test_execute_signals_dedup_prevents_duplicate_history_same_candle(self):
         candle = {
@@ -78,14 +80,14 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
             }
         )
 
-        before_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep_bull"])
+        before_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep"])
 
         # Re-seed same target in the same candle: dedup should suppress processor emission.
         state.transient_signals = {}
         state.obs = [{"ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"}]
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
-        after_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep_bull"])
+        after_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep"])
         self.assertEqual(before_second_run, after_second_run)
 
     def test_execute_signals_emits_sweep_bear_with_bearish_target(self):
@@ -106,8 +108,10 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
         tags = [item.get("tag") for item in state.signal_history]
-        self.assertIn("sweep_bear", tags)
-        self.assertIn("sweep_bear", state.transient_signals)
+        values = [item.get("value") for item in state.signal_history]
+        self.assertIn("sweep", tags)
+        self.assertIn("sweep_bear", values)
+        self.assertIn("sweep", state.transient_signals)
 
 
 if __name__ == "__main__":

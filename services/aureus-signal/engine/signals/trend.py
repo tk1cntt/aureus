@@ -57,9 +57,11 @@ class TrendSignal(BaseSignal):
         return {
             "tag": "htf_trend",
             "value": htf_trend,
-            "regime": regime,
-            "ema_ref": round(current_ema, 5),
-            "green_ob_count": green_count,
-            "red_ob_count": red_count,
-            "delta": green_count - red_count
+            "t": int(df.iloc[-1]["t"]),
+            "data": {
+                "ema_ref": round(current_ema, 5),
+                "green_ob_count": green_count,
+                "red_ob_count": red_count,
+                "delta": green_count - red_count
+            }
         }

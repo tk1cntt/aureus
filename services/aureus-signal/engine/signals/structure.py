@@ -129,21 +129,39 @@ class StructureSignal(BaseSignal):
                         # Evaluation: Closed out of zone? (Rejection strength)
                         is_rejection = candle['c'] > ob['top']
 
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BULLISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
+                        log_actor = getattr(state_obj, "log_actor", None)
+                        if callable(log_actor):
+                            log_actor(c_t, {
+                                "type": "OB_TOUCH",
+                                "ob_type": "BULLISH",
+                                "ob_start": ob['t_start'],
+                                "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            })
 
+                        signal = {
+                            "tag": "ob",
+                            "value": "BULLISH_MITIGATED",
+                            "t": c_t,
+                            "data": {
+                                "price_swept": float(ob.get("top", candle['l'])),
+                                "ob_start": ob.get("t_start"),
+                                "ob_type": ob.get("ob_type", "UNKNOWN"), 
+                                "is_hard_break": candle['c'] < ob['bottom'], # Closed below zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            }
+                        }
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 1... Bullish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
-                            latest_bull_mitigation = ob
+                            latest_bull_mitigation = signal
                         break
                 else: # BEARISH
                     if c_h >= ob['bottom']:
@@ -157,28 +175,46 @@ class StructureSignal(BaseSignal):
 
                         is_rejection = candle['c'] < ob['bottom']
 
-                        state_obj.log_actor(c_t, {
-                            "type": "OB_TOUCH",
-                            "ob_type": "BEARISH",
-                            "ob_start": ob['t_start'],
-                            "is_hard_break": candle['c'] > ob['top'], # Closed above zone
-                            "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
-                            "candle": {
-                                "o": float(candle['o']), "h": float(candle['h']),
-                                "l": float(candle['l']), "c": float(candle['c'])
-                            }
-                        })
+                        log_actor = getattr(state_obj, "log_actor", None)
+                        if callable(log_actor):
+                            log_actor(c_t, {
+                                "type": "OB_TOUCH",
+                                "ob_type": "BEARISH",
+                                "ob_start": ob['t_start'],
+                                "is_hard_break": candle['c'] > ob['top'], # Closed above zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            })
 
+                        signal = {
+                            "tag": "ob",
+                            "value": "BEARISH_MITIGATED",
+                            "t": c_t,
+                            "data": {
+                                "price_swept": float(ob.get("bottom", candle['h'])),
+                                "ob_start": ob.get("t_start"),
+                                "ob_type": ob.get("ob_type", "UNKNOWN"), 
+                                "is_hard_break": candle['c'] > ob['top'], # Closed above zone
+                                "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                                "candle": {
+                                    "o": float(candle['o']), "h": float(candle['h']),
+                                    "l": float(candle['l']), "c": float(candle['c'])
+                                }
+                            }
+                        }
                         # logger.info(f"[t={c_t}] [{state_obj.symbol}] [_verify_mitigations] 2... Bearish OB ({ob['t_start']}) MITIGATED at {c_t}")
                         if c_t == latest_t:
-                            latest_bear_mitigation = ob
+                            latest_bear_mitigation = signal
                         break
 
         if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
             if latest_bull_mitigation is not None:
-                state_obj.transient_signals['ob_bull_mitigated'] = latest_bull_mitigation
+                state_obj.transient_signals['ob'] = latest_bull_mitigation
             if latest_bear_mitigation is not None:
-                state_obj.transient_signals['ob_bear_mitigated'] = latest_bear_mitigation
+                state_obj.transient_signals['ob'] = latest_bear_mitigation
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""

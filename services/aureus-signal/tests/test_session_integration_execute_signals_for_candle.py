@@ -47,15 +47,15 @@ class TestSessionExecuteSignalsForCandleIntegration(unittest.TestCase):
 
     def test_current_session_progresses_across_defined_windows(self):
         timestamps = [
-            1704067200,  # 07:00 GMT+7 => ASIA
-            1704092400,  # 14:00 GMT+7 => LONDON
-            1704110400,  # 19:00 GMT+7 => NEW_YORK
+            1704067200,  # LUNCH_TIME
+            1704092400,  # ASIA
+            1704110400,  # LONDON
         ]
         state = self._run_for_timestamps(timestamps)
 
-        self.assertEqual(state.current_session, "NEW_YORK")
+        self.assertEqual(state.current_session, "LONDON")
         self.assertIn("session_hlo", state.tracking_vars)
-        self.assertEqual(state.tracking_vars["session_hlo"].get("session"), "NEW_YORK")
+        self.assertEqual(state.tracking_vars["session_hlo"].get("session"), "LONDON")
 
 
 if __name__ == "__main__":

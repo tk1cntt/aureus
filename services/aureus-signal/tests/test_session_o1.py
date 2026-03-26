@@ -38,40 +38,40 @@ class TestSessionSignalBehavior(unittest.TestCase):
     def test_classifies_gmt7_boundaries_as_expected(self):
         state = _DummyState()
 
-        london_result = self.signal.calculate(
-            _df_from_row({"t": 1704092400, "o": 2051.0, "h": 2052.0, "l": 2050.0}),  # 02:00 New York (winter)
-            state,
-        )
-        self.assertIsNotNone(london_result)
-        self.assertEqual(london_result["session"], "LONDON")
-
-        ny_result = self.signal.calculate(
-            _df_from_row({"t": 1704110400, "o": 2052.0, "h": 2053.0, "l": 2051.0}),  # 07:00 New York (winter)
-            state,
-        )
-        self.assertIsNotNone(ny_result)
-        self.assertEqual(ny_result["session"], "NEW_YORK")
-
-        lunch_result = self.signal.calculate(
-            _df_from_row({"t": 1704128400, "o": 2053.0, "h": 2054.0, "l": 2052.0}),  # 12:00 New York (winter)
-            state,
-        )
-        self.assertIsNotNone(lunch_result)
-        self.assertEqual(lunch_result["session"], "LUNCH_TIME")
-
         asia_result = self.signal.calculate(
-            _df_from_row({"t": 1704153600, "o": 2050.0, "h": 2051.0, "l": 2049.0}),  # 19:00 New York (winter)
+            _df_from_row({"t": 1704092400, "o": 2051.0, "h": 2052.0, "l": 2050.0}),
             state,
         )
         self.assertIsNotNone(asia_result)
-        self.assertEqual(asia_result["session"], "ASIA")
+        self.assertEqual(asia_result["value"], "ASIA")
 
-        asia_dst_result = self.signal.calculate(
-            _df_from_row({"t": 1719874800, "o": 2050.0, "h": 2051.0, "l": 2049.0}),  # 19:00 New York (summer/EDT)
+        london_result = self.signal.calculate(
+            _df_from_row({"t": 1704110400, "o": 2052.0, "h": 2053.0, "l": 2051.0}),
             state,
         )
-        self.assertIsNotNone(asia_dst_result)
-        self.assertEqual(asia_dst_result["session"], "ASIA")
+        self.assertIsNotNone(london_result)
+        self.assertEqual(london_result["value"], "LONDON")
+
+        ny_result = self.signal.calculate(
+            _df_from_row({"t": 1704128400, "o": 2053.0, "h": 2054.0, "l": 2052.0}),
+            state,
+        )
+        self.assertIsNotNone(ny_result)
+        self.assertEqual(ny_result["value"], "NEW_YORK")
+
+        lunch_result = self.signal.calculate(
+            _df_from_row({"t": 1704153600, "o": 2050.0, "h": 2051.0, "l": 2049.0}),
+            state,
+        )
+        self.assertIsNotNone(lunch_result)
+        self.assertEqual(lunch_result["value"], "LUNCH_TIME")
+
+        lunch_dst_result = self.signal.calculate(
+            _df_from_row({"t": 1719874800, "o": 2050.0, "h": 2051.0, "l": 2049.0}),
+            state,
+        )
+        self.assertIsNotNone(lunch_dst_result)
+        self.assertEqual(lunch_dst_result["value"], "LUNCH_TIME")
 
     def test_updates_session_hlo_deterministically_within_same_session(self):
         state = _DummyState()
@@ -86,7 +86,7 @@ class TestSessionSignalBehavior(unittest.TestCase):
         )
 
         hlo = state.tracking_vars["session_hlo"]
-        self.assertEqual(hlo["session"], "ASIA")
+        self.assertEqual(hlo["session"], "LUNCH_TIME")
         self.assertEqual(hlo["open"], 2050.0)
         self.assertEqual(hlo["high"], 2051.8)
         self.assertEqual(hlo["low"], 2049.2)

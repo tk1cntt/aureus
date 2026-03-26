@@ -11,4 +11,7 @@ class SweepBullSignal(BaseSignal):
 
     def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
         # Consume from the transient signals populated by SweepProcessor
-        return state_obj.transient_signals.get(self.TAG)
+        # TODO: Kiểm tra nến hiện tại và state_obj.transient_signals.get(self.TAG) có cùng thời gian hay không
+        if state_obj.transient_signals.get(self.TAG) and int(state_obj.transient_signals.get(self.TAG).get("t")) == int(df.iloc[-1]["t"]):
+            return state_obj.transient_signals.get(self.TAG)
+        return None

@@ -23,8 +23,8 @@ See `.planning/archive/` for full archives.
 | 15.6 | Sweep rule & AI sentiment stabilization | Internal stabilization | ✅ COMPLETE |
 | 15.7 | Sequence enabled but no-entry trigger diagnosis | Internal strategy debug/instrumentation | PLANNED |
 | 15.8 | Signal→Nautilus order-open delivery diagnosis & contract alignment | Internal runtime integration debug/alignment | PLANNED |
-| 15.9 | Enrich signal_history with semantic metadata | Internal semantic observability | PLANNED |
-| 15.10 | Pydantic Signal History Refactoring | Refactor signal history to strong-typed Pydantic classes | PLANNED |
+| 15.9 | Enrich signal_history with semantic metadata | Internal semantic observability | DONE |
+| 15.10 | Pydantic Signal History Refactoring | Refactor signal history to strong-typed Pydantic classes | DONE |
 | 16 | Schema & Data Loader | SCHEMA-01→04 | NOT STARTED |
 | 17 | Signal Actor & Strategy Adapter | NAUTILUS-01→06, PARITY-01→03 | NOT STARTED |
 | 18 | Metrics & Result Persistence | METRIC-01→08, QUALITY-01, MEASURE-01→03 | NOT STARTED |

@@ -6,11 +6,6 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from engine.logging_common import get_logger
-from engine.time_normalization import (
-    broker_datetime_from_utc_seconds,
-    is_eu_dst_utc,
-    parse_epoch_seconds,
-)
 from .base import BaseSignal
 
 logger = get_logger(__name__)
@@ -85,12 +80,19 @@ class SessionSignal(BaseSignal):
         if not hasattr(state_obj, "tracking_vars") or not isinstance(getattr(state_obj, "tracking_vars", None), dict):
             state_obj.tracking_vars = {}
 
+        data = {}
+
         previous_session = str(getattr(state_obj, "current_session", "OFF_MARKET"))
         if session != previous_session:
             logger.info(f"[{state_obj.symbol}][{ts_unix}][{dt_user}] Session Shift {previous_session} -> {session}")
             # Reset session H/L tracking
             state_obj.tracking_vars["session_hlo"] = {
                 "session": session,
+                "high": high,
+                "low": low,
+                "open": open_px,
+            }
+            data = {
                 "high": high,
                 "low": low,
                 "open": open_px,
@@ -105,19 +107,18 @@ class SessionSignal(BaseSignal):
             hlo["high"] = max(float(hlo.get("high", high)), high)
             hlo["low"] = min(float(hlo.get("low", low)), low)
             hlo.setdefault("open", open_px)
+            data = {
+                "high": hlo["high"],
+                "low": hlo["low"],
+                "open": hlo["open"],
+            }
 
         # Enrich state object
         state_obj.current_session = session
 
         return {
             "tag": "market_session",
-            "session": session,
-            "broker_time": dt_broker.strftime("%H:%M"),
-            "broker_offset": f"GMT+{broker_offset}",
-            "user_time": dt_user.strftime("%H:%M"),
-            "is_dst": is_dst,
-            "category": "session",
             "value": session,
-            "explain": f"Market session is {session}",
-            "inputs": {"broker_time": dt_broker.strftime("%H:%M"), "user_time": dt_user.strftime("%H:%M")}
+            "t": int(df["t"].iloc[-1]),
+            "data": data
         }

@@ -191,18 +191,17 @@ class SweepSignal(BaseSignal):
 
                     if not already_swept:
                         triggered_sweep = {
-                            "tag": status_tag,
+                            "tag": "sweep",
+                            "value": status_tag,
                             "t": c_t,
-                            "price_swept": target_price,
-                            "source_type": "OB_" + ob.get("ob_type", "UNKNOWN"),
-                            "source_t": ob.get("t_start"),
-                            "fidelity": 0.8,
-                            "market_regime": regime,
-                            "status": current_status,
-                            "category": "liquidity",
-                            "value": target_price,
-                            "explain": f"Liquidity sweep ({current_status}) on {suffix.upper()} targets",
-                            "inputs": {"ob_type": ob.get("ob_type", "UNKNOWN"), "mitigated": mitigated}
+                            "data": {
+                                "price_swept": target_price,
+                                "source_type": "OB_" + ob.get("ob_type", "UNKNOWN"),
+                                "source_t": ob.get("t_start"),
+                                "status": current_status,
+                                "ob_type": ob.get("ob_type", "UNKNOWN"), 
+                                "mitigated": mitigated
+                            }
                         }
                         logger.info(
                             f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
@@ -210,7 +209,7 @@ class SweepSignal(BaseSignal):
 
                         transient = getattr(state_obj, "transient_signals", None)
                         if isinstance(transient, dict):
-                            transient[status_tag] = triggered_sweep
+                            transient["sweep"] = triggered_sweep
                             transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
 
                         # AI update is orchestrated centrally in runtime engine policy.

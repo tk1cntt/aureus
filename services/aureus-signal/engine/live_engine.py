@@ -119,16 +119,11 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
             logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             if res:
-                category = res.get("category")
+                time = res.get("t")
                 value = res.get("value")
-                explain = res.get("explain")
-                inputs = res.get("inputs")
                 emitted_tag = res.get("tag")
                 if emitted_tag:
-                    state.log_signal(emitted_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
-                cross_tag = res.get("cross")
-                if cross_tag:
-                    state.log_signal(cross_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
+                    state.log_signal(emitted_tag, time, value, data=res.get("data"))
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
     logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {state.signal_history}")
