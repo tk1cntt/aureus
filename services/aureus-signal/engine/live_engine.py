@@ -119,14 +119,19 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
             logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             if res:
+                category = res.get("category")
+                value = res.get("value")
+                explain = res.get("explain")
+                inputs = res.get("inputs")
                 emitted_tag = res.get("tag")
                 if emitted_tag:
-                    state.log_signal(emitted_tag, ts_unix)
+                    state.log_signal(emitted_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
                 cross_tag = res.get("cross")
                 if cross_tag:
-                    state.log_signal(cross_tag, ts_unix)
+                    state.log_signal(cross_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
+    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {state.signal_history}")
 
 def _read_ab_mode() -> str:
     raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()
@@ -357,10 +362,14 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             try:
                                 res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                                 if res:
+                                    category = res.get("category")
+                                    value = res.get("value")
+                                    explain = res.get("explain")
+                                    inputs = res.get("inputs")
                                     tag_val = res.get('tag', tag)
-                                    if tag_val: state.log_signal(tag_val, int(candle_data['t']))
+                                    if tag_val: state.log_signal(tag_val, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                                     cross_val = res.get('cross')
-                                    if cross_val: state.log_signal(cross_val, int(candle_data['t']))
+                                    if cross_val: state.log_signal(cross_val, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                             except Exception as e:
                                 pass
             else:
@@ -390,8 +399,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                             if res:
+                                category = res.get("category")
+                                value = res.get("value")
+                                explain = res.get("explain")
+                                inputs = res.get("inputs")
                                 tag_val = res.get('tag', tag)
-                                if tag_val: state.log_signal(tag_val, int(df.iloc[-1]['t']))
+                                if tag_val: state.log_signal(tag_val, int(df.iloc[-1]['t']), category=category, value=value, explain=explain, inputs=inputs)
                         except Exception as e:
                             logger.error(f"Init signal calc error for {tag}: {e}")
 
@@ -682,7 +695,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 
                                 for res in strategy_results:
                                     logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
-                                    state.log_signal(f"strat:{res['strategy']}", res['t'])
+                                    state.log_signal(
+                                        f"strat:{res['strategy']}",
+                                        res['t'],
+                                        category="strategy",
+                                        value=res['strategy'],
+                                        explain="Strategy triggered"
+                                    )
                             else:
                                 logger.debug(
                                     f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][no_accepted] "
@@ -1004,12 +1023,16 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                             if res:
+                                category = res.get("category")
+                                value = res.get("value")
+                                explain = res.get("explain")
+                                inputs = res.get("inputs")
                                 sig_tag = res.get('tag', tag)
                                 if sig_tag:
-                                    state.log_signal(sig_tag, int(candle_data['t']))
+                                    state.log_signal(sig_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                                 cross_tag = res.get('cross')
                                 if cross_tag:
-                                    state.log_signal(cross_tag, int(candle_data['t']))
+                                    state.log_signal(cross_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                         except Exception as e:
                             if i < 3:
                                 logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")

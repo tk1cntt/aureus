@@ -69,13 +69,23 @@ class EMASignal(BaseSignal):
                 "slope": slope
             }
 
-            res: Dict[str, Any] = {"tag": None, "period": self.period, "value": curr_ema, "t": curr_t}
+            res: Dict[str, Any] = {
+                "tag": None, 
+                "period": self.period, 
+                "value": curr_ema, 
+                "t": curr_t,
+                "category": "trend",
+                "explain": f"Price near EMA {self.period}",
+                "inputs": {"close": curr_close, "ema": curr_ema, "slope": slope}
+            }
 
             # 2. State Tags (Above/Below)
             if curr_close > curr_ema:
                 res["tag"] = self.tag_up
+                res["explain"] = f"Price above EMA {self.period}"
             else:
                 res["tag"] = self.tag_down
+                res["explain"] = f"Price below EMA {self.period}"
                 
             # 2. Cross Crossover Signals (Optional: can be logged separately)
             if prev_close <= prev_ema and curr_close > curr_ema:

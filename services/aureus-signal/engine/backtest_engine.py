@@ -200,10 +200,14 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                                     try:
                                         res = signal_calc.calculate(df, c_state, redis_client=r, symbol=symbol)
                                         if res:
+                                            category = res.get("category")
+                                            value = res.get("value")
+                                            explain = res.get("explain")
+                                            inputs = res.get("inputs")
                                             t_tag = res.get('tag')
-                                            if t_tag: c_state.log_signal(t_tag, ts_unix)
+                                            if t_tag: c_state.log_signal(t_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
                                             t_cross = res.get('cross')
-                                            if t_cross: c_state.log_signal(t_cross, ts_unix)
+                                            if t_cross: c_state.log_signal(t_cross, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
                                     except Exception as e:
                                         logger.error(f"Signal {tag} calc error: {e}")
                                 # Story 3.4: Trade Lock Mechanism during 24H Warmup
@@ -219,7 +223,13 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                                         if new_orders > 0:
                                             for res in strategy_results:
                                                 logger.debug(f"[{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
-                                                c_state.log_signal(f"strat:{res['strategy']}", ts_unix)
+                                                c_state.log_signal(
+                                                    f"strat:{res['strategy']}",
+                                                    ts_unix,
+                                                    category="strategy",
+                                                    value=res['strategy'],
+                                                    explain="Strategy triggered"
+                                                )
     
                                     # REVIEW FIX: Reset events at engine level for clean tick lifecycle
                                     # process_triggers may have appended ORDER_OPENED above

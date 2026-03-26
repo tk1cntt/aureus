@@ -43,6 +43,10 @@ class FVGSignal(BaseSignal):
                 "top": c3_low_f,
                 "bottom": c1_high_f,
                 "msg": "New Bullish FVG",
+                "category": "imbalance",
+                "value": c3_low_f - c1_high_f,
+                "explain": "Bullish FVG Formed",
+                "inputs": {"top": c3_low_f, "bottom": c1_high_f}
             }
             self._append_fvg(state_obj, fvg_data)
             self._emit_transient(state_obj, "fvg_bull_new", fvg_data)
@@ -56,6 +60,10 @@ class FVGSignal(BaseSignal):
                 "top": c1_low_f,
                 "bottom": c3_high_f,
                 "msg": "New Bearish FVG",
+                "category": "imbalance",
+                "value": c3_high_f - c1_low_f,
+                "explain": "Bearish FVG Formed",
+                "inputs": {"top": c1_low_f, "bottom": c3_high_f}
             }
             self._append_fvg(state_obj, fvg_data)
             self._emit_transient(state_obj, "fvg_bear_new", fvg_data)
@@ -126,6 +134,10 @@ class FVGSignal(BaseSignal):
                         "fvg_t": fvg.get("t"),
                         "top": top_f,
                         "bottom": bottom_f,
+                        "category": "imbalance",
+                        "value": top_f - bottom_f,
+                        "explain": "Bullish FVG Mitigated",
+                        "inputs": {"fvg_t": fvg.get("t"), "top": top_f, "bottom": bottom_f}
                     },
                 )
                 symbol = getattr(state_obj, "symbol", "UNKNOWN")
@@ -145,6 +157,10 @@ class FVGSignal(BaseSignal):
                         "fvg_t": fvg.get("t"),
                         "top": top_f,
                         "bottom": bottom_f,
+                        "category": "imbalance",
+                        "value": top_f - bottom_f,
+                        "explain": "Bearish FVG Mitigated",
+                        "inputs": {"fvg_t": fvg.get("t"), "top": top_f, "bottom": bottom_f}
                     },
                 )
                 symbol = getattr(state_obj, "symbol", "UNKNOWN")

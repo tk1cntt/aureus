@@ -232,8 +232,12 @@ class StateSnapshot:
                 events = json.loads(self.events) if isinstance(self.events, str) else self.events
                 for evt in events:
                     tag = evt.get('tag', '')
+                    category = evt.get("category")
+                    value = evt.get("value")
+                    explain = evt.get("explain")
+                    inputs = evt.get("inputs")
                     state.transient_signals[tag] = evt
-                    state.log_signal(tag, self.timestamp)
+                    state.log_signal(tag, self.timestamp, category=category, value=value, explain=explain, inputs=inputs)
             except Exception:
                 pass
 

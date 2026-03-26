@@ -116,4 +116,8 @@ class SessionSignal(BaseSignal):
             "broker_offset": f"GMT+{broker_offset}",
             "user_time": dt_user.strftime("%H:%M"),
             "is_dst": is_dst,
+            "category": "session",
+            "value": session,
+            "explain": f"Market session is {session}",
+            "inputs": {"broker_time": dt_broker.strftime("%H:%M"), "user_time": dt_user.strftime("%H:%M")}
         }

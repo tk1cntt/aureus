@@ -287,7 +287,18 @@ class StructureSignal(BaseSignal):
 
                     # self._register_sweep_targets(state_obj, ob, points[pivot_idx])
                     
-                    return {"tag": tag, "t": int(candle['t']), "price": pivot_price, "breakout_t": breakout_t, "ob": ob}
+                    explain = "Bullish CHOCH detected" if is_bullish else "Bearish CHOCH detected"
+                    return {
+                        "tag": tag, 
+                        "t": int(candle['t']), 
+                        "price": pivot_price, 
+                        "breakout_t": breakout_t, 
+                        "ob": ob,
+                        "category": "structure",
+                        "value": pivot_price,
+                        "explain": explain,
+                        "inputs": {"pivot_t": int(pivot_t), "pivot_price": pivot_price, "is_bullish": is_bullish}
+                    }
                 
                 break # Only process the FIRST break
                 

@@ -199,6 +199,10 @@ class SweepSignal(BaseSignal):
                             "fidelity": 0.8,
                             "market_regime": regime,
                             "status": current_status,
+                            "category": "liquidity",
+                            "value": target_price,
+                            "explain": f"Liquidity sweep ({current_status}) on {suffix.upper()} targets",
+                            "inputs": {"ob_type": ob.get("ob_type", "UNKNOWN"), "mitigated": mitigated}
                         }
                         logger.info(
                             f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"

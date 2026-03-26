@@ -57,12 +57,22 @@ class SymbolState:
         self.loss_count: int = 0
         self.trade_history: List[Dict[str, Any]] = []
 
-    def log_signal(self, tag: str, timestamp: int):
+    def log_signal(self, tag: str, timestamp: int, category: Optional[str] = None, value: Any = None, explain: Optional[str] = None, inputs: Optional[Dict[str, Any]] = None):
         # Defensive check in case of legacy state restoration
         if not hasattr(self, 'signal_history'):
             self.signal_history = []
             
-        self.signal_history.append({"tag": tag, "t": timestamp})
+        record = {"tag": tag, "t": timestamp}
+        if category is not None:
+            record["category"] = category
+        if value is not None:
+            record["value"] = value
+        if explain is not None:
+            record["explain"] = explain
+        if inputs is not None:
+            record["inputs"] = inputs
+
+        self.signal_history.append(record)
         # Keep history reasonable
         if len(self.signal_history) > 1000:
             self.signal_history.pop(0)

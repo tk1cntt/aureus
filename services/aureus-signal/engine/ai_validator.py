@@ -111,8 +111,10 @@ Be concise. Identify the dominant bias (BULLISH/BEARISH/NEUTRAL).
         history = state.signal_history[-20:]
         recent_ch = [h for h in history if 'CHOCH' in h['tag'] or 'BOS' in h['tag']]
         if recent_ch:
-            last_ch = recent_ch[-1]
-            ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['tag']} detected at {last_ch['t']}"
+            if "explain" in last_ch and last_ch.get("explain"):
+                ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['explain']} (tag: {last_ch['tag']}) detected at {last_ch['t']}"
+            else:
+                ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['tag']} detected at {last_ch['t']}"
             
             # Enrich with Actor information if available
             actor = state.candle_actors.get(str(last_ch['t']))
