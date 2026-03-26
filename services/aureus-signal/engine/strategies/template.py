@@ -370,20 +370,51 @@ class TemplateStrategy(BaseStrategy):
         core = self._evaluate_sequence(df, state_obj)
         diagnostics = self._build_sequence_diagnostics(core)
 
+        logger.info(
+            f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][sequence_eval] "
+            f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
+            f"score={core.get('score')} matched_steps={core.get('matched_steps')} "
+            f"missing_required={core.get('missing_required')} "
+            f"origin_timestamp={core.get('origin_timestamp')} "
+            f"progress_data={core.get('progress_data')}"
+        )
+
         # Determine reason_code: context must pass AND sequence must match
+        missing_required = bool(core["missing_required"])
+        score_below_threshold = core["score"] < self.min_score
+
         if not ctx["passed"]:
             reason_code = "CONTEXT_FILTER_FAILED"
-        elif core["missing_required"] or core["score"] < self.min_score:
+        elif missing_required or score_below_threshold:
             reason_code = "SEQUENCE_NOT_MATCHED"
         else:
             reason_code = "OK"
+
+        if reason_code == "SEQUENCE_NOT_MATCHED":
+            mismatch_causes: List[str] = []
+            if missing_required:
+                mismatch_causes.append("MISSING_REQUIRED_STEP")
+            if score_below_threshold:
+                mismatch_causes.append("SCORE_BELOW_THRESHOLD")
+
+            logger.info(
+                f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][sequence_mismatch_detail] "
+                f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
+                f"mismatch_causes={mismatch_causes} "
+                f"missing_required={missing_required} "
+                f"missing_required_tags={diagnostics['missing_required_tags']} "
+                f"score={core['score']} min_score={self.min_score} "
+                f"score_below_threshold={score_below_threshold} score_gap={diagnostics['score_gap']} "
+                f"matched_steps={core['matched_steps']} current_step_index={diagnostics['current_step_index']} "
+                f"mismatch_reason={diagnostics['mismatch_reason']}"
+            )
 
         if reason_code != "OK":
             logger.info(
                 f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent_not_actionable] "
                 f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
                 f"reason_code={reason_code} score={core['score']} min_score={self.min_score} "
-                f"missing_required={core['missing_required']} failed_filters={ctx['failed_filters']} "
+                f"missing_required={missing_required} failed_filters={ctx['failed_filters']} "
                 f"matched_steps={core['matched_steps']} mismatch_reason={diagnostics['mismatch_reason']} "
                 f"missing_required_tags={diagnostics['missing_required_tags']} "
                 f"current_step_index={diagnostics['current_step_index']} "

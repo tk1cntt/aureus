@@ -128,6 +128,35 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
 
+def _read_ab_mode() -> str:
+    raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()
+    return raw if raw in {"A", "B"} else "B"
+
+
+def _read_ab_target_strategy_names() -> list[str]:
+    raw = str(
+        os.getenv("AB_TARGET_STRATEGIES")
+        or os.getenv("AUREUS_AB_TARGET_STRATEGIES")
+        or "TREND_CONT"
+    ).strip()
+    if not raw:
+        return ["TREND_CONT"]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _apply_ab_mode_to_registry(registry: StrategyRegistry, symbol: str, mode: str, keep_names: list[str]) -> None:
+    if mode != "A":
+        logger.info(
+            f"{PIPELINE_LOG_PREFIX}[{symbol}][AB_MODE] mode={mode} keep=ALL (full-stack)"
+        )
+        return
+
+    filter_result = registry.apply_name_filter(keep_names)
+    logger.info(
+        f"{PIPELINE_LOG_PREFIX}[{symbol}][AB_MODE] mode=A keep={keep_names} "
+        f"after={filter_result.get('after', [])} removed={filter_result.get('removed', [])}"
+    )
+
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
     load_dotenv()
@@ -197,6 +226,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     target_streams = {}      # stream_key -> symbol
     symbol_strategies = {}   # symbol -> StrategyRegistry
 
+    ab_mode = _read_ab_mode()
+    ab_target_strategies = _read_ab_target_strategy_names()
+    logger.info(
+        f"{PIPELINE_LOG_PREFIX}[GLOBAL][AB_MODE] mode={ab_mode} target_strategies={ab_target_strategies}"
+    )
+
     for symbol in symbols_list:
         cfg = SYMBOL_CONFIG.get(symbol, SYMBOL_CONFIG.get("XAUUSD", {}))
         if not cfg:
@@ -214,6 +249,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         # Load strategies for this symbol (each symbol gets its own registry)
         symbol_strategies[symbol] = StrategyRegistry()
         await symbol_strategies[symbol].load_from_db(db_pool, symbol)
+        _apply_ab_mode_to_registry(
+            symbol_strategies[symbol],
+            symbol=symbol,
+            mode=ab_mode,
+            keep_names=ab_target_strategies,
+        )
 
     # --- Consumer Group Setup ---
     group_name = "aureus-signal-group"
@@ -413,6 +454,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                         if s not in symbol_strategies:
                             symbol_strategies[s] = StrategyRegistry()
                         await symbol_strategies[s].load_from_db(db_pool, s)
+                        _apply_ab_mode_to_registry(
+                            symbol_strategies[s],
+                            symbol=s,
+                            mode=ab_mode,
+                            keep_names=ab_target_strategies,
+                        )
 
     asyncio.create_task(listen_for_reload())
     

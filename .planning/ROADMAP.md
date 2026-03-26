@@ -15,13 +15,14 @@ See `.planning/archive/` for full archives.
 
 **Goal:** Validate strategy quality independently → integrate NautilusTrader BacktestEngine → persist results → Custom UI + Grafana.
 
-**Phases:** 8
+**Phases:** 9
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
 | 15.5 | Strategy Quality Assurance | STRATQA-01→05 | PLANNED |
 | 15.6 | Sweep rule & AI sentiment stabilization | Internal stabilization | ✅ COMPLETE |
 | 15.7 | Sequence enabled but no-entry trigger diagnosis | Internal strategy debug/instrumentation | PLANNED |
+| 15.8 | Signal→Nautilus order-open delivery diagnosis & contract alignment | Internal runtime integration debug/alignment | PLANNED |
 | 16 | Schema & Data Loader | SCHEMA-01→04 | NOT STARTED |
 | 17 | Signal Actor & Strategy Adapter | NAUTILUS-01→06, PARITY-01→03 | NOT STARTED |
 | 18 | Metrics & Result Persistence | METRIC-01→08, QUALITY-01, MEASURE-01→03 | NOT STARTED |
@@ -121,6 +122,18 @@ Plans:
 - [ ] Xác định điểm cần instrument/log để tách bạch lỗi do signal, context_filters, sequence matcher hay risk/execution guard
 - [ ] Tạo context đầu vào cho research/planning phase fix
 
+### Phase 15.8: Signal→Nautilus order-open delivery diagnosis & contract alignment
+
+**Goal:** Khoanh vùng và chốt nguyên nhân khiến trigger/order-open từ `aureus-signal` không đi được tới `aureus-nautilus-node`, sau đó chuẩn hóa contract runtime để order-open được nhận và xử lý nhất quán theo symbol thực tế.
+**Requirements**: Internal runtime integration debug/alignment (stream wiring, symbol routing, order payload contract)
+**Depends on:** Phase 15.7
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] Xác nhận điểm đứt luồng thực tế trong chain `aureus-signal` → Redis stream `:orders` → `aureus-nautilus-node`/bridge consumer
+- [ ] Chốt contract stream/symbol (không hardcode `XAUUSD`, hỗ trợ symbol runtime như `ETHUSD`)
+- [ ] Chốt contract payload `ORDER_OPEN` giữa producer/consumer (mapping trường bắt buộc, validation gates, reject-reason observability)
+- [ ] Tạo phase context `15.8-CONTEXT.md` làm đầu vào cho research/planning phase fix
 
 
 ---

@@ -8,3 +8,13 @@ datasources:
     url: http://prometheus-dev:9090
     isDefault: true
     editable: true
+
+  - name: Redis
+    type: redis-datasource
+    uid: redis-dev
+    access: proxy
+    url: redis://redis-dev:6379/0
+    editable: true
+    jsonData:
+      timeout: 10
+      poolSize: 5

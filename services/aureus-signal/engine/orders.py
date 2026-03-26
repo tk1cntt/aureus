@@ -158,6 +158,10 @@ class SimulatedTradeManager:
             
             # Notify Gateway/Dashboard via Stream
             stream_type = "ORDER_PENDING" if status == "PENDING_AI" else "ORDER_OPEN"
+            logger.info(
+                f"[{symbol}] [process_triggers] {stream_type} entry_price={order.get('entry_price')} sl={order.get('sl')} tp={order.get('tp')} open_time={order.get('open_time')} " 
+                f"trace_id={order.get('trace_id')} strategy_name={order.get('strategy_name')} strategy_id={order.get('strategy_id')} side={order.get('side')} type={order.get('type')} "
+                f"status={order.get('status')} execution_mode={order.get('execution_mode')} ai_validation={order.get('ai_validation')} order_plan_snapshot={order.get('order_plan_snapshot')}")
             await self.r.xadd(f"aureus:stream:{symbol}:orders", {
                 "type": stream_type,
                 "data": json.dumps(order)
