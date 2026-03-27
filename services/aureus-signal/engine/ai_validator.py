@@ -99,31 +99,103 @@ Be concise. Identify the dominant bias (BULLISH/BEARISH/NEUTRAL).
     def _synthesize_structure(self, state: Any) -> str:
         """Summarizes HH, HL, LH, LL and Choch/Bos history with institutional context."""
         swings = state.swing_points[-10:] if hasattr(state, 'swing_points') else []
-        if not swings: return "No clear structural points detected. Market may be in range or consolidating."
-        
+        if not swings:
+            return "No clear structural points detected. Market may be in range or consolidating."
+
         summary = []
-        # Describe the last 3 major swings to establish trend
+        # Describe recent major swings to establish trend
         major_swings = [s for s in swings if s.get('type', '') in ('HH', 'LL', 'HL', 'LH')]
         for s in major_swings[-5:]:
             summary.append(f"- {s['type']} formed at {s['price']:.5f} (Time: {s['t']})")
-        
-        # Check for recent Break of Structure or Change of Character
-        history = state.signal_history[-20:]
-        recent_ch = [h for h in history if 'CHOCH' in h['tag'] or 'BOS' in h['tag']]
+
+        recent_ch: List[Dict[str, Any]] = []
+
+        # Legacy/raw history path
+        raw_history = getattr(state, 'signal_history', []) or []
+        for h in raw_history[-40:]:
+            if not isinstance(h, dict):
+                continue
+            tag = str(h.get('tag', ''))
+            if not tag:
+                continue
+            tag_upper = tag.upper()
+            if 'CHOCH' in tag_upper or 'BOS' in tag_upper:
+                recent_ch.append(
+                    {
+                        'tag': tag,
+                        't': h.get('t'),
+                        'explain': h.get('explain') or (h.get('data') or {}).get('explain') if isinstance(h.get('data'), dict) else h.get('explain'),
+                    }
+                )
+
+        # Normalized history path (grouped by timestamp)
+        normalized_history = getattr(state, 'signal_history_normalized', []) or []
+        for group in normalized_history[:20]:
+            if not isinstance(group, dict):
+                continue
+
+            signals = group.get('signals') if isinstance(group.get('signals'), dict) else {}
+
+            # Backward-compat path
+            structure_tag = signals.get('structure')
+            if isinstance(structure_tag, str):
+                structure_upper = structure_tag.upper()
+                if 'CHOCH' in structure_upper or 'BOS' in structure_upper:
+                    recent_ch.append(
+                        {
+                            'tag': structure_tag,
+                            't': group.get('t'),
+                            'explain': None,
+                        }
+                    )
+
+            # New normalized contract path
+            events = signals.get('events') if isinstance(signals.get('events'), list) else []
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                event_tag = str(event.get('tag', ''))
+                if not event_tag:
+                    continue
+                event_upper = event_tag.upper()
+                if 'CHOCH' in event_upper or 'BOS' in event_upper:
+                    recent_ch.append(
+                        {
+                            'tag': event_tag,
+                            't': group.get('t'),
+                            'explain': event.get('explain'),
+                        }
+                    )
+
         if recent_ch:
-            if "explain" in last_ch and last_ch.get("explain"):
-                ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['explain']} (tag: {last_ch['tag']}) detected at {last_ch['t']}"
+            def _safe_t(item: Dict[str, Any]) -> int:
+                try:
+                    return int(item.get('t') or 0)
+                except Exception:
+                    return 0
+
+            last_ch = sorted(recent_ch, key=_safe_t)[-1]
+
+            if last_ch.get('explain'):
+                ch_msg = (
+                    f"CRITICAL: Recent market shift pulse: {last_ch['explain']} "
+                    f"(tag: {last_ch['tag']}) detected at {last_ch.get('t')}"
+                )
             else:
-                ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['tag']} detected at {last_ch['t']}"
-            
+                ch_msg = f"CRITICAL: Recent market shift pulse: {last_ch['tag']} detected at {last_ch.get('t')}"
+
             # Enrich with Actor information if available
-            actor = state.candle_actors.get(str(last_ch['t']))
+            actor_book = getattr(state, 'candle_actors', {}) if hasattr(state, 'candle_actors') else {}
+            actor = actor_book.get(str(last_ch.get('t'))) if isinstance(actor_book, dict) else None
             if actor and actor.get('type') == 'CHOCH_BREAKOUT':
-                candle = actor['candle']
-                ch_msg += f" (Breaking Candle: O:{candle['o']}, H:{candle['h']}, L:{candle['l']}, C:{candle['c']})"
-            
+                candle = actor.get('candle') or {}
+                ch_msg += (
+                    f" (Breaking Candle: O:{candle.get('o')}, H:{candle.get('h')}, "
+                    f"L:{candle.get('l')}, C:{candle.get('c')})"
+                )
+
             summary.append(ch_msg)
-            
+
         return "\n".join(summary)
 
     def _calculate_positioning(self, df: 'pd.DataFrame', state: Any) -> str:

@@ -221,6 +221,86 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(restored.strategy_transition_history), 500)
         self.assertEqual(restored.strategy_last_transition["S1"]["t"], 1710000504)
 
+    def test_symbol_state_signal_history_dual_contract_serialization(self):
+        state = SymbolState("XAUUSD")
+        t_older = 1710000500
+        t_newer = 1710000600
+
+        state.log_signal("market_session", t_older, value="ASIA", data={"window": "OPEN"})
+        state.log_signal("market_session", t_older, value="LONDON", data={"window": "OPEN"})
+
+        state.log_signal("ema_50_up", t_newer, value=2312.25, data={"slope": "UP"})
+        state.log_signal("ema_50_up", t_newer, value=2313.0, data={"slope": "FLAT"})
+        state.log_signal("htf_trend", t_newer, value="BEARISH", data={"timeframe": "H1"})
+        state.log_signal("atr_14", t_newer, value=4.003302)
+        state.log_signal("zigzag", t_newer, value="ll", data={"price": 0.68956})
+        state.log_signal(
+            "choch",
+            t_newer,
+            value="down",
+            data={
+                "direction": "down",
+                "price": 0.68963,
+                "breakout_t": t_newer,
+                "pivot_t": t_older,
+                "ob": {"type": "bearish_ob"},
+            },
+        )
+
+        payload = state.to_dict()
+
+        # Legacy/raw contract remains available
+        self.assertIn("signal_history", payload)
+        self.assertEqual(len(payload["signal_history"]), 8)
+
+        # New normalized contract is available for grouped consumers
+        self.assertIn("signal_history_normalized", payload)
+        normalized = payload["signal_history_normalized"]
+        self.assertEqual(len(normalized), 2)
+
+        # Must be sorted ascending by timestamp
+        self.assertEqual(normalized[0]["t"], t_older)
+        self.assertEqual(normalized[1]["t"], t_newer)
+
+        older_signals = normalized[0]["signals"]
+        self.assertEqual(older_signals["market_session"]["value"], "LONDON")
+        self.assertEqual(older_signals["market_session"]["window"], "OPEN")
+
+        newer_signals = normalized[1]["signals"]
+        self.assertEqual(newer_signals["ema"]["ema_50"]["direction"], "up")
+        self.assertEqual(newer_signals["ema"]["ema_50"]["value"], 2313.0)
+        self.assertEqual(newer_signals["ema"]["ema_50"]["slope"], "FLAT")
+        self.assertEqual(newer_signals["htf_trend"]["value"], "BEARISH")
+        self.assertEqual(newer_signals["htf_trend"]["timeframe"], "H1")
+        self.assertEqual(newer_signals["atr_14"], 4.003302)
+        self.assertEqual(newer_signals["zigzag"]["kind"], "ll")
+        self.assertEqual(newer_signals["zigzag"]["price"], 0.68956)
+
+        self.assertEqual(len(newer_signals["events"]), 1)
+        event = newer_signals["events"][0]
+        self.assertEqual(event["tag"], "choch")
+        self.assertEqual(event["direction"], "down")
+        self.assertEqual(event["price"], 0.68963)
+        self.assertEqual(event["breakout_t"], t_newer)
+        self.assertEqual(event["pivot_t"], t_older)
+        self.assertEqual(event["ob"]["type"], "bearish_ob")
+
+    def test_symbol_state_to_dict_handles_none_timestamp_in_raw_signal_history(self):
+        state = SymbolState("XAUUSD")
+        state.signal_history.append({"tag": "ema_20_up", "t": None, "value": 2300.0})
+        state.log_signal("ema_20_up", 1710000600, value=2301.0)
+
+        payload = state.to_dict()
+
+        self.assertEqual(len(payload["signal_history"]), 2)
+        self.assertEqual(payload["signal_history"][0]["t"], 1710000600)
+        self.assertIsNone(payload["signal_history"][1].get("t"))
+
+        normalized = payload["signal_history_normalized"]
+        self.assertEqual(len(normalized), 1)
+        self.assertEqual(normalized[0]["t"], 1710000600)
+
+
 
 if __name__ == "__main__":
     unittest.main()

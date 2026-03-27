@@ -278,10 +278,12 @@ class PivotSignal(BaseSignal):
 
             latest = state_obj.swing_points[-1]
             return {
-                "tag": str(latest.get("type", "")).lower(),
-                "price": float(latest.get("price", 0.0)),
+                "tag": "zigzag",
+                "value": str(latest.get("type", "")).lower(),
                 "t": int(latest.get("t", 0)),
-                "is_high": bool(latest.get("is_high", False)),
+                "data": {
+                    "price": float(latest.get("price", 0.0)),
+                },
             }
 
         return None

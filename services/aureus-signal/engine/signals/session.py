@@ -11,6 +11,44 @@ from .base import BaseSignal
 logger = get_logger(__name__)
 
 
+def is_eu_dst_utc(dt_utc: datetime) -> bool:
+    """Return True when UTC datetime falls in EU DST window (last Sun Mar -> last Sun Oct)."""
+    if dt_utc.tzinfo is None:
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = dt_utc.astimezone(timezone.utc)
+
+    year = dt_utc.year
+
+    # EU DST starts at 01:00 UTC on the last Sunday of March.
+    march_last_day = datetime(year, 3, 31, 1, 0, tzinfo=timezone.utc)
+    dst_start = march_last_day - timedelta(days=(march_last_day.weekday() + 1) % 7)
+
+    # EU DST ends at 01:00 UTC on the last Sunday of October.
+    october_last_day = datetime(year, 10, 31, 1, 0, tzinfo=timezone.utc)
+    dst_end = october_last_day - timedelta(days=(october_last_day.weekday() + 1) % 7)
+
+    return dst_start <= dt_utc < dst_end
+
+
+def broker_datetime_from_utc_seconds(ts_unix: Any) -> tuple[datetime, int]:
+    """
+    Convert canonical UTC epoch seconds to broker server datetime.
+
+    Broker offset policy:
+    - Winter: UTC+3
+    - Summer (EU DST): UTC+4
+
+    Returns:
+      (broker_datetime, broker_offset_hours)
+    """
+    ts_value = float(ts_unix)
+    dt_utc = datetime.fromtimestamp(ts_value, tz=timezone.utc)
+    broker_offset = 4 if is_eu_dst_utc(dt_utc) else 3
+    dt_broker = dt_utc + timedelta(hours=broker_offset)
+    return dt_broker, broker_offset
+
+
 class SessionSignal(BaseSignal):
     """
     Identifies trading sessions based on canonical UTC candle timestamp.
@@ -54,7 +92,8 @@ class SessionSignal(BaseSignal):
             return None
 
         try:
-            ts_unix = df["t"].iloc[-1]
+            ts_unix_raw = df["t"].iloc[-1]
+            ts_unix = float(ts_unix_raw)
         except Exception:
             logger.warning("[SessionSignal] Invalid candle timestamp; skipping session update")
             return None

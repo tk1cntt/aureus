@@ -132,16 +132,10 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
                 try:
                     res = signal_calc.calculate(df, state, redis_client=None, symbol=symbol)
                     if res:
-                        category = res.get("category")
                         value = res.get("value")
-                        explain = res.get("explain")
-                        inputs = res.get("inputs")
                         sig_tag = res.get('tag', tag)
                         if sig_tag:
                             state.log_signal(sig_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
-                        cross_tag = res.get('cross')
-                        if cross_tag:
-                            state.log_signal(cross_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                 except Exception as e:
                     if processed < 5:  # Only log first few errors
                         logger.debug(f"Signal {tag} error at candle {i}: {e}")

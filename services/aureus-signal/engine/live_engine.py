@@ -126,7 +126,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
                     state.log_signal(emitted_tag, time, value, data=res.get("data"))
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
-    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {state.signal_history}")
+    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {state._normalize_signal_history(state.signal_history)}")
 
 def _read_ab_mode() -> str:
     raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()
@@ -357,10 +357,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             try:
                                 res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                                 if res:
-                                    category = res.get("category")
                                     value = res.get("value")
-                                    explain = res.get("explain")
-                                    inputs = res.get("inputs")
                                     tag_val = res.get('tag', tag)
                                     if tag_val: state.log_signal(tag_val, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                                     cross_val = res.get('cross')
@@ -394,10 +391,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                             if res:
-                                category = res.get("category")
                                 value = res.get("value")
-                                explain = res.get("explain")
-                                inputs = res.get("inputs")
                                 tag_val = res.get('tag', tag)
                                 if tag_val: state.log_signal(tag_val, int(df.iloc[-1]['t']), category=category, value=value, explain=explain, inputs=inputs)
                         except Exception as e:
@@ -1018,16 +1012,10 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                             if res:
-                                category = res.get("category")
                                 value = res.get("value")
-                                explain = res.get("explain")
-                                inputs = res.get("inputs")
                                 sig_tag = res.get('tag', tag)
                                 if sig_tag:
                                     state.log_signal(sig_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
-                                cross_tag = res.get('cross')
-                                if cross_tag:
-                                    state.log_signal(cross_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
                         except Exception as e:
                             if i < 3:
                                 logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")

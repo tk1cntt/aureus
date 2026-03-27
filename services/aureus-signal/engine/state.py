@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List, Any, Optional
 
 class SymbolState:
@@ -56,6 +57,123 @@ class SymbolState:
         self.win_count: int = 0
         self.loss_count: int = 0
         self.trade_history: List[Dict[str, Any]] = []
+
+    _STRUCTURE_TAGS = {
+        "CHOCH_UP", "CHOCH_DOWN"
+    }
+    _EMA_TAG_RE = re.compile(r"^ema_(\d+)_(up|down)$", re.IGNORECASE)
+
+    def _normalize_signal_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        grouped: Dict[int, Dict[str, Any]] = {}
+
+        for rec in history:
+            if not isinstance(rec, dict):
+                continue
+
+            tag_raw = rec.get("tag")
+            if tag_raw is None:
+                continue
+
+            timestamp = rec.get("t")
+            try:
+                t = int(timestamp)
+            except (TypeError, ValueError):
+                continue
+
+            tag = str(tag_raw)
+            tag_lower = tag.lower()
+            data_payload = rec.get("data") if isinstance(rec.get("data"), dict) else {}
+            value_payload = rec.get("value")
+
+            if t not in grouped:
+                grouped[t] = {
+                    "t": t,
+                    "signals": {
+                        "ema": {},
+                        "_events_map": {},
+                    },
+                }
+
+            signals = grouped[t]["signals"]
+
+            if tag_lower == "htf_trend":
+                trend_obj: Dict[str, Any] = {}
+                if value_payload is not None:
+                    trend_obj["value"] = value_payload
+                trend_obj.update(data_payload)
+                signals["htf_trend"] = trend_obj if trend_obj else {"value": None}
+                continue
+
+            if tag_lower == "atr_14":
+                signals["atr_14"] = value_payload
+                continue
+
+            if tag_lower == "market_session":
+                session_obj: Dict[str, Any] = {}
+                if value_payload is not None:
+                    session_obj["value"] = value_payload
+                session_obj.update(data_payload)
+                signals["market_session"] = session_obj if session_obj else True
+                continue
+
+            if tag_lower == "zigzag":
+                zigzag_obj: Dict[str, Any] = {}
+                if isinstance(value_payload, dict):
+                    zigzag_obj.update(value_payload)
+                elif value_payload is not None:
+                    zigzag_obj["kind"] = value_payload
+                zigzag_obj.update(data_payload)
+                if "explain" in rec:
+                    zigzag_obj["explain"] = rec.get("explain")
+                if "category" in rec:
+                    zigzag_obj["category"] = rec.get("category")
+                signals["zigzag"] = zigzag_obj if zigzag_obj else {"kind": None}
+                continue
+
+            ema_match = self._EMA_TAG_RE.match(tag)
+            if ema_match:
+                period, direction = ema_match.groups()
+                ema_key = f"ema_{period}"
+                ema_obj: Dict[str, Any] = {
+                    "direction": direction.lower(),
+                    "value": value_payload,
+                }
+                ema_obj.update(data_payload)
+                signals["ema"][ema_key] = ema_obj
+                continue
+
+            event_obj: Dict[str, Any] = {"tag": tag_lower}
+            if isinstance(value_payload, dict):
+                event_obj.update(value_payload)
+            elif value_payload is not None:
+                event_obj["value"] = value_payload
+
+            event_obj.update(data_payload)
+
+            for passthrough_key in ("explain", "category", "inputs"):
+                if passthrough_key in rec:
+                    event_obj[passthrough_key] = rec.get(passthrough_key)
+
+            # Keep latest event per tag in each timestamp group (overwrite semantics)
+            signals["_events_map"][tag_lower] = event_obj
+
+        output: List[Dict[str, Any]] = []
+        for t in sorted(grouped.keys()):
+            item = grouped[t]
+            signals = item["signals"]
+
+            events_map = signals.pop("_events_map", {})
+            if events_map:
+                signals["events"] = list(events_map.values())
+
+            if not signals["ema"]:
+                signals.pop("ema", None)
+            if "events" in signals and not signals["events"]:
+                signals.pop("events", None)
+
+            output.append(item)
+
+        return output
 
     def log_signal(self, tag: str, timestamp: int, value: Any = None, data: Optional[Dict[str, Any]] = None):
         # Defensive check in case of legacy state restoration
@@ -142,12 +260,30 @@ class SymbolState:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes current state for dashboard/UI consumption."""
+        source_signal_history = getattr(self, 'signal_history', [])
+
+        def _safe_history_timestamp(entry: Any) -> int:
+            if not isinstance(entry, dict):
+                return 0
+            try:
+                return int(entry.get('t'))
+            except (TypeError, ValueError):
+                return 0
+
+        raw_signal_history = sorted(
+            source_signal_history,
+            key=_safe_history_timestamp,
+            reverse=True,
+        )
+        normalized_signal_history = self._normalize_signal_history(source_signal_history)
+
         return {
             "symbol": self.symbol,
             "obs": sorted(self.obs, key=lambda x: x.get('t_breakout') or x.get('t_start') or 0, reverse=True),
             "fvgs": sorted(self.fvgs, key=lambda x: x.get('t_start') or 0, reverse=True),
             "swing_points": self.swing_points,
-            "signal_history": sorted(getattr(self, 'signal_history', []), key=lambda x: x.get('t') or 0, reverse=True),
+            "signal_history": raw_signal_history,
+            "signal_history_normalized": normalized_signal_history,
             "tracking_vars": self.tracking_vars,
             "last_candle": self.last_candle,
             "strategy_progress": self.strategy_progress,

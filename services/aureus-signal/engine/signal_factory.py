@@ -15,8 +15,6 @@ from engine.signals.session import SessionSignal
 from engine.signals.choch_up import CHOCHUpSignal
 from engine.signals.choch_down import CHOCHDownSignal
 from engine.signals.sweep import SweepSignal
-from engine.signals.sweep_bull import SweepBullSignal
-from engine.signals.sweep_bear import SweepBearSignal
 from engine.signals.ema import EMASignal
 from engine.signals.atr import ATRSignal
 from engine.signals.fvg_up import FVGUpSignal
@@ -142,8 +140,6 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "sweep_processor": SweepSignal(),
         "choch_up": CHOCHUpSignal(),
         "choch_down": CHOCHDownSignal(),
-        "sweep_bull": SweepBullSignal(),
-        "sweep_bear": SweepBearSignal(),
         "ema_21": EMASignal(21),
         "ema_34": EMASignal(34),
         "ema_55": EMASignal(55),
