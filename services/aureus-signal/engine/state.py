@@ -1,5 +1,37 @@
 import re
+from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
+
+@dataclass
+class CandleRecord:
+    t: int
+    session: Optional[Dict[str, Any]] = None
+    htf_trend: Optional[Dict[str, Any]] = None
+    atr_14: Any = None
+    zigzag: Optional[Dict[str, Any]] = None
+    ema: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    _events_map: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        signals: Dict[str, Any] = {}
+        if self.session is not None:
+            signals["market_session"] = self.session
+        if self.htf_trend is not None:
+            signals["htf_trend"] = self.htf_trend
+        if self.atr_14 is not None:
+            signals["atr_14"] = self.atr_14
+        if self.zigzag is not None:
+            signals["zigzag"] = self.zigzag
+        if self.ema:
+            signals["ema"] = dict(self.ema)
+        if self._events_map:
+            signals["events"] = list(self._events_map.values())
+
+        return {
+            "t": int(self.t),
+            "signals": signals,
+        }
+
 
 class SymbolState:
     """Manages persistent state for a specific symbol (OBs, FVGs, Ranges)."""
@@ -14,6 +46,7 @@ class SymbolState:
         self.fvgs: List[Dict[str, Any]] = []
         self.swing_points: List[Dict[str, Any]] = [] 
         self.signal_history: List[Dict[str, Any]] = [] 
+        self.log_signal_normalize: List[Dict[str, Any]] = []
         self.active_range: Optional[Dict[str, Any]] = None
         self.tracking_vars: Dict[str, Any] = {}
         self.last_candle: Optional[Dict[str, Any]] = None
@@ -63,7 +96,91 @@ class SymbolState:
     }
     _EMA_TAG_RE = re.compile(r"^ema_(\d+)_(up|down)$", re.IGNORECASE)
 
+    @staticmethod
+    def _build_signal_payload(
+        value_payload: Any,
+        data_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if isinstance(value_payload, dict):
+            payload.update(value_payload)
+        elif value_payload is not None:
+            payload["value"] = value_payload
+
+        if isinstance(data_payload, dict):
+            payload.update(data_payload)
+
+        return payload
+
+    def create_candle_record(self, timestamp: int) -> CandleRecord:
+        return CandleRecord(t=int(timestamp))
+
+    def map_signal_to_candle_record(
+        self,
+        record: CandleRecord,
+        tag: str,
+        value: Any = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not tag:
+            return
+
+        tag_lower = str(tag).lower()
+        payload = self._build_signal_payload(value, data)
+
+        if tag_lower in {"session", "market_session"}:
+            record.session = payload if payload else ({"value": value} if value is not None else {})
+            return
+
+        if tag_lower == "htf_trend":
+            record.htf_trend = payload if payload else ({"value": value} if value is not None else {})
+            return
+
+        if tag_lower == "atr_14":
+            if payload:
+                record.atr_14 = payload.get("value") if len(payload) == 1 and "value" in payload else payload
+            else:
+                record.atr_14 = value
+            return
+
+        if tag_lower == "zigzag":
+            record.zigzag = payload if payload else ({"kind": value} if value is not None else {"kind": None})
+            return
+
+        ema_match = self._EMA_TAG_RE.match(str(tag))
+        if ema_match:
+            period, direction = ema_match.groups()
+            ema_key = f"ema_{period}"
+            ema_obj = payload if payload else {}
+            ema_obj.setdefault("value", value)
+            ema_obj["direction"] = direction.lower()
+            record.ema[ema_key] = ema_obj
+            return
+
+        event_obj: Dict[str, Any] = {"tag": tag_lower}
+        event_obj.update(payload)
+        record._events_map[tag_lower] = event_obj
+
+    def log_signal_normalize_add(self, record: CandleRecord) -> None:
+        payload = record.to_dict() if isinstance(record, CandleRecord) else record
+        if not isinstance(payload, dict):
+            return
+
+        signals = payload.get("signals") if isinstance(payload.get("signals"), dict) else {}
+        if not signals:
+            return
+
+        self.log_signal_normalize.append(payload)
+        if len(self.log_signal_normalize) > 1000:
+            self.log_signal_normalize.pop(0)
+
     def _normalize_signal_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if getattr(self, "log_signal_normalize", None):
+            return sorted(
+                self.log_signal_normalize,
+                key=lambda item: int(item.get("t", 0)) if isinstance(item, dict) else 0,
+            )
+
         grouped: Dict[int, Dict[str, Any]] = {}
 
         for rec in history:
@@ -238,6 +355,7 @@ class SymbolState:
         self.fvgs = data.get('fvgs', [])
         self.swing_points = data.get('swing_points', [])
         self.signal_history = data.get('signal_history', [])
+        self.log_signal_normalize = data.get('signal_history_normalized', [])
         self.tracking_vars = data.get('tracking_vars', {})
         self.simulated_orders = data.get('active_orders', []) + data.get('closed_orders', [])
         self.strategy_progress = data.get('strategy_progress', {})
@@ -275,7 +393,14 @@ class SymbolState:
             key=_safe_history_timestamp,
             reverse=True,
         )
-        normalized_signal_history = self._normalize_signal_history(source_signal_history)
+        normalized_source = getattr(self, 'log_signal_normalize', [])
+        if normalized_source:
+            normalized_signal_history = sorted(
+                normalized_source,
+                key=lambda item: int(item.get('t', 0)) if isinstance(item, dict) else 0,
+            )
+        else:
+            normalized_signal_history = self._normalize_signal_history(source_signal_history)
 
         return {
             "symbol": self.symbol,

@@ -109,24 +109,31 @@ async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_reje
 
 
 def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
-    """Executes all signal calculators for the current candle and appends emitted tags into state history."""
+    """Executes all signal calculators for current candle and appends one normalized CandleRecord."""
     if df is None or len(df) == 0:
         return
 
     ts_unix = int(df.iloc[-1]["t"])
+    record = state.create_candle_record(ts_unix)
+
     for signal_name, signal_calc in signals.items():
         try:
             logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             if res:
-                time = res.get("t")
-                value = res.get("value")
-                emitted_tag = res.get("tag")
+                emitted_tag = res.get("tag", signal_name)
                 if emitted_tag:
-                    state.log_signal(emitted_tag, time, value, data=res.get("data"))
+                    state.map_signal_to_candle_record(
+                        record,
+                        tag=emitted_tag,
+                        value=res.get("value"),
+                        data=res.get("data"),
+                    )
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
-    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {state._normalize_signal_history(state.signal_history)}")
+
+    state.log_signal_normalize_add(record)
+    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
 
 def _read_ab_mode() -> str:
     raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()
@@ -146,13 +153,13 @@ def _read_ab_target_strategy_names() -> list[str]:
 
 def _apply_ab_mode_to_registry(registry: StrategyRegistry, symbol: str, mode: str, keep_names: list[str]) -> None:
     if mode != "A":
-        logger.info(
+        logger.debug(
             f"{PIPELINE_LOG_PREFIX}[{symbol}][AB_MODE] mode={mode} keep=ALL (full-stack)"
         )
         return
 
     filter_result = registry.apply_name_filter(keep_names)
-    logger.info(
+    logger.debug(
         f"{PIPELINE_LOG_PREFIX}[{symbol}][AB_MODE] mode=A keep={keep_names} "
         f"after={filter_result.get('after', [])} removed={filter_result.get('removed', [])}"
     )
@@ -228,7 +235,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
     ab_mode = _read_ab_mode()
     ab_target_strategies = _read_ab_target_strategy_names()
-    logger.info(
+    logger.debug(
         f"{PIPELINE_LOG_PREFIX}[GLOBAL][AB_MODE] mode={ab_mode} target_strategies={ab_target_strategies}"
     )
 
@@ -353,17 +360,25 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     state.transient_signals = {}
                     
                     if df is not None and len(df) >= 5:
+                        candle_t = int(candle_data['t'])
+                        record = state.create_candle_record(candle_t)
                         for tag, signal_calc in signals.items():
                             try:
                                 res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                                 if res:
                                     value = res.get("value")
                                     tag_val = res.get('tag', tag)
-                                    if tag_val: state.log_signal(tag_val, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
-                                    cross_val = res.get('cross')
-                                    if cross_val: state.log_signal(cross_val, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
+                                    if tag_val:
+                                        state.map_signal_to_candle_record(
+                                            record,
+                                            tag=tag_val,
+                                            value=value,
+                                            data=res.get("data"),
+                                        )
                             except Exception as e:
                                 pass
+
+                        state.log_signal_normalize_add(record)
             else:
                 logger.info(f"[{symbol}] No snapshot found. Performing full initial warm-up...")
                 logger.debug(f"Starting initial DB fetch for {symbol}...")
@@ -387,15 +402,25 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 df = window_manager.get_df(symbol)
                 signals = symbol_signals[symbol]
                 if df is not None:
+                    candle_t = int(df.iloc[-1]['t'])
+                    record = state.create_candle_record(candle_t)
                     for tag, signal_calc in signals.items():
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
                             if res:
                                 value = res.get("value")
                                 tag_val = res.get('tag', tag)
-                                if tag_val: state.log_signal(tag_val, int(df.iloc[-1]['t']), category=category, value=value, explain=explain, inputs=inputs)
+                                if tag_val:
+                                    state.map_signal_to_candle_record(
+                                        record,
+                                        tag=tag_val,
+                                        value=value,
+                                        data=res.get("data"),
+                                    )
                         except Exception as e:
                             logger.error(f"Init signal calc error for {tag}: {e}")
+
+                    state.log_signal_normalize_add(record)
 
             # Assign properly seeded state
             df = window_manager.get_df(symbol)
@@ -632,7 +657,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             accepted_count = len(strategy_results) if strategy_results else 0
                             rejection_count = len(registry_rejections) if registry_rejections else 0
-                            logger.info(
+                            logger.debug(
                                 f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
                                 f"t={ts_unix} accepted={accepted_count} rejections={rejection_count}"
                             )
@@ -648,7 +673,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 )
 
                             if registry_rejections:
-                                logger.warning(
+                                logger.debug(
                                     f"{PIPELINE_LOG_PREFIX}[{symbol}][D][post_evaluate_all][emit_rejections] "
                                     f"t={ts_unix} count={len(registry_rejections)}"
                                 )
@@ -664,7 +689,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 await trade_manager.update_orders(symbol, data, state)
                             
                             if strategy_results:
-                                logger.info(
+                                logger.debug(
                                     f"{PIPELINE_LOG_PREFIX}{symbol}[to_process_triggers] "
                                     f"t={ts_unix} accepted_count={len(strategy_results)}"
                                 )
@@ -675,7 +700,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     ai_validator,
                                     execution_mode=execution_mode,
                                 )
-                                logger.info(
+                                logger.debug(
                                     f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][process_triggers_done] "
                                     f"t={ts_unix} pending_ai={bool(pending_order)}"
                                 )
@@ -687,9 +712,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     state.log_signal(
                                         f"strat:{res['strategy']}",
                                         res['t'],
-                                        category="strategy",
                                         value=res['strategy'],
-                                        explain="Strategy triggered"
+                                        data={
+                                            "category": "strategy",
+                                            "explain": "Strategy triggered",
+                                        },
                                     )
                             else:
                                 logger.debug(
@@ -1008,6 +1035,8 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
 
                 # Run all signals per candle
                 if df is not None and len(df) >= 5:
+                    candle_t = int(candle_data['t'])
+                    record = state.create_candle_record(candle_t)
                     for tag, signal_calc in signals.items():
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
@@ -1015,10 +1044,17 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                                 value = res.get("value")
                                 sig_tag = res.get('tag', tag)
                                 if sig_tag:
-                                    state.log_signal(sig_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
+                                    state.map_signal_to_candle_record(
+                                        record,
+                                        tag=sig_tag,
+                                        value=value,
+                                        data=res.get("data"),
+                                    )
                         except Exception as e:
                             if i < 3:
                                 logger.error(f"[{symbol}] [recalculate_all_signals] Error: Signal {tag} calc error: {e}")
+
+                    state.log_signal_normalize_add(record)
 
                     # Only save snapshots for NEW candles (skip warm-up)
                     if i >= warmup_count:

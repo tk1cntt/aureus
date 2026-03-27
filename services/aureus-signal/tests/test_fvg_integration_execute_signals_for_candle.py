@@ -77,18 +77,32 @@ class TestFVGExecuteSignalsForCandleIntegration(unittest.TestCase):
         self.assertIsNotNone(state)
         return state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
+    @staticmethod
+    def _event_tags(record: dict) -> set[str]:
+        events = record.get("signals", {}).get("events", [])
+        return {
+            str(evt.get("tag"))
+            for evt in events
+            if isinstance(evt, dict) and evt.get("tag") is not None
+        }
+
     def test_execute_signals_emits_fvg_tags_after_three_candles(self):
         state = self._run_until(2)
+        records = self._normalized_records(state)
 
-        tags = [item.get("tag") for item in state.signal_history]
-        self.assertIn("fvg_up", tags)
+        self.assertTrue(any("fvg_up" in self._event_tags(rec) for rec in records))
 
     def test_execute_signals_populates_fvg_timestamp_in_signal_history(self):
         state = self._run_until(2)
+        records = self._normalized_records(state)
 
-        fvg_entries = [item for item in state.signal_history if item.get("tag") == "fvg_up"]
-        self.assertGreater(len(fvg_entries), 0)
-        self.assertEqual(fvg_entries[-1].get("t"), int(self._candle(2)["t"]))
+        fvg_records = [rec for rec in records if "fvg_up" in self._event_tags(rec)]
+        self.assertGreater(len(fvg_records), 0)
+        self.assertEqual(fvg_records[-1].get("t"), int(self._candle(2)["t"]))
 
     def test_execute_signals_emits_transient_fvg_event_keys(self):
         state = self._run_until(2)

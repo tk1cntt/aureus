@@ -230,14 +230,38 @@ class StateSnapshot:
         if self.events:
             try:
                 events = json.loads(self.events) if isinstance(self.events, str) else self.events
-                for evt in events:
-                    tag = evt.get('tag', '')
-                    category = evt.get("category")
-                    value = evt.get("value")
-                    explain = evt.get("explain")
-                    inputs = evt.get("inputs")
-                    state.transient_signals[tag] = evt
-                    state.log_signal(tag, self.timestamp, category=category, value=value, explain=explain, inputs=inputs)
+                if isinstance(events, list):
+                    for evt in events:
+                        if not isinstance(evt, dict):
+                            continue
+
+                        tag = str(evt.get("tag", "")).strip().lower()
+                        if not tag:
+                            continue
+
+                        value = evt.get("value")
+                        data_payload = evt.get("data") if isinstance(evt.get("data"), dict) else None
+                        if data_payload is None:
+                            legacy_payload = {
+                                key: val
+                                for key, val in evt.items()
+                                if key not in {"tag", "t", "value", "data"} and val is not None
+                            }
+                            data_payload = legacy_payload or None
+
+                        restored_evt = {"tag": tag, "t": self.timestamp}
+                        if value is not None:
+                            restored_evt["value"] = value
+                        if data_payload is not None:
+                            restored_evt["data"] = data_payload
+                        state.transient_signals[tag] = restored_evt
+
+                        state.log_signal(
+                            tag,
+                            self.timestamp,
+                            value=value,
+                            data=data_payload,
+                        )
             except Exception:
                 pass
 

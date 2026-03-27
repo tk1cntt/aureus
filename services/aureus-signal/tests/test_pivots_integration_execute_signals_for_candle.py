@@ -46,16 +46,33 @@ class TestPivotsExecuteSignalsForCandleIntegration(unittest.TestCase):
         self.assertIsNotNone(state)
         return state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
     def test_execute_signals_emits_latest_confirmed_pivot_tag(self):
         state = self._run_until(5)
-        tags = [item.get("tag") for item in state.signal_history]
-        self.assertIn("ll", tags)
+        records = self._normalized_records(state)
+
+        zigzag_values = [
+            rec.get("signals", {}).get("zigzag", {}).get("value")
+            for rec in records
+            if isinstance(rec.get("signals", {}).get("zigzag"), dict)
+        ]
+        self.assertIn("ll", zigzag_values)
 
     def test_execute_signals_persists_pivot_timestamp_in_history(self):
         state = self._run_until(5)
-        ll_entries = [item for item in state.signal_history if item.get("tag") == "ll"]
-        self.assertGreater(len(ll_entries), 0)
-        self.assertEqual(ll_entries[-1].get("t"), int(self._candle(5)["t"]))
+        records = self._normalized_records(state)
+
+        zigzag_records = [
+            rec
+            for rec in records
+            if isinstance(rec.get("signals", {}).get("zigzag"), dict)
+            and rec.get("signals", {}).get("zigzag", {}).get("value") is not None
+        ]
+        self.assertGreater(len(zigzag_records), 0)
+        self.assertEqual(zigzag_records[-1].get("t"), int(self._candle(5)["t"]))
 
     def test_execute_signals_keeps_expected_swing_point_contract(self):
         state = self._run_until(5)

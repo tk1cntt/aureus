@@ -196,15 +196,24 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                             
                             # Pipeline Step 2: Signal Calculation
                             if df is not None and len(df) >= 5:
+                                record = c_state.create_candle_record(ts_unix)
                                 for tag, signal_calc in signals.items():
                                     try:
                                         res = signal_calc.calculate(df, c_state, redis_client=r, symbol=symbol)
                                         if res:
                                             value = res.get("value")
-                                            t_tag = res.get('tag')
-                                            if t_tag: c_state.log_signal(t_tag, ts_unix, category=category, value=value, explain=explain, inputs=inputs)
+                                            t_tag = res.get('tag', tag)
+                                            if t_tag:
+                                                c_state.map_signal_to_candle_record(
+                                                    record,
+                                                    tag=t_tag,
+                                                    value=value,
+                                                    data=res.get("data"),
+                                                )
                                     except Exception as e:
                                         logger.error(f"Signal {tag} calc error: {e}")
+
+                                c_state.log_signal_normalize_add(record)
                                 # Story 3.4: Trade Lock Mechanism during 24H Warmup
                                 # is_warmup already computed above before len(df) check
                                 
@@ -221,9 +230,11 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                                                 c_state.log_signal(
                                                     f"strat:{res['strategy']}",
                                                     ts_unix,
-                                                    category="strategy",
                                                     value=res['strategy'],
-                                                    explain="Strategy triggered"
+                                                    data={
+                                                        "category": "strategy",
+                                                        "explain": "Strategy triggered",
+                                                    },
                                                 )
     
                                     # REVIEW FIX: Reset events at engine level for clean tick lifecycle

@@ -37,13 +37,22 @@ class TestSessionExecuteSignalsForCandleIntegration(unittest.TestCase):
         self.assertIsNotNone(state)
         return state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
     def test_execute_signals_logs_market_session_tag_with_expected_timestamp(self):
         ts = 1704067200  # 07:00 in GMT+7
         state = self._run_for_timestamps([ts])
+        records = self._normalized_records(state)
 
-        entries = [item for item in state.signal_history if item.get("tag") == "market_session"]
-        self.assertGreater(len(entries), 0)
-        self.assertEqual(entries[-1].get("t"), ts)
+        session_records = [
+            rec
+            for rec in records
+            if isinstance(rec.get("signals", {}).get("market_session"), dict)
+        ]
+        self.assertGreater(len(session_records), 0)
+        self.assertEqual(session_records[-1].get("t"), ts)
 
     def test_current_session_progresses_across_defined_windows(self):
         timestamps = [

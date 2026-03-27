@@ -29,7 +29,7 @@ class SimulatedTradeManager:
             strategy_name = t.get('strategy', 'UNKNOWN')
             
             if not origin_t:
-                logger.warning(
+                logger.debug(
                     f"{PIPELINE_LOG_PREFIX}[D][process_triggers][missing_origin_timestamp] "
                     f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} "
                     f"reason_code=MISSING_ORIGIN_TIMESTAMP"
@@ -60,7 +60,7 @@ class SimulatedTradeManager:
             sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
 
             if sl is None or tp is None:
-                logger.warning(
+                logger.debug(
                     f"{PIPELINE_LOG_PREFIX}[D][process_triggers][sl_tp_calc_failed] "
                     f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
                     f"reason_code=SL_TP_CALC_FAILED sl={sl} tp={tp}"
@@ -96,7 +96,7 @@ class SimulatedTradeManager:
                         "data": json.dumps(reason_payload),
                     },
                 )
-                logger.warning(
+                logger.debug(
                     f"{PIPELINE_LOG_PREFIX}[D][process_triggers][order_plan_incomplete] "
                     f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
                     f"reason_code=ORDER_PLAN_INCOMPLETE missing_keys={missing_order_plan_keys}"
@@ -108,7 +108,7 @@ class SimulatedTradeManager:
                 continue
 
             # It's a NEW trade!
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[D][process_triggers][new_trade] "
                 f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id}"
             )

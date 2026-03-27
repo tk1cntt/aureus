@@ -128,6 +128,8 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
         
         # Calculate ALL signals
         if df is not None and len(df) >= 5:
+            candle_t = int(candle_data['t'])
+            record = state.create_candle_record(candle_t)
             for tag, signal_calc in signals.items():
                 try:
                     res = signal_calc.calculate(df, state, redis_client=None, symbol=symbol)
@@ -135,10 +137,17 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
                         value = res.get("value")
                         sig_tag = res.get('tag', tag)
                         if sig_tag:
-                            state.log_signal(sig_tag, int(candle_data['t']), category=category, value=value, explain=explain, inputs=inputs)
+                            state.map_signal_to_candle_record(
+                                record,
+                                tag=sig_tag,
+                                value=value,
+                                data=res.get("data"),
+                            )
                 except Exception as e:
                     if processed < 5:  # Only log first few errors
                         logger.debug(f"Signal {tag} error at candle {i}: {e}")
+
+            state.log_signal_normalize_add(record)
         
         # Only store snapshots for candles in the target range (not warmup)
         ts_unix = int(candle_data['t'])

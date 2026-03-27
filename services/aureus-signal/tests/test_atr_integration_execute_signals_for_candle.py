@@ -39,10 +39,14 @@ class TestATRExecuteSignalsForCandleIntegration(unittest.TestCase):
             execute_signals_for_candle(self.signals, df, state, self.symbol, None)
         return state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
     def test_execute_signals_for_candle_emits_atr_after_warmup(self):
         state = self._run_until(self.period + 2)
-        tags = [item.get("tag") for item in state.signal_history]
-        self.assertIn("atr_14", tags)
+        records = self._normalized_records(state)
+        self.assertTrue(any("atr_14" in rec.get("signals", {}) for rec in records))
         self.assertIsNotNone(state.atr)
 
     def test_atr_state_progresses_after_warmup(self):
@@ -61,10 +65,10 @@ class TestATRExecuteSignalsForCandleIntegration(unittest.TestCase):
         state = self._run_until(self.period + 4)
         self.assertIsNotNone(state)
 
-        atr_entries = [item for item in state.signal_history if item.get("tag") == "atr_14"]
-        self.assertGreater(len(atr_entries), 0)
-        self.assertEqual(atr_entries[-1].get("tag"), "atr_14")
-        self.assertEqual(atr_entries[-1].get("t"), int(self._candle(self.period + 4)["t"]))
+        records = self._normalized_records(state)
+        atr_records = [rec for rec in records if "atr_14" in rec.get("signals", {})]
+        self.assertGreater(len(atr_records), 0)
+        self.assertEqual(atr_records[-1].get("t"), int(self._candle(self.period + 4)["t"]))
 
 
 if __name__ == "__main__":

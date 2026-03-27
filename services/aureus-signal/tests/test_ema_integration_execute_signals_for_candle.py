@@ -39,10 +39,17 @@ class TestEMAExecuteSignalsForCandleIntegration(unittest.TestCase):
             execute_signals_for_candle(self.signals, df, state, self.symbol, None)
         return state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
     def test_execute_signals_for_candle_emits_ema_after_warmup(self):
         state = self._run_until(self.period + 2)
-        tags = [item.get("tag") for item in state.signal_history]
-        self.assertTrue(any(tag in {f"ema_{self.period}_up", f"ema_{self.period}_down"} for tag in tags))
+        records = self._normalized_records(state)
+
+        self.assertTrue(
+            any(f"ema_{self.period}" in rec.get("signals", {}).get("ema", {}) for rec in records)
+        )
         self.assertIn(self.period, state.emas)
         self.assertIsNotNone(state.emas[self.period].get("current"))
 
@@ -60,15 +67,15 @@ class TestEMAExecuteSignalsForCandleIntegration(unittest.TestCase):
     def test_execute_signals_populates_ema_signal_history_timestamp(self):
         last_idx = self.period + 4
         state = self._run_until(last_idx)
+        records = self._normalized_records(state)
 
-        ema_entries = [
-            item
-            for item in state.signal_history
-            if item.get("tag") in {f"ema_{self.period}_up", f"ema_{self.period}_down"}
+        ema_records = [
+            rec
+            for rec in records
+            if f"ema_{self.period}" in rec.get("signals", {}).get("ema", {})
         ]
-        self.assertGreater(len(ema_entries), 0)
-        self.assertIn("t", ema_entries[-1])
-        self.assertEqual(ema_entries[-1].get("t"), int(self._candle(last_idx)["t"]))
+        self.assertGreater(len(ema_records), 0)
+        self.assertEqual(ema_records[-1].get("t"), int(self._candle(last_idx)["t"]))
 
 
 if __name__ == "__main__":

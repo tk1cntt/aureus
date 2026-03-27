@@ -327,7 +327,7 @@ class TemplateStrategy(BaseStrategy):
         symbol = str(getattr(state_obj, "symbol", "UNKNOWN") or "UNKNOWN")
 
         if df is None or state_obj is None:
-            logger.warning(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][invalid_context] "
                 f"strategy={self.name} strategy_id={self.strategy_id} "
                 f"has_df={df is not None} has_state={state_obj is not None}"
@@ -346,7 +346,7 @@ class TemplateStrategy(BaseStrategy):
         bar_ts = int(df.iloc[-1]["t"])
         backfill_status = context.get("backfill_status", "READY")
         if backfill_status != "READY":
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][backfill_not_ready] "
                 f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
                 f"backfill_status={backfill_status}"
@@ -370,7 +370,7 @@ class TemplateStrategy(BaseStrategy):
         core = self._evaluate_sequence(df, state_obj)
         diagnostics = self._build_sequence_diagnostics(core)
 
-        logger.info(
+        logger.debug(
             f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][sequence_eval] "
             f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
             f"score={core.get('score')} matched_steps={core.get('matched_steps')} "
@@ -397,7 +397,7 @@ class TemplateStrategy(BaseStrategy):
             if score_below_threshold:
                 mismatch_causes.append("SCORE_BELOW_THRESHOLD")
 
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][sequence_mismatch_detail] "
                 f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
                 f"mismatch_causes={mismatch_causes} "
@@ -410,7 +410,7 @@ class TemplateStrategy(BaseStrategy):
             )
 
         if reason_code != "OK":
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent_not_actionable] "
                 f"strategy={self.name} strategy_id={self.strategy_id} bar_t={bar_ts} "
                 f"reason_code={reason_code} score={core['score']} min_score={self.min_score} "
@@ -469,7 +469,7 @@ class TemplateStrategy(BaseStrategy):
 
     def validate_entry(self, intent: Optional[Dict[str, Any]], context: Dict[str, Any]) -> Dict[str, Any]:
         if not intent:
-            logger.warning(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
                 f"strategy={self.name} strategy_id={self.strategy_id} reason_code=NO_INTENT"
             )
@@ -485,7 +485,7 @@ class TemplateStrategy(BaseStrategy):
         bar_t = intent.get("t", 0)
 
         if intent_reason == "BACKFILL_NOT_READY":
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
                 f"strategy={self.name} strategy_id={self.strategy_id} intent_id={intent_id} "
                 f"t={bar_t} reason_code=BACKFILL_NOT_READY"
@@ -499,7 +499,7 @@ class TemplateStrategy(BaseStrategy):
 
         if not intent.get("is_actionable"):
             propagated_reason = str(intent_reason or "NON_ACTIONABLE_INTENT").strip().upper() or "NON_ACTIONABLE_INTENT"
-            logger.info(
+            logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[B][validate_entry][reject] "
                 f"strategy={self.name} strategy_id={self.strategy_id} intent_id={intent_id} "
                 f"t={bar_t} reason_code={propagated_reason} failed_rules=['{propagated_reason}']"

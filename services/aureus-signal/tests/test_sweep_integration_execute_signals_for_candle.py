@@ -27,6 +27,18 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         state.transient_signals = {}
         return df, state
 
+    @staticmethod
+    def _normalized_records(state):
+        return [item for item in state.log_signal_normalize if isinstance(item, dict)]
+
+    @staticmethod
+    def _events_by_tag(record: dict, tag: str) -> list[dict]:
+        events = record.get("signals", {}).get("events", [])
+        return [
+            evt for evt in events
+            if isinstance(evt, dict) and str(evt.get("tag")) == tag
+        ]
+
     def test_execute_signals_emits_sweep_bull_and_transient_key(self):
         candle = {
             "t": 1702000000,
@@ -48,9 +60,13 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
-        tags = [item.get("tag") for item in state.signal_history]
-        values = [item.get("value") for item in state.signal_history]
-        self.assertIn("sweep", tags)
+        records = self._normalized_records(state)
+        sweep_events = [
+            evt
+            for rec in records
+            for evt in self._events_by_tag(rec, "sweep")
+        ]
+        values = [evt.get("value") for evt in sweep_events]
         self.assertIn("sweep_bull", values)
         self.assertIn("sweep", state.transient_signals)
 
@@ -80,14 +96,16 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
             }
         )
 
-        before_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep"])
+        records_before = self._normalized_records(state)
+        before_second_run = sum(len(self._events_by_tag(rec, "sweep")) for rec in records_before)
 
         # Re-seed same target in the same candle: dedup should suppress processor emission.
         state.transient_signals = {}
         state.obs = [{"ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"}]
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
-        after_second_run = len([s for s in state.signal_history if s.get("tag") == "sweep"])
+        records_after = self._normalized_records(state)
+        after_second_run = sum(len(self._events_by_tag(rec, "sweep")) for rec in records_after)
         self.assertEqual(before_second_run, after_second_run)
 
     def test_execute_signals_emits_sweep_bear_with_bearish_target(self):
@@ -107,9 +125,13 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
 
-        tags = [item.get("tag") for item in state.signal_history]
-        values = [item.get("value") for item in state.signal_history]
-        self.assertIn("sweep", tags)
+        records = self._normalized_records(state)
+        sweep_events = [
+            evt
+            for rec in records
+            for evt in self._events_by_tag(rec, "sweep")
+        ]
+        values = [evt.get("value") for evt in sweep_events]
         self.assertIn("sweep_bear", values)
         self.assertIn("sweep", state.transient_signals)
 

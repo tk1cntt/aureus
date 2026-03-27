@@ -353,3 +353,11 @@ wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_redis redis-cli"
   - Sync API trả về status=name 'db_pool' is not defined (lỗi 500) → test vẫn ghi PASS vì nó nhận được response
   - Sync API trả operator does not exist (lỗi SQL) → vẫn PASS
   - Command format sai, signal engine không nhận → vẫn PASS
+
+10. Với test Python trong WSL: nếu `python3 -m pytest` báo `No module named pytest`, phải chạy bằng virtualenv của repo để đảm bảo đúng dependencies:
+
+```
+wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && .venv/bin/python -m pytest <test_paths> -q"
+```
+
+Không cài package tạm vào system Python để tránh lệch môi trường giữa các lần chạy.

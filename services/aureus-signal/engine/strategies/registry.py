@@ -70,7 +70,7 @@ class StrategyRegistry:
         after = list(self._strategies.keys())
         removed = [name for name in before if name not in after]
 
-        logger.info(
+        logger.debug(
             f"{PIPELINE_LOG_PREFIX}[FILTER][apply_name_filter] "
             f"keep={sorted(normalized_keep)} before={before} after={after} removed={removed}"
         )
@@ -112,7 +112,7 @@ class StrategyRegistry:
             "matched_steps": diagnostics.get("matched_steps"),
             "total_steps": diagnostics.get("total_steps"),
         }
-        logger.info(f"{PIPELINE_LOG_PREFIX}[{symbol}][MATRIX] {json.dumps(payload, ensure_ascii=False)}")
+        logger.debug(f"{PIPELINE_LOG_PREFIX}[{symbol}][MATRIX] {json.dumps(payload, ensure_ascii=False)}")
 
     def _validate_compatibility(self, strategy: BaseStrategy) -> Tuple[bool, Optional[str], Dict[str, Any]]:
         strategy_version = getattr(strategy, "strategy_version", None)
@@ -255,7 +255,7 @@ class StrategyRegistry:
                         bar_t=bar_ts,
                         status="REJECTED",
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=compatibility "
                         f"reason_code={reason_code or 'UNKNOWN_REJECTION'} bar_t={bar_ts}"
@@ -277,11 +277,11 @@ class StrategyRegistry:
                         bar_t=bar_ts,
                         status="DROP",
                     )
-                    logger.info(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][no_intent] "
                         f"strategy={name} strategy_id={strategy_id} bar_t={bar_ts}"
                     )
-                    logger.info(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=on_bar_close "
                         f"reason_code=NO_INTENT bar_t={bar_ts}"
@@ -289,7 +289,7 @@ class StrategyRegistry:
                     # No trigger is not a rejection; strategy simply did not emit intent.
                     continue
 
-                logger.info(
+                logger.debug(
                     f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent] "
                     f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                     f"reason_code={intent.get('reason_code', 'N/A')} "
@@ -321,7 +321,7 @@ class StrategyRegistry:
                         intent=intent,
                         diagnostics=reject_diag,
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][reject] "
                         f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                         f"reason_code={intent_reason} diagnostics={reject_diag if reject_diag else 'N/A'}"
@@ -340,7 +340,7 @@ class StrategyRegistry:
                             "t": intent.get("t", bar_ts),
                         },
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=on_bar_close "
                         f"intent_id={intent.get('intent_id')} reason_code={intent_reason} "
@@ -361,7 +361,7 @@ class StrategyRegistry:
                         status="REJECTED",
                         intent=intent,
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][B][validate_entry][reject] "
                         f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                         f"reason_code={reject_reason} "
@@ -379,7 +379,7 @@ class StrategyRegistry:
                             "t": intent.get("t", bar_ts),
                         },
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=validate_entry "
                         f"intent_id={intent.get('intent_id')} "
@@ -400,7 +400,7 @@ class StrategyRegistry:
                         status="REJECTED",
                         intent=intent,
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][C][build_order_plan][invalid_shape] "
                         f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                         f"returned_type={type(order_plan).__name__}"
@@ -415,7 +415,7 @@ class StrategyRegistry:
                             "returned_type": type(order_plan).__name__,
                         },
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=build_order_plan "
                         f"intent_id={intent.get('intent_id')} reason_code=ORDER_PLAN_INVALID_SHAPE bar_t={bar_ts}"
@@ -434,7 +434,7 @@ class StrategyRegistry:
                         status="REJECTED",
                         intent=intent,
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][C][build_order_plan][reject] "
                         f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                         f"reason_code={plan_reason}"
@@ -449,7 +449,7 @@ class StrategyRegistry:
                             "evaluated_rules": order_plan.get("evaluated_rules", []),
                         },
                     )
-                    logger.warning(
+                    logger.debug(
                         f"{PIPELINE_LOG_PREFIX}[{symbol}][SUMMARY][drop] "
                         f"strategy={name} strategy_id={strategy_id} phase=build_order_plan "
                         f"intent_id={intent.get('intent_id')} reason_code={plan_reason} bar_t={bar_ts}"
@@ -497,7 +497,7 @@ class StrategyRegistry:
                     intent=intent,
                     diagnostics=(intent.get("sequence_diagnostics") if isinstance(intent.get("sequence_diagnostics"), dict) else {}),
                 )
-                logger.info(
+                logger.debug(
                     f"{PIPELINE_LOG_PREFIX}[{symbol}][C][accepted] "
                     f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                     f"t={accepted_t}"
