@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Backtesting & Measurement Engine
 status: Executing Phase 15.10
-last_updated: "2026-03-26T13:45:43.573Z"
+last_updated: "2026-03-27T19:08:25+07:00"
 progress:
   total_phases: 11
   completed_phases: 2
@@ -15,7 +15,7 @@ progress:
 
 ## Current Position
 
-Phase: 15.10 (Pydantic Signal History Refactoring) — EXECUTING
+Phase: 15.10 (Pydantic Signal History Refactoring) — EXECUTING (reopened)
 Plan: 1 of 1
 
 ## Architecture Decision
@@ -32,6 +32,12 @@ Plan: 1 of 1
 ### Roadmap Evolution
 
 - Phase 15.7 added: Sequence enabled but no-entry trigger diagnosis
+- 2026-03-27: Phase 15.10 được mở lại để đồng bộ contract `signal_history/log_signal` sau khi rollback một phần.
+- `SymbolState.log_signal` hiện ở legacy signature (`tag`, `timestamp`, `value`, `data`) nhưng nhiều call-site vẫn truyền metadata kwargs (`category`, `explain`, `inputs`) trong:
+  - `services/aureus-signal/engine/live_engine.py`
+  - `services/aureus-signal/engine/backtest_engine.py`
+  - `services/aureus-signal/signal_computer.py`
+- Quick verification hiện tại: `pytest tests/test_decision_trace_schema.py tests/test_signal_contract_normalization.py -q` → `19 passed` (chưa phủ đầy đủ runtime loop live/backtest).
 
 - v1.1 Signal Optimization: Toàn bộ tín hiệu lõi modular hóa, 100% test coverage
 - v1.2 Strategy Sequence Engine: O(1) state machine, 3-pillar framework, legacy deprecated

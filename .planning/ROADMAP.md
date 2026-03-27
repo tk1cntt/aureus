@@ -24,7 +24,7 @@ See `.planning/archive/` for full archives.
 | 15.7 | Sequence enabled but no-entry trigger diagnosis | Internal strategy debug/instrumentation | PLANNED |
 | 15.8 | Signal→Nautilus order-open delivery diagnosis & contract alignment | Internal runtime integration debug/alignment | PLANNED |
 | 15.9 | Enrich signal_history with semantic metadata | Internal semantic observability | DONE |
-| 15.10 | Pydantic Signal History Refactoring | Refactor signal history to strong-typed Pydantic classes | DONE |
+| 15.10 | Pydantic Signal History Refactoring | Refactor signal history to strong-typed Pydantic classes | EXECUTING (REOPENED) |
 | 16 | Schema & Data Loader | SCHEMA-01→04 | NOT STARTED |
 | 17 | Signal Actor & Strategy Adapter | NAUTILUS-01→06, PARITY-01→03 | NOT STARTED |
 | 18 | Metrics & Result Persistence | METRIC-01→08, QUALITY-01, MEASURE-01→03 | NOT STARTED |
@@ -151,17 +151,16 @@ Plans:
 
 ### Phase 15.10: Pydantic Signal History Refactoring
 
-**Goal:** Chuyển đổi cấu trúc dữ liệu `signal_history` từ `List[Dict]` sang sử dụng các Data Models có kiểu dữ liệu chặt chẽ (Pydantic `BaseModel`) hỗ trợ Đa hình (Polymorphism) để phục hồi và xử lý an toàn. Target/Pivot price gộp chung thành trường `price`.
-**Requirements**: Refactor schema for better type-safety and maintainability.
+**Goal:** Ổn định lại contract `signal_history/log_signal` sau vòng rollback cục bộ, đảm bảo đồng nhất giữa `state.py` và các call-sites runtime trước khi tiếp tục refactor kiểu mạnh Pydantic.
+**Requirements**: Contract stabilization for safe continuation of type-safety refactor.
 **Depends on:** Phase 15.9
-**Plans:** 0/0 plans complete
+**Plans:** 1/1 plans tracked (execution reopened)
 
 Plans:
-- [ ] Định nghĩa `signal_models.py` với `BaseSignalRecord` và các Subclass (Trend, Structure, Session, v.v.). Cần xử lý thống nhất trường `price`.
-- [ ] Cập nhật `state.log_signal` để nhận `BaseSignalRecord` instance.
-- [ ] Cập nhật `AIValidator` để tương thích với object property.
-- [ ] Cập nhật tất cả các files `signal_calc` (ema, structure, sweep, session, fvg) trả về định dạng Pydantic class.
-- [ ] Thêm factory/discriminator trong `StateSnapshot.restore_to_state` để khôi phục mảng JSON ngược thành mảng Object.
+- [x] Đồng bộ trạng thái hiện tại vào `.planning/STATE.md`, `.planning/ROADMAP.md`, `.planning/phases/15.10-refactor-signal-history/*`
+- [x] Ghi nhận drift hiện tại: `state.log_signal` legacy signature vs metadata kwargs call-sites trong `live_engine.py`, `backtest_engine.py`, `signal_computer.py`
+- [x] Chốt quick verification hiện tại: `pytest tests/test_decision_trace_schema.py tests/test_signal_contract_normalization.py -q` → 19 passed
+- [ ] Kế tiếp: thực hiện contract reconciliation (đồng bộ signature/call-sites) rồi chạy lại smoke/runtime verify
 
 ---
 

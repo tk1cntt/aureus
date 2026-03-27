@@ -1,0 +1,965 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Redis uptime from INFO server section.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "command": "info",
+          "query": "",
+          "refId": "A",
+          "section": "server",
+          "type": "command"
+        }
+      ],
+      "title": "Redis Uptime",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "uptime_in_seconds"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Connected Redis clients from INFO clients.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "command": "info",
+          "query": "",
+          "refId": "A",
+          "section": "clients",
+          "type": "command"
+        }
+      ],
+      "title": "Connected Clients",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "connected_clients"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Total keys in selected Redis DB.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "query": "dbsize",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "DB Size (Keys)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Redis command throughput from INFO stats.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "command": "info",
+          "query": "",
+          "refId": "A",
+          "section": "stats",
+          "type": "command"
+        }
+      ],
+      "title": "Ops / sec",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "instantaneous_ops_per_sec"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Read-only key discovery by SCAN. Update key_pattern or key_domain to narrow results.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "scan 0 match ${key_pattern} count 200",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Key Discovery (SCAN)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Current key type for selected_key.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "type ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Selected Key Type",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "TTL of selected_key (seconds). -1 means no expire.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 4
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "ttl ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Selected Key TTL",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Preview scalar/string value with GET.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 4
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "get ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Selected Key Value (GET)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Inspect hash field/value pairs for selected hash key.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 12,
+        "y": 7
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "hgetall ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Hash Inspector (HGETALL)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Inspect a single hash field value from selected hash key.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 7
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "hget ${selected_key} ${hash_field}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Hash Field Inspector (HGET)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Length of selected list key.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 13
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "llen ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "List Size (LLEN)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Cardinality of selected set key.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 13
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "scard ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Set Size (SCARD)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Cardinality of selected sorted-set key.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 13
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "zcard ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "ZSet Size (ZCARD)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Sample sorted-set content for selected key.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 13
+      },
+      "id": 14,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "zrange ${selected_key} 0 20 withscores",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "ZSet Sample (ZRANGE)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Length of selected stream key.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 17
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "xlen ${selected_key}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Stream Size (XLEN)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "1 nếu member_value có trong set selected_key, ngược lại 0.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 17
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "sismember ${selected_key} ${member_value}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Set Membership (SISMEMBER)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Sample list items bằng LRANGE từ index 0 đến sample_limit.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 17,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "lrange ${selected_key} 0 ${sample_limit}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "List Sample (LRANGE 0 50)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Sample set members (giới hạn sample_limit) qua EVAL read-only wrapper.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 18,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "eval \"local m=redis.call('SMEMBERS', KEYS[1]); local lim=tonumber(ARGV[1]) or 50; local n=math.min(#m,lim); local out={}; for i=1,n do out[i]=m[i] end; return out\" 1 ${selected_key} ${sample_limit}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Set Sample (SMEMBERS Limited)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "redis-datasource",
+        "uid": "redis-dev"
+      },
+      "description": "Auto-detect type (string/hash/list/set/zset) và pretty-print value.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 19,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "eval \"local k=KEYS[1]; local lim=tonumber(ARGV[1]) or 50; local t=redis.call('TYPE',k)['ok']; local function q(v) if v==false or v==nil then return 'null' end; v=tostring(v); v=string.gsub(v,'\\\\','\\\\\\\\'); v=string.gsub(v,'\"','\\\\\"'); return '\"'..v..'\"' end; if t=='none' then return '{\\n  \\\"type\\\": \\\"none\\\",\\n  \\\"value\\\": null\\n}' end; if t=='string' then local v=redis.call('GET',k); return '{\\n  \\\"type\\\": \\\"string\\\",\\n  \\\"value\\\": '..q(v)..'\\n}' end; if t=='hash' then local a=redis.call('HGETALL',k); local c=math.min(#a,lim*2); local out='{\\n  \\\"type\\\": \\\"hash\\\",\\n  \\\"value\\\": {'; for i=1,c,2 do local s=(i<c-1) and ',' or ''; out=out..'\\n    '..q(a[i])..': '..q(a[i+1])..s; end; return out..'\\n  }\\n}' end; if t=='list' then local a=redis.call('LRANGE',k,0,lim); local out='{\\n  \\\"type\\\": \\\"list\\\",\\n  \\\"value\\\": ['; for i=1,#a do local s=(i<#a) and ',' or ''; out=out..'\\n    '..q(a[i])..s; end; return out..'\\n  ]\\n}' end; if t=='set' then local a=redis.call('SMEMBERS',k); local n=math.min(#a,lim); local out='{\\n  \\\"type\\\": \\\"set\\\",\\n  \\\"value\\\": ['; for i=1,n do local s=(i<n) and ',' or ''; out=out..'\\n    '..q(a[i])..s; end; return out..'\\n  ]\\n}' end; if t=='zset' then local a=redis.call('ZRANGE',k,0,lim,'WITHSCORES'); local out='{\\n  \\\"type\\\": \\\"zset\\\",\\n  \\\"value\\\": ['; for i=1,#a,2 do local s=(i<#a-1) and ',' or ''; out=out..'\\n    {\\\"member\\\": '..q(a[i])..', \\\"score\\\": '..q(a[i+1])..'}'..s; end; return out..'\\n  ]\\n}' end; return '{\\n  \\\"type\\\": '..q(t)..',\\n  \\\"note\\\": \\\"unsupported\\\"\\n}'\" 1 ${selected_key} ${sample_limit}",
+          "refId": "A",
+          "type": "cli"
+        }
+      ],
+      "title": "Value Preview (Auto by Type)",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "aureus",
+    "redis",
+    "explorer"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "Redis",
+          "value": "Redis"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Redis Datasource",
+        "multi": false,
+        "name": "redis",
+        "options": [],
+        "query": "redis-datasource",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "Trading",
+          "value": "Trading"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Key Domain",
+        "multi": false,
+        "name": "key_domain",
+        "options": [
+          {
+            "selected": true,
+            "text": "Trading",
+            "value": "Trading"
+          },
+          {
+            "selected": false,
+            "text": "App",
+            "value": "App"
+          },
+          {
+            "selected": false,
+            "text": "All",
+            "value": "All"
+          }
+        ],
+        "query": "Trading,App,All",
+        "refresh": 0,
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "aureus:*",
+          "value": "aureus:*"
+        },
+        "hide": 0,
+        "label": "Key Pattern",
+        "name": "key_pattern",
+        "query": "aureus:*",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "aureus:state:AUDUSD",
+          "value": "aureus:state:AUDUSD"
+        },
+        "hide": 0,
+        "label": "Selected Key",
+        "name": "selected_key",
+        "query": "aureus:state:AUDUSD",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "last_candle",
+          "value": "last_candle"
+        },
+        "hide": 0,
+        "label": "Hash Field",
+        "name": "hash_field",
+        "query": "last_candle",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "AUDUSD:6:1774462200",
+          "value": "AUDUSD:6:1774462200"
+        },
+        "hide": 0,
+        "label": "Set Member Value",
+        "name": "member_value",
+        "query": "AUDUSD:6:1774462200",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "50",
+          "value": "50"
+        },
+        "hide": 0,
+        "label": "Sample Limit",
+        "name": "sample_limit",
+        "query": "50",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "Redis Key Explorer",
+  "uid": "redis-key-explorer",
+  "version": 1,
+  "weekStart": ""
+}
