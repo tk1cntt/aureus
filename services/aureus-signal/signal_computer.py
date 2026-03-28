@@ -129,7 +129,8 @@ async def precompute_signals(symbol: str, start_dt: datetime, end_dt: datetime,
         # Calculate ALL signals
         if df is not None and len(df) >= 5:
             candle_t = int(candle_data['t'])
-            record = state.create_candle_record(candle_t)
+            candle_close = float(candle_data['c'])
+            record = state.create_candle_record(candle_t, candle_close)
             for tag, signal_calc in signals.items():
                 try:
                     res = signal_calc.calculate(df, state, redis_client=None, symbol=symbol)

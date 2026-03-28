@@ -45,3 +45,8 @@ Plan: 1 of 1
 - Existing Nautilus live integration: AureusMarketDataClient, AureusExecutionClient, SyncWorker, NautilusBridge
 - Strategy QA Decision (2026-03-23): Must validate strategy quality independently before Nautilus integration — otherwise poor backtest results cannot be attributed (strategy vs integration)
 - Backlog items: Early Exit Engine, BEARISH seeds, sweep_o1 tag fix (deferred to future)
+
+### Pending Todos
+
+- [2026-03-28-remove-market-regime-use-htf-trend](file:///D:/Aureus/.planning/todos/pending/2026-03-28-remove-market-regime-use-htf-trend.md)
+- [2026-03-28-investigate-sweep-triggers-after-broken-pending](file:///D:/Aureus/.planning/todos/pending/2026-03-28-investigate-sweep-triggers-after-broken-pending.md)

@@ -196,7 +196,8 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                             
                             # Pipeline Step 2: Signal Calculation
                             if df is not None and len(df) >= 5:
-                                record = c_state.create_candle_record(ts_unix)
+                                close_price = float(mapped_candle['c'])
+                                record = c_state.create_candle_record(ts_unix, close_price)
                                 for tag, signal_calc in signals.items():
                                     try:
                                         res = signal_calc.calculate(df, c_state, redis_client=r, symbol=symbol)

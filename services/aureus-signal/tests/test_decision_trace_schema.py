@@ -261,6 +261,8 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
         # Must be sorted ascending by timestamp
         self.assertEqual(normalized[0]["t"], t_older)
         self.assertEqual(normalized[1]["t"], t_newer)
+        self.assertNotIn("price", normalized[0])
+        self.assertNotIn("price", normalized[1])
 
         older_signals = normalized[0]["signals"]
         self.assertEqual(older_signals["market_session"]["value"], "LONDON")

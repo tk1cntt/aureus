@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional
 @dataclass
 class CandleRecord:
     t: int
+    price: float
     session: Optional[Dict[str, Any]] = None
     htf_trend: Optional[Dict[str, Any]] = None
     atr_14: Any = None
@@ -29,6 +30,7 @@ class CandleRecord:
 
         return {
             "t": int(self.t),
+            "price": float(self.price),
             "signals": signals,
         }
 
@@ -112,8 +114,8 @@ class SymbolState:
 
         return payload
 
-    def create_candle_record(self, timestamp: int) -> CandleRecord:
-        return CandleRecord(t=int(timestamp))
+    def create_candle_record(self, timestamp: int, close: float) -> CandleRecord:
+        return CandleRecord(t=int(timestamp), price=float(close))
 
     def map_signal_to_candle_record(
         self,
@@ -171,7 +173,7 @@ class SymbolState:
             return
 
         self.log_signal_normalize.append(payload)
-        if len(self.log_signal_normalize) > 1000:
+        if len(self.log_signal_normalize) > 240:
             self.log_signal_normalize.pop(0)
 
     def _normalize_signal_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

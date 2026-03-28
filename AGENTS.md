@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Mọi trao đổi phải dùng tiếng Việt.
+Mọi trao đổi phải dùng tiếng Việt nhưng tất cả các thông tin file hay folder phải là tiếng Anh.
 
 Never guess. Verify first.
 

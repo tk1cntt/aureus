@@ -105,16 +105,14 @@ async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_reje
             },
         )
 
-
-
-
 def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
     """Executes all signal calculators for current candle and appends one normalized CandleRecord."""
     if df is None or len(df) == 0:
         return
 
     ts_unix = int(df.iloc[-1]["t"])
-    record = state.create_candle_record(ts_unix)
+    close_price = float(df.iloc[-1]["c"])
+    record = state.create_candle_record(ts_unix, close_price)
 
     for signal_name, signal_calc in signals.items():
         try:
@@ -361,7 +359,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     
                     if df is not None and len(df) >= 5:
                         candle_t = int(candle_data['t'])
-                        record = state.create_candle_record(candle_t)
+                        candle_close = float(candle_data['c'])
+                        record = state.create_candle_record(candle_t, candle_close)
                         for tag, signal_calc in signals.items():
                             try:
                                 res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
@@ -403,7 +402,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 signals = symbol_signals[symbol]
                 if df is not None:
                     candle_t = int(df.iloc[-1]['t'])
-                    record = state.create_candle_record(candle_t)
+                    candle_close = float(df.iloc[-1]['c'])
+                    record = state.create_candle_record(candle_t, candle_close)
                     for tag, signal_calc in signals.items():
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
@@ -650,7 +650,6 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 symbol=symbol,
                                 redis_client=r,
                             )
-
 
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
@@ -1036,7 +1035,8 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                 # Run all signals per candle
                 if df is not None and len(df) >= 5:
                     candle_t = int(candle_data['t'])
-                    record = state.create_candle_record(candle_t)
+                    candle_close = float(candle_data['c'])
+                    record = state.create_candle_record(candle_t, candle_close)
                     for tag, signal_calc in signals.items():
                         try:
                             res = signal_calc.calculate(df, state, redis_client=r, symbol=symbol)
