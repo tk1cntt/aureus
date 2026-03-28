@@ -154,14 +154,14 @@ Plans:
 **Goal:** Ổn định lại contract `signal_history/log_signal` sau vòng rollback cục bộ, đảm bảo đồng nhất giữa `state.py` và các call-sites runtime trước khi tiếp tục refactor kiểu mạnh Pydantic.
 **Requirements**: Contract stabilization for safe continuation of type-safety refactor.
 **Depends on:** Phase 15.9
-**Plans:** 1/2 plans tracked (execution reopened)
+**Plans:** 1/3 plans tracked (execution reopened)
 
 Plans:
 - [x] Đồng bộ trạng thái hiện tại vào `.planning/STATE.md`, `.planning/ROADMAP.md`, `.planning/phases/15.10-refactor-signal-history/*`
 - [x] Ghi nhận drift hiện tại: `state.log_signal` legacy signature vs metadata kwargs call-sites trong `live_engine.py`, `backtest_engine.py`, `signal_computer.py`
 - [x] Chốt quick verification hiện tại: `pytest tests/test_decision_trace_schema.py tests/test_signal_contract_normalization.py -q` → 19 passed
 - [ ] Plan 02: normalize `signal_history` theo canonical schema (`t/symbol/timeframe/state/events`) dựa trên sample `normalize_signal_history`
-- [ ] Kế tiếp: thực hiện contract reconciliation (đồng bộ signature/call-sites) rồi chạy lại smoke/runtime verify
+- [ ] Plan 03: thực thi 2 todo pending — migrate `market_regime` → `htf_trend` và điều tra/fix thiếu event `sweep`/`MITIGATED` trong `signal_history_normalized`
 
 ---
 

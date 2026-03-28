@@ -14,7 +14,7 @@ from engine.signals.sweep import SweepSignal
 class _DummyState:
     def __init__(self):
         self.symbol = "XAUUSD"
-        self.market_regime = "SIDEWAYS"
+        self.htf_trend = "NEUTRAL"
         self.obs: list[Any] = []
         self.signal_history: list[dict[str, Any]] = []
         self.transient_signals: dict[str, Any] = {}
@@ -43,7 +43,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(state.transient_signals, {})
 
-    def test_bullish_sweep_emits_payload_transient_and_consumes_target(self):
+    def test_bullish_sweep_emits_canonical_payload_and_transient(self):
         state = _DummyState()
         state.obs = [
             {
@@ -57,15 +57,16 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["tag"], "sweep_bull")
-        self.assertIn("sweep_bull", state.transient_signals)
-        self.assertEqual(state.transient_signals["sweep_bull"]["status"], "SWEEP")
+        self.assertEqual(result["tag"], "sweep")
+        self.assertEqual(result["value"], "sweep_bull")
+        self.assertIn("sweep", state.transient_signals)
+        self.assertEqual(state.transient_signals["sweep"]["data"]["status"], "SWEEP")
         self.assertEqual(state.obs[0]["status"], "SWEEP")
         self.assertEqual(state.ai_events, [])
 
-    def test_bearish_sweep_respects_trend_dn_filter(self):
+    def test_bearish_sweep_emits_even_when_htf_trend_is_bullish(self):
         state = _DummyState()
-        state.market_regime = "TREND_DN"
+        state.htf_trend = "BULLISH"
         state.obs = [{"ob_type": "BEARISH", "bottom": 2009.0, "top": 2010.0, "t_start": 1700000000, "status": "PENDING"}]
         df = self._df([
             {"t": 1700000120, "o": 2008.0, "h": 2011.5, "l": 2007.4, "c": 2008.4},
@@ -74,14 +75,20 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["tag"], "sweep_bear")
-        self.assertIn("sweep_bear", state.transient_signals)
+        self.assertEqual(result["tag"], "sweep")
+        self.assertEqual(result["value"], "sweep_bear")
+        self.assertIn("sweep", state.transient_signals)
 
-    def test_dedup_skips_existing_history_same_tag_price_and_time(self):
+    def test_dedup_skips_existing_history_same_value_price_and_time(self):
         state = _DummyState()
         state.obs = [{"ob_type": "BULLISH", "bottom": 1999.5, "top": 2000.0, "t_start": 1700000000, "status": "PENDING"}]
         state.signal_history = [
-            {"tag": "sweep_bull", "price_swept": 1999.5, "t": 1700000180},
+            {
+                "tag": "sweep",
+                "value": "sweep_bull",
+                "t": 1700000180,
+                "data": {"price_swept": 1999.5},
+            },
         ]
         df = self._df([
             {"t": 1700000180, "o": 2001.0, "h": 2002.0, "l": 1998.5, "c": 2000.2},
@@ -91,7 +98,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(len(state.obs), 1)
-        self.assertNotIn("sweep_bull", state.transient_signals)
+        self.assertNotIn("sweep", state.transient_signals)
 
     def test_ignores_malformed_targets_without_raising(self):
         state = _DummyState()
@@ -130,8 +137,9 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["tag"], "sweep_touched_bull")
-        self.assertIn("sweep_touched_bull", state.transient_signals)
+        self.assertEqual(result["tag"], "sweep")
+        self.assertEqual(result["value"], "sweep_touched_bull")
+        self.assertIn("sweep", state.transient_signals)
 
     def test_mitigated_non_touched_emits_when_mitigation_age_under_five_minutes(self):
         state = _DummyState()
@@ -154,8 +162,9 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["tag"], "sweep_bull")
-        self.assertIn("sweep_bull", state.transient_signals)
+        self.assertEqual(result["tag"], "sweep")
+        self.assertEqual(result["value"], "sweep_bull")
+        self.assertIn("sweep", state.transient_signals)
 
     def test_mitigated_non_touched_skips_when_mitigation_age_over_five_minutes(self):
         state = _DummyState()
@@ -178,7 +187,7 @@ class TestSweepSignalBehavior(unittest.TestCase):
         result = self.signal.calculate(df, state)
 
         self.assertIsNone(result)
-        self.assertNotIn("sweep_bull", state.transient_signals)
+        self.assertNotIn("sweep", state.transient_signals)
 
 
 if __name__ == "__main__":

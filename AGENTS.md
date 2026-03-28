@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Mọi trao đổi phải dùng tiếng Việt nhưng tất cả các thông tin file hay folder phải là tiếng Anh.
+Mọi trao đổi phải dùng tiếng Việt nhưng tên file hay folder phải là tiếng Anh.
 
 Never guess. Verify first.
 
@@ -12,8 +12,6 @@ Expose a relevant superset of tools, not the full registry and not a minimal exa
 Include tools needed for both the current request and the most plausible next steps after analysis.
 Exclude only tools that are clearly irrelevant.
 If a missing relevant tool is later needed, expand the tool set and retry.
-
-Trước khi chạy command nào, hãy đọc file RUN_SERVICES.md để hiểu rõ về các service và cách chạy chúng. Khi chạy bất kỳ command nào mà lỗi, sau đó chạy lại được, hãy update rule vào file RUN_SERVICES.md.
 
 This project is indexed by GitNexus as **Aureus** (8279 symbols, 11332 relationships, 122 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 

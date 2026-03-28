@@ -127,7 +127,6 @@ class SweepSignal(BaseSignal):
         self._update_ob_states(state_obj, candle)
 
         # 2. Check for triggered sweeps
-        regime = str(getattr(state_obj, "market_regime", "SIDEWAYS") or "SIDEWAYS")
         history = getattr(state_obj, "signal_history", [])
         history = history if isinstance(history, list) else []
 
@@ -137,7 +136,7 @@ class SweepSignal(BaseSignal):
         for ob_idx, ob in enumerate(obs):
             if not isinstance(ob, dict):
                 continue
-                
+
             if ob.pop("_just_swept", False):
                 is_bullish = ob.get("ob_type") == "BULLISH"
                 current_status = str(ob.get("status", "")).strip().upper()
@@ -152,7 +151,13 @@ class SweepSignal(BaseSignal):
                     "CLEAN_BREAKOUT": f"clean_breakout_{suffix}",
                 }
                 status_tag = status_tag_by_state.get(current_status)
+                if not status_tag:
+                    continue
+
                 target_price = ob.get("bottom") if is_bullish else ob.get("top")
+                target_price = self._to_float(target_price)
+                if target_price is None:
+                    continue
 
                 # Rule gate: If mitigated, event valid only when c_t - t_mitigation <= 300 seconds
                 mitigation_age = 0
@@ -173,48 +178,62 @@ class SweepSignal(BaseSignal):
                         )
                         continue
 
-                # Regime Check
-                valid = False
-                if is_bullish and regime in ["TREND_UP", "SIDEWAYS"]:
-                    valid = True
-                if not is_bullish and regime in ["TREND_DN", "SIDEWAYS"]:
-                    valid = True
+                def _same_sweep_event(rec: Any) -> bool:
+                    if not isinstance(rec, dict):
+                        return False
 
-                if valid and status_tag:
-                    already_swept = any(
-                        isinstance(s, dict)
-                        and s.get("tag") == status_tag
-                        and self._to_float(s.get("price_swept")) == target_price
-                        and int(s.get("t", -1)) == c_t
-                        for s in history
+                    try:
+                        rec_t = int(rec.get("t", -1))
+                    except (TypeError, ValueError):
+                        return False
+                    if rec_t != c_t:
+                        return False
+
+                    rec_tag = str(rec.get("tag", "")).strip().lower()
+                    rec_data = rec.get("data") if isinstance(rec.get("data"), dict) else {}
+
+                    rec_price_direct = self._to_float(rec.get("price_swept"))
+                    rec_price_data = self._to_float(rec_data.get("price_swept"))
+                    rec_price = rec_price_data if rec_price_data is not None else rec_price_direct
+
+                    if rec_tag == "sweep":
+                        rec_value = rec.get("value")
+                        if rec_value is None:
+                            rec_value = rec_data.get("value")
+                        rec_value_str = str(rec_value or "").strip().lower()
+                        return rec_value_str == status_tag and rec_price == target_price
+
+                    # Backward compatibility for legacy history shape: tag == sweep_*.
+                    return rec_tag == status_tag and rec_price == target_price
+
+                already_swept = any(_same_sweep_event(s) for s in history)
+
+                if not already_swept:
+                    triggered_sweep = {
+                        "tag": "sweep",
+                        "value": status_tag,
+                        "t": c_t,
+                        "data": {
+                            "price_swept": target_price,
+                            "source_type": "OB_" + ob.get("ob_type", "UNKNOWN"),
+                            "source_t": ob.get("t_start"),
+                            "status": current_status,
+                            "ob_type": ob.get("ob_type", "UNKNOWN"),
+                            "mitigated": mitigated
+                        }
+                    }
+                    logger.info(
+                        f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
                     )
 
-                    if not already_swept:
-                        triggered_sweep = {
-                            "tag": "sweep",
-                            "value": status_tag,
-                            "t": c_t,
-                            "data": {
-                                "price_swept": target_price,
-                                "source_type": "OB_" + ob.get("ob_type", "UNKNOWN"),
-                                "source_t": ob.get("t_start"),
-                                "status": current_status,
-                                "ob_type": ob.get("ob_type", "UNKNOWN"), 
-                                "mitigated": mitigated
-                            }
-                        }
-                        logger.info(
-                            f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
-                        )
+                    transient = getattr(state_obj, "transient_signals", None)
+                    if isinstance(transient, dict):
+                        transient["sweep"] = triggered_sweep
+                        transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
 
-                        transient = getattr(state_obj, "transient_signals", None)
-                        if isinstance(transient, dict):
-                            transient["sweep"] = triggered_sweep
-                            transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
-
-                        # AI update is orchestrated centrally in runtime engine policy.
-                        # Sweep signal layer only emits domain events to transient_signals.
-                        # Emitting only ONE sweep signal max per tick to match old parity
-                        break
+                    # AI update is orchestrated centrally in runtime engine policy.
+                    # Sweep signal layer only emits domain events to transient_signals.
+                    # Emitting only ONE sweep signal max per tick to match old parity
+                    break
 
         return triggered_sweep

@@ -51,7 +51,6 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
             "symbol": self.symbol,
         }
         df, state = self._push_candle(candle)
-        state.market_regime = "SIDEWAYS"
         state.obs = [
             {
                 "ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"
@@ -82,7 +81,6 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
             "symbol": self.symbol,
         }
         df, state = self._push_candle(candle)
-        state.market_regime = "SIDEWAYS"
         state.obs = [{"ob_type": "BULLISH", "bottom": 1999.0, "top": 2000.0, "t_start": 1701999940, "status": "PENDING"}]
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)
@@ -90,9 +88,10 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
         # Seed canonical sweep history shape so processor dedup guard can match.
         state.signal_history.append(
             {
-                "tag": "sweep_bull",
+                "tag": "sweep",
+                "value": "sweep_bull",
                 "t": int(candle["t"]),
-                "price_swept": 1999.0,
+                "data": {"price_swept": 1999.0},
             }
         )
 
@@ -120,7 +119,6 @@ class TestSweepExecuteSignalsForCandleIntegration(unittest.TestCase):
             "symbol": self.symbol,
         }
         df, state = self._push_candle(candle)
-        state.market_regime = "TREND_DN"
         state.obs = [{"ob_type": "BEARISH", "top": 2011.0, "bottom": 2010.0, "t_start": 1701999940, "status": "PENDING"}]
 
         execute_signals_for_candle(self.signals, df, state, self.symbol, None)

@@ -18,7 +18,7 @@ class TrendSignal(BaseSignal):
         if len(df) < self.ema_period:
             state_obj.htf_trend = "NEUTRAL"
             return None
-            
+
         # We assume EMA signals are already calculated in df by EMASignal
         # Or we calculate it here if not present
         col_name = f"ema_{self.ema_period}"
@@ -29,12 +29,12 @@ class TrendSignal(BaseSignal):
 
         current_ema = float(ema_series.iloc[-1])
         current_price = float(df['c'].iloc[-1])
-        
+
         # M1-Strict Unmitigated OB Counter Matrix
         obs = getattr(state_obj, 'obs', [])
         green_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BULLISH')
         red_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BEARISH')
-        
+
         # "N=2, M>=2" Order Flow Matrix Contract
         if green_count >= 2 and red_count >= 2:
             regime = "SIDEWAYS"
@@ -49,16 +49,16 @@ class TrendSignal(BaseSignal):
             # Divergence (Anti-FOMO) or weak trend -> NEUTRAL stood aside
             regime = "SIDEWAYS"
             htf_trend = "NEUTRAL"
-            
-        # Enrich state object
+
+        # Canonical state field
         state_obj.htf_trend = htf_trend
-        state_obj.market_regime = regime
-        
+
         return {
             "tag": "htf_trend",
             "value": htf_trend,
             "t": int(df.iloc[-1]["t"]),
             "data": {
+                "regime": regime,
                 "ema_ref": round(current_ema, 5),
                 "green_ob_count": green_count,
                 "red_ob_count": red_count,
