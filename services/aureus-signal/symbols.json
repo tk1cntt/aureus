@@ -6,7 +6,7 @@
         "pivots": {
             "ext_period": 5,
             "min_amplitude": 2000,
-            "min_amplitude_pct": 0.2,
+            "min_amplitude_pct": 0.1,
             "min_motion": 1
         }
     },
@@ -47,7 +47,7 @@
         "pivots": {
             "ext_period": 5,
             "min_amplitude": 50,
-            "min_amplitude_pct": 0.2,
+            "min_amplitude_pct": 0.1,
             "min_motion": 0
         }
     },
@@ -68,7 +68,7 @@
         "pivots": {
             "ext_period": 5,
             "min_amplitude": 1000,
-            "min_amplitude_pct": 0.2,
+            "min_amplitude_pct": 0.1,
             "min_motion": 0
         }
     },
@@ -79,7 +79,7 @@
         "pivots": {
             "ext_period": 5,
             "min_amplitude": 400,
-            "min_amplitude_pct": 0.2,
+            "min_amplitude_pct": 0.1,
             "min_motion": 0
         }
     }

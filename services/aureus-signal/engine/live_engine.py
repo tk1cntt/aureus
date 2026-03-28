@@ -744,7 +744,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     snapshot = build_snapshot(state, data)
                                     asyncio.create_task(insert_single_snapshot(db_pool, snapshot))
                                 except Exception as e:
-                                    logger.debug(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
+                                    logger.warning(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
                             
                             # Clean up trade events for the next tick
                             trade_manager.last_tick_events = []

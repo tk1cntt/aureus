@@ -455,7 +455,7 @@ class ZigZagPro:
                     let = 1
                 elif m < n:
                     let = -1
-
+            '''
             # --- Story 5.1/5.2: Inside Bar Detection & Bypass ---
             is_inside = False
             if self.last_mother_idx != -1:
@@ -546,7 +546,7 @@ class ZigZagPro:
                 if not self.valid_indices or self.valid_indices[-1] != i:
                     self.valid_indices.append(i)
                 continue
-
+            '''
             # Standard update of mother and valid indices
             self.last_mother_idx = i
             if not self.valid_indices or self.valid_indices[-1] != i:

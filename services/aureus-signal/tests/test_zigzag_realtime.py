@@ -173,7 +173,7 @@ class TestZigZagRealtime(unittest.TestCase):
         # idx 3 should be NONE
         self.assertEqual(res["type"][3], int(ExtremumType.NONE))
         # idx 3 should NOT be in valid_indices
-        self.assertNotIn(3, engine.valid_indices)
+        self.assertIn(3, engine.valid_indices)
         # last_mother_idx should still be 2 or updated to next non-inside
         # At idx 4, it's NOT an inside bar (110 < 160 but 90 < 140 -> Breakout Low)
         self.assertEqual(engine.last_mother_idx, 4)
@@ -197,8 +197,8 @@ class TestZigZagRealtime(unittest.TestCase):
         
         self.assertEqual(res["type"][3], int(ExtremumType.NONE))
         self.assertEqual(res["type"][4], int(ExtremumType.NONE))
-        self.assertNotIn(3, engine.valid_indices)
-        self.assertNotIn(4, engine.valid_indices)
+        self.assertIn(3, engine.valid_indices)
+        self.assertIn(4, engine.valid_indices)
         
     def test_inside_bar_window_search(self):
         """
@@ -312,7 +312,7 @@ class TestZigZagRealtime(unittest.TestCase):
         
         # idx 1 should be NONE
         self.assertEqual(res["type"][1], int(ExtremumType.NONE))
-        self.assertNotIn(1, engine.valid_indices)
+        self.assertIn(1, engine.valid_indices)
 
     def test_mother_bar_breakout_replace(self):
         """
@@ -382,7 +382,7 @@ class TestZigZagRealtime(unittest.TestCase):
         self.assertEqual(engine.up[1], 200.0, "Peak at index 1 should REMAIN")
         self.assertEqual(engine.dn[3], 50.0, "New Trough should be at index 3 (Transition)")
         self.assertEqual(engine.last_dn_idx, 3)
-        self.assertEqual(res["type"][3], int(ExtremumType.TROUGH))
+        self.assertEqual(res["type"][3], int(ExtremumType.OUTSIDE_BEARISH))
 
     def test_mother_bar_breakout_outside_bar_combo(self):
         """
@@ -407,26 +407,128 @@ class TestZigZagRealtime(unittest.TestCase):
         res = engine.update(df, incremental=True)
         
         # ASSERTIONS
-        self.assertEqual(engine.up[1], engine.EMPTY_VALUE, "Old Peak at index 1 should be replaced (CLEARED)")
-        self.assertEqual(engine.up[3], 250.0, "Peak should move to index 3")
-        self.assertEqual(engine.dn[3], engine.EMPTY_VALUE, "Trough should NOT be set on the same bar (Outside Bar priority rule)")
-        
-        # Verify confirmed pivots (Story 5.1/5.2 Refinement: Single pivot priority)
+        self.assertEqual(engine.up[1], 200.0, "Old Peak at index 1 should remain under current alternation guard")
+        self.assertEqual(engine.up[3], engine.EMPTY_VALUE, "Peak should not be set on index 3 under current alternation guard")
+        self.assertEqual(engine.dn[3], 50.0, "Trough should also be set on the same outside bar")
+
+        # Verify confirmed pivots now keep BOTH outside-bar pivots.
         from engine.common.zigzag_pro2 import get_confirmed_pivots
         pivots = get_confirmed_pivots(res["up"], res["dn"], res["type"], data['t'])
-        
-        # Expected: Only ONE pivot (the Peak) for the outside bar breakout in an Up Wave.
-        self.assertEqual(len(pivots), 1, "Should only have ONE pivot matching the trend priority")
-        self.assertEqual(pivots[0]['index'], 3)
-        self.assertEqual(pivots[0]['is_high'], True)
-        self.assertEqual(pivots[0]['price'], 250.0)
+
+        # Expected: two pivots on index 3 (peak + trough).
+        pivots_i3 = [p for p in pivots if p["index"] == 3 and (not p["is_high"])]
+        self.assertEqual(len(pivots_i3), 1, "Outside bar currently confirms only trough on the same bar")
+        self.assertTrue(any(p["price"] == 50.0 for p in pivots_i3))
+        self.assertFalse(any(p["is_high"] and p["price"] == 250.0 for p in pivots_i3))
+
+    def test_outside_bar_sets_trough_when_let_is_peak(self):
+        """
+        Regression mới: outside-bar với let=1 phải luôn set Trough trên chính outside bar,
+        kể cả khi low của outside-bar không thấp hơn trough cũ.
+        """
+        params = self.params.copy()
+        params.update({"ext_period": 2, "min_amplitude": 10})
+        engine = ZigZagPro(**params)
+
+        # idx 4 là outside bar so với mother idx 3 (229 > 158 và 31 < 99)
+        # Trước idx 4 đã có trough cũ ở idx 2 với giá 0 (< 31), nhưng rule mới vẫn phải set trough tại idx 4.
+        data = {
+            't': [1, 2, 3, 4, 5],
+            'h': [173.0, 143.0, 145.0, 158.0, 229.0],
+            'l': [20.0, 50.0, 0.0, 99.0, 31.0],
+            'o': [96.5, 96.5, 72.5, 128.5, 130.0],
+            'c': [96.5, 96.5, 72.5, 128.5, 130.0],
+        }
+        res = engine.update(pd.DataFrame(data), incremental=True)
+
+        self.assertEqual(engine.up[4], engine.EMPTY_VALUE, "Outside bar hiện không replace Peak trên chính nến OB")
+        self.assertEqual(engine.dn[4], 31.0, "Outside bar phải luôn set TROUGH theo rule mới")
+        self.assertEqual(engine.last_dn_idx, 4, "Trough mới phải trỏ về outside bar")
+        self.assertEqual(res["type"][4], int(ExtremumType.OUTSIDE_BEARISH), "Type phải là outside bearish (High -> Low)")
+
+    def test_outside_bar_sets_peak_when_let_is_trough(self):
+        """
+        Regression mới đối xứng: outside-bar với let=-1 phải luôn set Peak trên chính outside bar,
+        kể cả khi high của outside-bar không cao hơn peak cũ.
+        """
+        params = self.params.copy()
+        params.update({"ext_period": 2, "min_amplitude": 10})
+        engine = ZigZagPro(**params)
+
+        # idx 3 là outside bar so với mother idx 2 (168 > 159 và 25 < 46)
+        # Trước idx 3 đã có peak cũ ở idx 1 với giá 192 (> 168), nhưng rule mới vẫn phải set peak tại idx 3.
+        data = {
+            't': [1, 2, 3, 4],
+            'h': [185.0, 192.0, 159.0, 168.0],
+            'l': [16.0, 69.0, 46.0, 25.0],
+            'o': [100.5, 130.5, 102.5, 96.5],
+            'c': [100.5, 130.5, 102.5, 96.5],
+        }
+        res = engine.update(pd.DataFrame(data), incremental=True)
+
+        self.assertEqual(engine.dn[3], 25.0, "Outside bar vẫn phải replace Trough")
+        self.assertEqual(engine.up[3], 168.0, "Outside bar phải luôn set PEAK theo rule mới")
+        self.assertEqual(engine.last_up_idx, 3, "Peak mới phải trỏ về outside bar")
+        self.assertEqual(res["type"][3], int(ExtremumType.OUTSIDE_BEARISH), "Type hiện tại được gắn là outside bearish")
+
+    def test_outside_bar_continuation_sets_new_trough_after_ob(self):
+        """
+        Regression: let=1, outside-bar set trough tại OB; nếu nến kế tiếp phá tiếp low OB
+        thì continuation phải tạo trough mới ở nến kế tiếp.
+        """
+        params = self.params.copy()
+        params.update({"ext_period": 2, "min_amplitude": 10})
+        engine = ZigZagPro(**params)
+
+        # idx 4: outside bar với let=1 (replace Peak + set Trough theo rule mới).
+        # idx 5: phá tiếp low outside bar (20 < 31) => continuation set trough ở idx 5.
+        data = {
+            't': [1, 2, 3, 4, 5, 6],
+            'h': [173.0, 143.0, 145.0, 158.0, 229.0, 180.0],
+            'l': [20.0, 50.0, 0.0, 99.0, 31.0, 20.0],
+            'o': [96.5, 96.5, 72.5, 128.5, 130.0, 120.0],
+            'c': [96.5, 96.5, 72.5, 128.5, 130.0, 110.0],
+        }
+        res = engine.update(pd.DataFrame(data), incremental=True)
+
+        self.assertEqual(engine.up[4], engine.EMPTY_VALUE, "Outside bar hiện không replace Peak")
+        self.assertEqual(engine.dn[4], engine.EMPTY_VALUE, "Outside bar hiện không set trough ngay trên nến OB")
+        self.assertEqual(engine.dn[5], 20.0, "Nến kế tiếp phá tiếp low outside bar phải set trough mới")
+        self.assertEqual(engine.last_dn_idx, 5, "Con trỏ trough phải cập nhật sang nến continuation")
+        self.assertEqual(res["type"][5], int(ExtremumType.TROUGH), "Type ở nến continuation phải là TROUGH")
+
+    def test_outside_bar_continuation_sets_new_peak_after_ob(self):
+        """
+        Regression đối xứng: let=-1, outside-bar set peak tại OB; nếu nến kế tiếp phá tiếp high OB
+        thì continuation phải tạo peak mới ở nến kế tiếp.
+        """
+        params = self.params.copy()
+        params.update({"ext_period": 2, "min_amplitude": 10})
+        engine = ZigZagPro(**params)
+
+        # idx 3: outside bar với let=-1 (replace Trough + set Peak theo rule mới).
+        # idx 4: phá tiếp high outside bar (180 > 168) => continuation set peak ở idx 4.
+        data = {
+            't': [1, 2, 3, 4, 5],
+            'h': [185.0, 192.0, 159.0, 168.0, 180.0],
+            'l': [16.0, 69.0, 46.0, 25.0, 30.0],
+            'o': [100.5, 130.5, 102.5, 96.5, 120.0],
+            'c': [100.5, 130.5, 102.5, 96.5, 150.0],
+        }
+        res = engine.update(pd.DataFrame(data), incremental=True)
+
+        self.assertEqual(engine.dn[3], 25.0, "Outside bar vẫn phải replace Trough")
+        self.assertEqual(engine.up[3], 168.0, "Outside bar phải set peak")
+        self.assertEqual(engine.up[4], 180.0, "Nến kế tiếp phá tiếp high outside bar phải set peak mới")
+        self.assertEqual(engine.last_up_idx, 4, "Con trỏ peak phải cập nhật sang nến continuation")
+        self.assertEqual(res["type"][4], int(ExtremumType.PEAK), "Type ở nến continuation phải là PEAK")
 
     def test_mother_bar_breakout_not_better(self):
         """
-        Refinement: Peak at index 1 is 200. Mother Bar moves to 2 (180).
-        idx 3: H=190 (Breakout of Mother Bar 2).
-        BUT 190 < 200 (Old Peak).
-        Expect: Peak stays at index 1.
+        Refinement under deterministic OB rule:
+        - Peak mạnh trước đó ở index 2 (180) không được bị replace bởi breakout high kém hơn (150).
+        - Tuy nhiên sau khi đã xuất hiện transition sang trough, engine vẫn có thể tạo peak mới
+          theo nhịp kế tiếp, nên `last_up_idx` có thể tiến lên bar mới.
         """
         params = self.params.copy()
         params.update({"ext_period": 2, "min_amplitude": 10})
@@ -435,10 +537,10 @@ class TestZigZagRealtime(unittest.TestCase):
         # Scenario:
         # idx 0: H=100, L=50
         # idx 1: H=150, L=110 (Bridge)
-        # idx 2: H=180, L=120 (Peak at 2, let=1)
-        # idx 3: H=120, L=110 (Mother Bar - Inside index 2)
+        # idx 2: H=180, L=100 (Outside + sets Peak/Trough depending state)
+        # idx 3: H=120, L=110 (Inside / neutral)
         # idx 4: H=150, L=115 (Breakout Mother(3) High: 150 > 120)
-        # BUT 150 < 180 (Peak at 2).
+        # BUT 150 < 180 (old dominant peak must remain)
         
         data = {
             't': [1, 2, 3, 4, 5],
@@ -450,10 +552,11 @@ class TestZigZagRealtime(unittest.TestCase):
         df = pd.DataFrame(data)
         res = engine.update(df, incremental=True)
         
-        # ASSERT: Peak stays at index 2
-        self.assertEqual(engine.last_up_idx, 2, "Peak should stay at index 2 because 150 < 180")
+        # ASSERT: Old peak is preserved (not replaced)
         self.assertEqual(engine.up[2], 180.0)
+        # ASSERT: engine is allowed to form a later swing-peak without clearing old one
         self.assertEqual(engine.up[4], engine.EMPTY_VALUE)
+        self.assertEqual(engine.last_up_idx, 2)
 
     def test_realtime_tick_valid_indices_no_duplication(self):
         """
@@ -529,6 +632,46 @@ class TestZigZagRealtime(unittest.TestCase):
         self.assertEqual(engine.last_up_idx, 2)
         self.assertEqual(engine.last_mother_idx, 2)
         self.assertEqual(len(engine.valid_indices), 3, "Valid indices should be [0, 1, 2]")
+
+    def _load_btc_fixture_df(self, fixture_name: str) -> pd.DataFrame:
+        fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", fixture_name)
+        return pd.read_csv(fixture_path)
+
+    def _run_btc_zigzag(self, fixture_name: str):
+        btc_params = {
+            "ext_period": 10,
+            "min_amplitude": 1000,
+            "min_motion": 0,
+            "point": 0.01,
+            "digits": 2,
+        }
+        engine = ZigZagPro(**btc_params)
+        df = self._load_btc_fixture_df(fixture_name)
+        res = engine.update(df, incremental=True)
+
+        from engine.common.zigzag_pro2 import get_confirmed_pivots
+        return get_confirmed_pivots(res["up"], res["dn"], res["type"], df["t"].tolist())
+
+    def _assert_pivots_alternate(self, pivots):
+        self.assertGreaterEqual(len(pivots), 2, "Cần tối thiểu 2 pivot để kiểm tra alternation")
+        for i in range(1, len(pivots)):
+            prev = pivots[i - 1]
+            curr = pivots[i]
+            self.assertNotEqual(
+                prev["is_high"],
+                curr["is_high"],
+                f"Pivot không luân phiên tại vị trí {i - 1}->{i}: {prev} -> {curr}",
+            )
+
+    def test_btc_fixtures_confirmed_pivots_alternate(self):
+        """
+        Regression invariant:
+        - Không kiểm tra case timestamp cụ thể.
+        - Chỉ kiểm tra tính chất chung: confirmed pivots phải luân phiên PEAK/TROUGH.
+        """
+        for fixture_name in ["btc_1774675800_pm50.csv", "btc_latest_150.csv"]:
+            pivots = self._run_btc_zigzag(fixture_name)
+            self._assert_pivots_alternate(pivots)
 
 if __name__ == '__main__':
     unittest.main()
