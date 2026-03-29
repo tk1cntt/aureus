@@ -15,7 +15,7 @@ See `.planning/archive/` for full archives.
 
 **Goal:** Validate strategy quality independently → integrate NautilusTrader BacktestEngine → persist results → Custom UI + Grafana.
 
-**Phases:** 9
+**Phases:** 10
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
@@ -83,7 +83,35 @@ See `.planning/archive/` for full archives.
 
 Canonical refs: existing `aureus-nautilus-node/` as adapter pattern reference
 
----
+### Phase 15.11: Tối ưu phần gửi sang cho LLM trong hàm build_pulse_context theo template chart-analyst-skill
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.11 to break down)
+
+### Phase 15.11: Tối ưu phần gửi sang cho LLM trong hàm build_pulse_context theo template chart-analyst-skill
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.11 to break down)
+
+### Phase 15.11: Optimize LLM pulse context
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.11 to break down)
 
 ## Phase 18: Metrics & Result Persistence
 
@@ -163,7 +191,25 @@ Plans:
 - [ ] Plan 02: normalize `signal_history` theo canonical schema (`t/symbol/timeframe/state/events`) dựa trên sample `normalize_signal_history`
 - [ ] Plan 03: thực thi 2 todo pending — migrate `market_regime` → `htf_trend` và điều tra/fix thiếu event `sweep`/`MITIGATED` trong `signal_history_normalized`
 
----
+### Phase 15.11: Optimize LLM Pulse Context
+
+**Goal:** Tối ưu payload/context gửi LLM trong `build_pulse_context` để narrative pulse ổn định, deterministic và bám sát technical anchors lấy từ `log_signal_normalize` (60 bản ghi mới nhất).
+**Requirements**: Deterministic high-frequency institutional pulse narrative.
+**Depends on:** Phase 15.10
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] Plan 01: thiết kế lại `build_pulse_context` payload + `generate_pulse` system prompt theo template `chart-analyst-skill.txt`, giữ output contract JSON phẳng (`narrative`, `sentiment`, `aci`, `debate_log`), thêm regression tests cho stability và fallback.
+
+### Phase 15.12: Improve strategy quality using log_signal_normalize instead of signal_history (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 15.11
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.12 to break down)
 
 ## Phase 19: Custom UI & Dashboard
 
@@ -192,3 +238,5 @@ Plans:
 4. Live engine writes signal snapshots async (fire-and-forget, < 2ms impact)
 5. Snapshot gap detection + auto-recovery
 6. Data continuity between pre-computed and live snapshots
+
+

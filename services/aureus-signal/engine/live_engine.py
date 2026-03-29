@@ -651,6 +651,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 redis_client=r,
                             )
 
+                            # TODO: Từ phần này trở xuống là làm những gì?
                             strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
                             registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
 
@@ -706,6 +707,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 if pending_order:
                                     await queue_ai_audit_task(ai_queue, ai_validator, symbol, df, state, pending_order)
                                 
+                                # TODO: Phần này là làm gì? Add vào log_signal có ý nghĩa gì?
                                 for res in strategy_results:
                                     logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
                                     state.log_signal(

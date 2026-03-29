@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Backtesting & Measurement Engine
 status: Executing Phase 15.10
-last_updated: "2026-03-28T08:51:39+07:00"
+last_updated: "2026-03-29T03:20:23.993Z"
 progress:
-  total_phases: 11
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 2
+  total_phases: 13
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 4
 ---
 
 # STATE
@@ -32,6 +32,7 @@ Plan: 1 of 3
 ### Roadmap Evolution
 
 - Phase 15.7 added: Sequence enabled but no-entry trigger diagnosis
+- Phase 15.12 inserted after Phase 15.11: Improve strategy quality using log_signal_normalize instead of signal_history (URGENT)
 - 2026-03-27: Phase 15.10 được mở lại để đồng bộ contract `signal_history/log_signal` sau khi rollback một phần.
 - `SymbolState.log_signal` hiện ở legacy signature (`tag`, `timestamp`, `value`, `data`) nhưng nhiều call-site vẫn truyền metadata kwargs (`category`, `explain`, `inputs`) trong:
   - `services/aureus-signal/engine/live_engine.py`

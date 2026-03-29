@@ -360,4 +360,25 @@ wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_redis redis-cli"
 wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && .venv/bin/python -m pytest <test_paths> -q"
 ```
 
+11. Khi kiểm tra LLM endpoint trong môi trường Docker dev:
+- Không chạy `docker ...` trực tiếp ở PowerShell nếu máy không expose Docker CLI. Luôn chạy qua WSL:
+
+```
+wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
+```
+
+- `host.docker.internal` là hostname dành cho container truy cập host, không dùng để probe trực tiếp từ WSL host.
+- Nếu cần verify endpoint, viết script Python riêng và chạy trong container service (ví dụ `aureus-signal-dev`) để đảm bảo đúng network context.
+- Tránh gộp `docker cp` và `docker exec` có heredoc/quote phức tạp trong cùng một command vì dễ lỗi escaping. Nên tách thành 2 lệnh độc lập:
+  1) `docker cp ...`
+  2) `docker exec ...`
+  rồi kiểm tra exit code từng bước trước khi chạy bước tiếp theo.
+
+12. Khi dùng `gsd-tools` để xem trợ giúp command phase:
+- Không chạy `node ".agent/get-shit-done/bin/gsd-tools.cjs" phase remove --help` vì `--help` có thể bị parse như phase number và gây thay đổi roadmap/state.
+- Cách an toàn để kiểm tra command hỗ trợ:
+  1) đọc workflow trong `.agent/get-shit-done/workflows/*.md`
+  2) grep usage trong `.agent/get-shit-done/bin/gsd-tools.cjs` (ví dụ `phase remove <phase>`, `phase insert <after> <description>`)
+- Luôn chạy trên branch làm việc và kiểm tra `git status --short` ngay sau command thăm dò.
+
 Không cài package tạm vào system Python để tránh lệch môi trường giữa các lần chạy.

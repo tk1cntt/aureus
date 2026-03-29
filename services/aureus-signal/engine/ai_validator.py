@@ -3,12 +3,13 @@ from engine.logging_common import get_logger
 import json
 import os
 import time
+from collections import Counter
 from datetime import datetime
 try:
     import pandas as pd
 except ImportError:
     pd = None
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from .logic.orchestrator import HybridOrchestrator
 from .logic.gates.news_gate import NewsGate
@@ -65,36 +66,232 @@ Identify if this is a high-probability institutional alignment or a retail trap.
 """
         return context.strip()
     def build_pulse_context(self, symbol: str, df: 'pd.DataFrame', state_obj: Any, trigger_events: List[str] = None) -> str:
-        """Context for periodic analysis (General state instead of trade logic)."""
-        structure = self._synthesize_structure(state_obj)
-        positioning = self._calculate_positioning(df, state_obj)
-        liquidity = self._map_liquidity(state_obj, {})
-        metrics = self._extract_metrics(df)
-        
-        trigger_str = ", ".join(trigger_events) if trigger_events else "PERIODIC_PULSE"
-        
-        context = f"""
-[MARKET PULSE: {symbol}] | TRIGGER: [{trigger_str}]
-Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Last Price: {state_obj.last_candle['c']}
+        """Build deterministic pulse context anchored on latest normalized signal records."""
+        records = self._collect_pulse_records(state_obj, limit=60)
 
-STRUCTURE:
-{structure}
+        trigger_list = [
+            str(event).strip().upper()
+            for event in (trigger_events or ["PERIODIC_PULSE"])
+            if str(event).strip()
+        ]
+        if not trigger_list:
+            trigger_list = ["PERIODIC_PULSE"]
 
-LEVELS:
-{positioning}
+        payload = self._build_pulse_anchor_payload(symbol, records, trigger_list, df, state_obj)
+        payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-LIQUIDITY:
-{liquidity}
+        return (
+            "[MARKET_PULSE_CONTEXT_V2]\n"
+            "SOURCE=PAYLOAD_JSON_ONLY\n"
+            "WINDOW_RULE=log_signal_normalize_window must contain latest 60 records\n"
+            "STABILITY_RULE=unchanged anchors => unchanged sentiment/aci bias\n"
+            f"PAYLOAD_JSON={payload_json}\n"
+            "OUTPUT_CONTRACT={narrative:string,sentiment:BULLISH|BEARISH|NEUTRAL,aci:int,"
+            "debate_log:{trend:string,liquidity:string,skeptic:string}}"
+        )
 
-METRICS:
-{metrics}
+    def _collect_pulse_records(self, state: Any, limit: int = 60) -> List[Dict[str, Any]]:
+        source = getattr(state, "log_signal_normalize", None)
+        if not isinstance(source, list) or not source:
+            source = getattr(state, "signal_history_normalized", [])
 
-TASK: Provide an institutional narrative of the current market state, specifically addressing the TRIGGER event(s) if present. 
-Be concise. Identify the dominant bias (BULLISH/BEARISH/NEUTRAL).
-"""
-        return context.strip()
+        records: List[Dict[str, Any]] = []
+        for raw in source:
+            if not isinstance(raw, dict):
+                continue
 
+            try:
+                t = int(raw.get("t"))
+            except (TypeError, ValueError):
+                continue
+
+            record: Dict[str, Any] = {"t": t}
+            price = self._extract_record_price(raw)
+            if price is not None:
+                record["price"] = price
+
+            signals_raw = raw.get("signals") if isinstance(raw.get("signals"), dict) else {}
+            events_raw = signals_raw.get("events") if isinstance(signals_raw.get("events"), list) else []
+
+            compact_signals = {
+                "htf_trend": str((signals_raw.get("htf_trend") or {}).get("value") or (signals_raw.get("htf_trend") or {}).get("trend") or "UNKNOWN").upper(),
+                "market_session": str((signals_raw.get("market_session") or {}).get("value") or "UNKNOWN").upper(),
+                "zigzag_kind": str((signals_raw.get("zigzag") or {}).get("kind") or "UNKNOWN").upper(),
+                "events": self._compact_signal_events(events_raw),
+            }
+            record["signals"] = compact_signals
+            records.append(record)
+
+        records.sort(key=lambda item: int(item.get("t", 0)))
+        if limit > 0:
+            records = records[-limit:]
+        return records
+
+    def _extract_record_price(self, record: Dict[str, Any]) -> Optional[float]:
+        price_raw = record.get("price")
+        if price_raw is not None:
+            try:
+                return float(price_raw)
+            except (TypeError, ValueError):
+                pass
+
+        for key in ("c", "close", "o", "h", "l"):
+            value = record.get(key)
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+
+        signals = record.get("signals") if isinstance(record.get("signals"), dict) else {}
+        for key in ("zigzag", "htf_trend", "market_session"):
+            candidate = signals.get(key)
+            if not isinstance(candidate, dict):
+                continue
+            for value_key in ("price", "close", "value"):
+                value = candidate.get(value_key)
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    continue
+
+        events = signals.get("events") if isinstance(signals.get("events"), list) else []
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            for value_key in ("price", "close", "value"):
+                value = event.get(value_key)
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    continue
+
+        return None
+
+    def _compact_signal_events(self, events: List[Dict[str, Any]], max_events_per_record: int = 4) -> List[Dict[str, Any]]:
+        compact_events: List[Dict[str, Any]] = []
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            tag = str(event.get("tag") or "").strip().lower()
+            if not tag:
+                continue
+            compact_event: Dict[str, Any] = {"tag": tag}
+            direction = str(event.get("direction") or "").strip().upper()
+            if direction:
+                compact_event["direction"] = direction
+            event_price = self._extract_record_price(event)
+            if event_price is not None:
+                compact_event["price"] = event_price
+            compact_events.append(compact_event)
+            if len(compact_events) >= max_events_per_record:
+                break
+        return compact_events
+
+    def _build_pulse_anchor_payload(
+        self,
+        symbol: str,
+        records: List[Dict[str, Any]],
+        trigger_events: List[str],
+        df: 'pd.DataFrame',
+        state: Any,
+    ) -> Dict[str, Any]:
+        event_counter: Counter = Counter()
+        swing_counter: Counter = Counter()
+        recent_events: List[Dict[str, Any]] = []
+
+        latest_htf_trend = "UNKNOWN"
+        latest_market_session = "UNKNOWN"
+        latest_zigzag_kind = "UNKNOWN"
+        price_series: List[float] = []
+
+        for rec in records:
+            price = self._extract_record_price(rec)
+            if price is not None:
+                price_series.append(float(price))
+
+            signals = rec.get("signals") if isinstance(rec.get("signals"), dict) else {}
+            latest_htf_trend = str(signals.get("htf_trend") or latest_htf_trend).upper()
+            latest_market_session = str(signals.get("market_session") or latest_market_session).upper()
+            latest_zigzag_kind = str(signals.get("zigzag_kind") or latest_zigzag_kind).upper()
+
+            events = signals.get("events") if isinstance(signals.get("events"), list) else []
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                tag = str(event.get("tag") or "").lower()
+                if not tag:
+                    continue
+
+                event_counter[tag] += 1
+                if tag in {"hh", "hl", "lh", "ll"}:
+                    swing_counter[tag] += 1
+
+                recent_events.append(
+                    {
+                        "t": int(rec.get("t", 0)),
+                        "tag": tag,
+                        "direction": str(event.get("direction") or "").upper(),
+                        "price": event.get("price") if event.get("price") is not None else price,
+                    }
+                )
+
+        if not price_series and df is not None and not df.empty:
+            try:
+                price_series = [float(value) for value in df["c"].tail(60).tolist()]
+            except Exception:
+                price_series = []
+
+        first_t = int(records[0].get("t", 0)) if records else 0
+        last_t = int(records[-1].get("t", 0)) if records else 0
+        first_price = price_series[0] if price_series else self._extract_record_price(getattr(state, "last_candle", {}) or {})
+        last_price = price_series[-1] if price_series else first_price
+
+        net_change = None
+        net_change_pct = None
+        if first_price is not None and last_price is not None:
+            net_change = round(last_price - first_price, 6)
+            if abs(first_price) > 1e-9:
+                net_change_pct = round((net_change / first_price) * 100.0, 4)
+
+        dominant_tags = [
+            {"tag": tag, "count": count}
+            for tag, count in sorted(event_counter.items(), key=lambda item: (-item[1], item[0]))[:6]
+        ]
+
+        return {
+            "schema": "pulse_context_v2",
+            "symbol": symbol,
+            "trigger_events": trigger_events,
+            "window": {
+                "record_count": len(records),
+                "first_t": first_t,
+                "last_t": last_t,
+                "first_price": first_price,
+                "last_price": last_price,
+                "high_price": max(price_series) if price_series else None,
+                "low_price": min(price_series) if price_series else None,
+                "net_change": net_change,
+                "net_change_pct": net_change_pct,
+            },
+            "log_signal_normalize_window": records,
+            "bias_anchors": {
+                "latest_htf_trend": latest_htf_trend,
+                "latest_market_session": latest_market_session,
+                "latest_zigzag_kind": latest_zigzag_kind,
+                "swing_balance": {
+                    "hh": int(swing_counter.get("hh", 0)),
+                    "hl": int(swing_counter.get("hl", 0)),
+                    "lh": int(swing_counter.get("lh", 0)),
+                    "ll": int(swing_counter.get("ll", 0)),
+                },
+                "choch_count": int(event_counter.get("choch", 0) + event_counter.get("choch_up", 0) + event_counter.get("choch_down", 0)),
+                "bos_count": int(event_counter.get("bos", 0) + event_counter.get("bos_up", 0) + event_counter.get("bos_down", 0)),
+                "dominant_event_tags": dominant_tags,
+            },
+            "recent_events": recent_events[-12:],
+        }
 
     def _synthesize_structure(self, state: Any) -> str:
         """Summarizes HH, HL, LH, LL and Choch/Bos history with institutional context."""
@@ -359,7 +556,12 @@ class AIValidator:
             analysis_result['symbol'] = symbol
             analysis_result['timestamp'] = int(datetime.now().timestamp())
             analysis_result['llm_latency_ms'] = llm_latency
-            analysis_result['request_payload'] = context
+            analysis_result['request_payload'] = {
+                "system_prompt": self.brain.get_pulse_system_prompt(),
+                "user_context": context,
+                "model": self.brain.model,
+                "temperature": 0.0,
+            }
             
             return analysis_result
             
@@ -454,34 +656,108 @@ CRITICAL: Do NOT nest objects inside these keys. Use flat strings only.
                 "key_insight": f"AI Engine Offline: {str(e)}"
             }
 
-    async def generate_pulse(self, context: str) -> Dict[str, Any]:
-        """Generates a general market pulse narrative."""
-        system_prompt = """
-You are the Aureus Market Analyst. Your task is to provide a high-frequency institutional narrative.
-Analyze the provided technical context and identify the dominant market bias.
+    def _coerce_debate_text(self, value: Any) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            return text if text else "No anchor-specific note."
+        if isinstance(value, (dict, list)):
+            try:
+                return json.dumps(value, ensure_ascii=False, sort_keys=True)
+            except Exception:
+                return str(value)
+        if value is None:
+            return "No anchor-specific note."
+        return str(value)
 
-CRITICAL: Stability is key. Base your narrative on the provided Technical Anchors. If the anchors haven't changed, your analysis should remain consistent with previous iterations. Avoid introducing "creative" new perspectives unless there is a clear structural breakout.
+    def _normalize_pulse_contract(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        narrative_raw = payload.get("narrative")
+        narrative = str(narrative_raw).strip() if narrative_raw is not None else ""
+        if not narrative:
+            narrative = "Anchors are mixed; maintain neutral institutional posture until clearer structure confirms bias."
 
-1. NARRATIVE: A concise (2-3 sentences) description of what big money is doing.
-2. SENTIMENT: BULLISH, BEARISH, or NEUTRAL.
-3. ACI: (Aureus Confidence Index) 0-100 indicating the strength of the current bias.
-4. DEBATE_LOG: Brief notes from "Trend", "Liquidity", and "Skeptic" perspectives.
+        sentiment = str(payload.get("sentiment") or "NEUTRAL").upper().strip()
+        if sentiment not in {"BULLISH", "BEARISH", "NEUTRAL"}:
+            sentiment = "NEUTRAL"
 
-Format as JSON:
-{
-  "narrative": "...",
-  "sentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "aci": int,
-  "debate_log": { 
-    "trend": "PLAIN TEXT ONLY - 1 sentence", 
-    "liquidity": "PLAIN TEXT ONLY - 1 sentence", 
-    "skeptic": "PLAIN TEXT ONLY - 1 sentence" 
-  }
-}
-CRITICAL: Do NOT nest objects inside these keys. Use flat strings only.
-"""
+        aci_raw = payload.get("aci", 50)
         try:
-            start_time = time.perf_counter()
+            aci = int(float(aci_raw))
+        except (TypeError, ValueError):
+            aci = 50
+        aci = max(0, min(100, aci))
+
+        debate_input = payload.get("debate_log")
+        if isinstance(debate_input, dict):
+            trend = self._coerce_debate_text(debate_input.get("trend"))
+            liquidity = self._coerce_debate_text(debate_input.get("liquidity"))
+            skeptic = self._coerce_debate_text(debate_input.get("skeptic"))
+        elif isinstance(debate_input, str):
+            text = debate_input.strip() or "No anchor-specific note."
+            trend = text
+            liquidity = text
+            skeptic = text
+        else:
+            trend = "No anchor-specific note."
+            liquidity = "No anchor-specific note."
+            skeptic = "No anchor-specific note."
+
+        return {
+            "narrative": narrative,
+            "sentiment": sentiment,
+            "aci": aci,
+            "debate_log": {
+                "trend": trend,
+                "liquidity": liquidity,
+                "skeptic": skeptic,
+            },
+        }
+
+    def _fallback_pulse_contract(self, reason: str) -> Dict[str, Any]:
+        note = f"Pulse fallback activated: {reason}"
+        return {
+            "narrative": "Anchors unavailable from model output; holding neutral institutional stance.",
+            "sentiment": "NEUTRAL",
+            "aci": 50,
+            "debate_log": {
+                "trend": note,
+                "liquidity": note,
+                "skeptic": note,
+            },
+        }
+
+    def get_pulse_system_prompt(self) -> str:
+        return """
+You are the Aureus Institutional Pulse Engine.
+Use only PAYLOAD_JSON from user message.
+
+POLICY:
+1) Derive bias only from anchors in PAYLOAD_JSON.
+2) Deterministic output: when anchors are effectively unchanged, keep sentiment/aci stable.
+3) No invention: no macro/news/external assumptions.
+4) Keep response compact: avoid repetition and filler.
+
+ANALYSIS ORDER:
+A) Market Context: latest_htf_trend + window net_change + session tone.
+B) Structure Evidence: choch_count, bos_count, swing_balance, dominant_event_tags, recent_events.
+C) Actionable Outlook: base-case continuation/fade and one invalidation clue from anchors.
+
+OUTPUT:
+- JSON object with exact keys: narrative, sentiment, aci, debate_log
+- sentiment in {BULLISH, BEARISH, NEUTRAL}
+- aci is int 0..100
+- debate_log has flat string keys: trend, liquidity, skeptic
+- narrative must be 3 concise parts in this exact order:
+  1) "Context: ..."
+  2) "Structure: ..."
+  3) "Outlook: ..."
+- narrative length target: 60-110 words total
+- each debate_log field: 1 concise sentence, anchor-backed
+""".strip()
+
+    async def generate_pulse(self, context: str) -> Dict[str, Any]:
+        """Generates deterministic market pulse narrative from technical anchors."""
+        system_prompt = self.get_pulse_system_prompt()
+        try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -489,32 +765,14 @@ CRITICAL: Do NOT nest objects inside these keys. Use flat strings only.
                     {"role": "user", "content": context}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,  # Maintain consistency
+                temperature=0.0,
                 timeout=45.0
             )
-            llm_latency = int((time.perf_counter() - start_time) * 1000)
-            result_text = response.choices[0].message.content
-            result = json.loads(result_text)
-            result['raw_response'] = result_text
-            
-            # Capture DeepSeek/vLLM reasoning (Internal Monologue) if present
-            reasoning = getattr(response.choices[0].message, 'reasoning_content', None)
-            if reasoning:
-                if 'debate_log' not in result: result['debate_log'] = {}
-                result['debate_log']['monologue'] = reasoning
-            
-            # Extract usage
-            usage = getattr(response, 'usage', None)
-            if usage:
-                result['prompt_tokens'] = usage.prompt_tokens
-                result['completion_tokens'] = usage.completion_tokens
-            
-            return result
+            result_text = (response.choices[0].message.content or "").strip()
+            parsed = json.loads(result_text)
+            if not isinstance(parsed, dict):
+                return self._fallback_pulse_contract("model response is not a JSON object")
+            return self._normalize_pulse_contract(parsed)
         except Exception as e:
             logger.error(f"[GLOBAL] [generate_pulse] Error: Pulse Brain Error: {e}")
-            return {
-                "narrative": "Unable to generate narrative.",
-                "sentiment": "NEUTRAL",
-                "aci": 50,
-                "debate_log": {"error": str(e)}
-            }
+            return self._fallback_pulse_contract(str(e))

@@ -1,7 +1,9 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Mọi trao đổi phải dùng tiếng Việt nhưng tên file hay folder phải là tiếng Anh.
+Mọi trao đổi phải dùng tiếng Việt.
+
+Đặt tên milestone, task, phase, sub-task hoặc tên file, folder phải là tiếng Anh.
 
 Never guess. Verify first.
 
