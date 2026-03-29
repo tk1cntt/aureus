@@ -163,6 +163,20 @@ def _apply_ab_mode_to_registry(registry: StrategyRegistry, symbol: str, mode: st
     )
 
 
+async def news_refresh_worker(refresh_interval_seconds: int) -> None:
+    """Refreshes news cache in background thread to keep candle loop non-blocking."""
+    interval = max(60, int(refresh_interval_seconds or 900))
+    while True:
+        try:
+            await asyncio.to_thread(NewsProvider.fetch_this_week)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"[GLOBAL] [news_refresh_worker] Error: Background news refresh failed: {e}")
+
+        await asyncio.sleep(interval)
+
+
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
     load_dotenv()
 
@@ -218,8 +232,9 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     
     # --- News System Initialization (Non-blocking) ---
     logger.info("[GLOBAL] [run_signal_engine] 6... Initializing News System...")
-    asyncio.create_task(asyncio.to_thread(NewsProvider.fetch_this_week)) 
-    
+    refresh_interval = int(os.getenv("NEWS_REFRESH_INTERVAL_SECONDS", "900"))
+    asyncio.create_task(news_refresh_worker(refresh_interval))
+
     # Spawn Brain Workers
     for i in range(2):
         asyncio.create_task(brain_worker(ai_queue, r, db_pool, ai_validator, trade_manager))
@@ -657,9 +672,18 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                             accepted_count = len(strategy_results) if strategy_results else 0
                             rejection_count = len(registry_rejections) if registry_rejections else 0
-                            logger.debug(
+                            logger.info(
                                 f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
-                                f"t={ts_unix} accepted={accepted_count} rejections={rejection_count}"
+                                f"t={ts_unix} accepted={accepted_count} rejections={rejection_count} "
+                                f"execution_mode={execution_mode}"
+                            )
+                            logger.info(
+                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
+                                f"strategy_results={strategy_results} "
+                            )
+                            logger.info(
+                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
+                                f"registry_rejections={registry_rejections} "
                             )
 
                             normalized_snapshot = None

@@ -63,8 +63,9 @@ class StructureSignal(BaseSignal):
                     if not is_duplicate and isinstance(transient, dict):
                         transient[tag] = signal
         # Traceability v1.1: Export explicit ob_state to transient_signals for Factory consumption
-        if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
-            state_obj.transient_signals["ob_state"] = {
+        transient = getattr(state_obj, 'transient_signals', None)
+        if isinstance(transient, dict):
+            transient["ob_state"] = {
                 "active_obs": [
                     {
                         "top": ob.get("top"),
@@ -74,10 +75,13 @@ class StructureSignal(BaseSignal):
                         "status": ob.get("status", "PENDING"),
                         "break_counter": ob.get("break_counter", 0),
                         "mitigated": ob.get("mitigated", False),
-                        "t_mitigation": ob.get("t_mitigation", 0)
-                    } for ob in getattr(state_obj, 'obs', [])
+                        "t_mitigation": ob.get("t_mitigation", 0),
+                    }
+                    for ob in getattr(state_obj, 'obs', [])
                 ]
             }
+            symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+            logger.info(f"[structure] [{symbol}] [ob_state] {transient['ob_state']}")
 
         self._verify_mitigations(df, state_obj)
 
@@ -209,12 +213,13 @@ class StructureSignal(BaseSignal):
                         if c_t == latest_t:
                             latest_bear_mitigation = signal
                         break
-
+        '''             
         if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
             if latest_bull_mitigation is not None:
                 state_obj.transient_signals['ob'] = latest_bull_mitigation
             if latest_bear_mitigation is not None:
                 state_obj.transient_signals['ob'] = latest_bear_mitigation
+        '''
 
     def _process_choch(self, df: pd.DataFrame, points: List[Dict[str, Any]], current_idx: int, pivot_idx: int, is_bullish: bool, state_obj: Any, t_map: Optional[Dict[int, int]] = None) -> Optional[Dict[str, Any]]:
         """Exact parity with ProcessCHOCH in MQL5."""

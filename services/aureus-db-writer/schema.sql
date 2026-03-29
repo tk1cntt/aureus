@@ -17,18 +17,6 @@ CREATE TABLE IF NOT EXISTS aureus_candles (
 -- Convert to Hypertable
 SELECT create_hypertable('aureus_candles', 'time', if_not_exists => TRUE);
 
--- Ticks Table
-CREATE TABLE IF NOT EXISTS aureus_ticks (
-    time        TIMESTAMPTZ       NOT NULL,
-    symbol      TEXT              NOT NULL,
-    bid         DOUBLE PRECISION  NOT NULL,
-    ask         DOUBLE PRECISION  NOT NULL,
-    volume      DOUBLE PRECISION  NOT NULL
-);
-
--- Convert to Hypertable
-SELECT create_hypertable('aureus_ticks', 'time', if_not_exists => TRUE);
-
 -- Swing Points Table
 CREATE TABLE IF NOT EXISTS aureus_swing_points (
     time        TIMESTAMPTZ       NOT NULL,

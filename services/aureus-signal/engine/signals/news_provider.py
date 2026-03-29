@@ -121,10 +121,10 @@ class NewsProvider:
 
     @classmethod
     def get_todays_events(cls, current_time_gmt7: datetime) -> list:
-        """Filter cached events for the specific day."""
+        """Filter cached events for the specific day without triggering network fetch."""
         events = cls.get_cached()
         if not events:
-            events = cls.fetch_this_week() # Try fetch if empty
-            
+            return []
+
         today_str = current_time_gmt7.strftime("%Y-%m-%d")
         return [e for e in events if e['date_gmt7'].startswith(today_str)]

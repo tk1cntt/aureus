@@ -90,6 +90,7 @@ class MockState:
                    [{"ob_type": "BEARISH", "top": 100, "bottom": 99, "t_start": 1}]
         self.emas = {21: {"slope": 0.5}}
         self.signal_history = []
+        self.log_signal_normalize = []
         self.strategy_progress = {}
         self.last_candle = {"t": 1000, "o": 100, "h": 105, "l": 99, "c": 103}
         self.atr = 5.0
@@ -103,7 +104,7 @@ def _create_mock_df(t_val=1000):
 
 
 def _make_bullish_signal_history():
-    """Return a signal history that triggers TREND_CONT and SESSION_SWEEP."""
+    """Return event list used to build normalized strategy inputs."""
     return [
         {"tag": "choch_up", "t": 900},
         {"tag": "sweep_bull", "t": 960},
@@ -111,23 +112,43 @@ def _make_bullish_signal_history():
     ]
 
 
+def _to_normalized_records(events):
+    grouped = {}
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        tag = ev.get("tag")
+        t_val = ev.get("t")
+        if tag is None or t_val is None:
+            continue
+        key = int(t_val)
+        if key not in grouped:
+            grouped[key] = {
+                "t": key,
+                "signals": {"events": []},
+            }
+        grouped[key]["signals"]["events"].append({"tag": str(tag)})
+    return [grouped[k] for k in sorted(grouped.keys())]
+
+
 class TestTrendContDeterminism(unittest.TestCase):
     """Two independent TREND_CONT runs on identical data must produce identical results."""
 
     def test_determinism_with_matching_sequence(self):
         signal_history = _make_bullish_signal_history()
+        normalized_log = _to_normalized_records(signal_history)
 
         # Run A
         strat_a = TemplateStrategy(copy.deepcopy(TREND_CONT_CONFIG))
         state_a = MockState()
-        state_a.signal_history = copy.deepcopy(signal_history)
+        state_a.log_signal_normalize = copy.deepcopy(normalized_log)
         context_a = {"df": _create_mock_df(1000), "state": state_a, "backfill_status": "READY"}
         intent_a = strat_a.on_bar_close(context_a)
 
         # Run B (independent instance)
         strat_b = TemplateStrategy(copy.deepcopy(TREND_CONT_CONFIG))
         state_b = MockState()
-        state_b.signal_history = copy.deepcopy(signal_history)
+        state_b.log_signal_normalize = copy.deepcopy(normalized_log)
         context_b = {"df": _create_mock_df(1000), "state": state_b, "backfill_status": "READY"}
         intent_b = strat_b.on_bar_close(context_b)
 
@@ -137,13 +158,14 @@ class TestTrendContDeterminism(unittest.TestCase):
 
     def test_determinism_with_context_filter_fail(self):
         signal_history = _make_bullish_signal_history()
+        normalized_log = _to_normalized_records(signal_history)
 
         # Both runs have BEARISH trend → context fails
         for _ in range(2):
             strat = TemplateStrategy(copy.deepcopy(TREND_CONT_CONFIG))
             state = MockState()
             state.htf_trend = "BEARISH"
-            state.signal_history = copy.deepcopy(signal_history)
+            state.log_signal_normalize = copy.deepcopy(normalized_log)
             context = {"df": _create_mock_df(1000), "state": state, "backfill_status": "READY"}
             intent = strat.on_bar_close(context)
             self.assertEqual(intent["reason_code"], "CONTEXT_FILTER_FAILED")
@@ -156,12 +178,13 @@ class TestSessionSweepDeterminism(unittest.TestCase):
             {"tag": "choch_up", "t": 900},
             {"tag": "sweep_bull", "t": 960},
         ]
+        normalized_log = _to_normalized_records(signal_history)
 
         results = []
         for _ in range(2):
             strat = TemplateStrategy(copy.deepcopy(SESSION_SWEEP_CONFIG))
             state = MockState()
-            state.signal_history = copy.deepcopy(signal_history)
+            state.log_signal_normalize = copy.deepcopy(normalized_log)
             context = {"df": _create_mock_df(1000), "state": state, "backfill_status": "READY"}
             results.append(strat.on_bar_close(context))
 
@@ -175,12 +198,13 @@ class TestOrderFlowDomDeterminism(unittest.TestCase):
         signal_history = [
             {"tag": "sweep_bull", "t": 960},
         ]
+        normalized_log = _to_normalized_records(signal_history)
 
         results = []
         for _ in range(2):
             strat = TemplateStrategy(copy.deepcopy(ORDER_FLOW_DOM_CONFIG))
             state = MockState()
-            state.signal_history = copy.deepcopy(signal_history)
+            state.log_signal_normalize = copy.deepcopy(normalized_log)
             context = {"df": _create_mock_df(1000), "state": state, "backfill_status": "READY"}
             results.append(strat.on_bar_close(context))
 
@@ -194,6 +218,7 @@ class TestRegistryDeterminism(unittest.TestCase):
 
     def test_registry_full_determinism(self):
         signal_history = _make_bullish_signal_history()
+        normalized_log = _to_normalized_records(signal_history)
 
         results = []
         for _ in range(2):
@@ -203,7 +228,7 @@ class TestRegistryDeterminism(unittest.TestCase):
                 registry.register(TemplateStrategy(config))
 
             state = MockState()
-            state.signal_history = copy.deepcopy(signal_history)
+            state.log_signal_normalize = copy.deepcopy(normalized_log)
             df = _create_mock_df(1000)
             signals = {}  # Empty signals dict — not needed for strategy evaluation
 

@@ -151,53 +151,95 @@ class TemplateStrategy(BaseStrategy):
                         s["status"] = "waiting" if s.get("required", False) else "missed"
                         s["time"] = None
 
+        normalized_log = getattr(state_obj, "log_signal_normalize", None)
         history = getattr(state_obj, "signal_history", [])
-        current_history_idx = len(history) - 1
 
-        # 2. Process new signals
-        if history and current_history_idx > last_processed_index:
-            for index in range(last_processed_index + 1, current_history_idx + 1):
-                latest_signal = history[index]
-                latest_tag = latest_signal["tag"]
-                latest_time = latest_signal["t"]
-                
-                # Check for matching steps
-                while current_step_index < len(self.sequence):
-                    step = self.sequence[current_step_index]
-                    tag = step["tag"]
-                    reset_tags = step.get("reset_signals", [])
-                    required = step.get("required", False)
+        use_normalized = isinstance(normalized_log, list) and len(normalized_log) > 0
+        source_records = normalized_log if use_normalized else history
+        current_history_idx = len(source_records) - 1
 
-                    # Reset condition has priority
-                    if latest_tag in reset_tags:
-                        current_step_index = 0
-                        origin_timestamp = None
-                        matched_timestamps = []
-                        last_matched_candle_idx = -1
-                        for s in sequence_progress:
-                            s["status"] = "waiting" if s.get("required", False) else "missed"
-                            s["time"] = None
-                        break  # Halt matching loop, start fresh
+        # 2. Process new signals/events
+        if source_records and current_history_idx > last_processed_index:
+            pending_records: List[tuple[int, Any]] = [
+                (record_index, source_records[record_index])
+                for record_index in range(last_processed_index + 1, current_history_idx + 1)
+            ]
 
-                    # Match condition
-                    if latest_tag == tag:
-                        if current_step_index == 0:
-                            origin_timestamp = latest_time
-                        
-                        matched_timestamps.append(latest_time)
-                        last_matched_candle_idx = internal_candle_counter
-                        sequence_progress[current_step_index]["status"] = "matched"
-                        sequence_progress[current_step_index]["time"] = latest_time
-                        current_step_index += 1
-                        break  # Consumed the signal
-                    else:
-                        if not required:
-                            sequence_progress[current_step_index]["status"] = "missed"
+            if use_normalized:
+                def _normalized_record_sort_key(item: tuple[int, Any]) -> tuple[int, Any, int]:
+                    record_index, raw_record = item
+                    if not isinstance(raw_record, dict):
+                        return (1, 0, record_index)
+
+                    record_time = raw_record.get("t")
+                    if isinstance(record_time, (int, float)):
+                        return (0, record_time, record_index)
+
+                    return (1, 0, record_index)
+
+                pending_records.sort(key=_normalized_record_sort_key)
+
+            for _, record in pending_records:
+                events_to_process: List[Dict[str, Any]] = []
+
+                if use_normalized and isinstance(record, dict):
+                    record_time = record.get("t")
+                    signals_obj = record.get("signals") if isinstance(record.get("signals"), dict) else {}
+                    events_obj = signals_obj.get("events") if isinstance(signals_obj.get("events"), list) else []
+
+                    for ev in events_obj:
+                        if not isinstance(ev, dict):
+                            continue
+                        ev_tag = ev.get("tag")
+                        if ev_tag is None:
+                            continue
+                        events_to_process.append({"tag": ev_tag, "t": record_time})
+                elif isinstance(record, dict):
+                    events_to_process.append(record)
+
+                for latest_signal in events_to_process:
+                    latest_tag = latest_signal.get("tag")
+                    if latest_tag is None:
+                        continue
+                    latest_time = latest_signal.get("t")
+
+                    # Check for matching steps
+                    while current_step_index < len(self.sequence):
+                        step = self.sequence[current_step_index]
+                        tag = step["tag"]
+                        reset_tags = step.get("reset_signals", [])
+                        required = step.get("required", False)
+
+                        # Reset condition has priority
+                        if latest_tag in reset_tags:
+                            current_step_index = 0
+                            origin_timestamp = None
+                            matched_timestamps = []
+                            last_matched_candle_idx = -1
+                            for s in sequence_progress:
+                                s["status"] = "waiting" if s.get("required", False) else "missed"
+                                s["time"] = None
+                            break  # Halt matching loop, start fresh
+
+                        # Match condition
+                        if latest_tag == tag:
+                            if current_step_index == 0:
+                                origin_timestamp = latest_time
+
+                            matched_timestamps.append(latest_time)
+                            last_matched_candle_idx = internal_candle_counter
+                            sequence_progress[current_step_index]["status"] = "matched"
+                            sequence_progress[current_step_index]["time"] = latest_time
                             current_step_index += 1
-                            continue # Try next step with the SAME signal
+                            break  # Consumed the signal
                         else:
-                            break # Step is required, wait for next event
-            
+                            if not required:
+                                sequence_progress[current_step_index]["status"] = "missed"
+                                current_step_index += 1
+                                continue # Try next step with the SAME signal
+                            else:
+                                break # Step is required, wait for next event
+
             last_processed_index = current_history_idx
 
         # Compute results
@@ -421,7 +463,7 @@ class TemplateStrategy(BaseStrategy):
                 f"step_status={diagnostics['step_status']}"
             )
 
-        return {
+        strategy_obj = {
             "intent_id": f"{self.name}:{self.strategy_id}:{bar_ts}",
             "strategy": self.name,
             "strategy_id": self.strategy_id,
@@ -466,6 +508,13 @@ class TemplateStrategy(BaseStrategy):
             "exit_config": self.exit_config,
             "t": bar_ts,
         }
+
+        logger.debug(
+            f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][strategy_progress] {strategy_obj}"
+        )
+
+        return strategy_obj
+        
 
     def validate_entry(self, intent: Optional[Dict[str, Any]], context: Dict[str, Any]) -> Dict[str, Any]:
         if not intent:

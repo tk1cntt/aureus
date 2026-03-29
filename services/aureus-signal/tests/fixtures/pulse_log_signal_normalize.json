@@ -1,0 +1,48 @@
+[
+  {
+    "t": 1710000000,
+    "price": 2010.5,
+    "signals": {
+      "zigzag": {"kind": "hl", "price": 2010.5},
+      "events": [
+        {"tag": "hl", "price": 2010.5}
+      ]
+    }
+  },
+  {
+    "t": 1710000060,
+    "signals": {
+      "htf_trend": {"value": "BULLISH", "close": 2012.0},
+      "events": [
+        {"tag": "choch", "direction": "up", "price": 2012.25}
+      ]
+    }
+  },
+  {
+    "t": 1710000120,
+    "signals": {
+      "market_session": {"value": "LONDON", "price": 2014.25},
+      "events": [
+        {"tag": "ll", "price": 2014.25}
+      ]
+    }
+  },
+  {
+    "t": "bad-ts",
+    "signals": {
+      "events": [{"tag": "hh", "price": 2018.0}]
+    }
+  },
+  {
+    "t": 1710000180,
+    "signals": {}
+  },
+  {
+    "t": 1710000240,
+    "signals": {
+      "events": [
+        {"tag": "hh", "price": 2016.75}
+      ]
+    }
+  }
+]

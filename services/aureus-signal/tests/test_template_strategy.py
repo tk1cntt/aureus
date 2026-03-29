@@ -5,6 +5,7 @@ from engine.strategies.template import TemplateStrategy
 class MockState:
     def __init__(self):
         self.signal_history = []
+        self.log_signal_normalize = []
         self.strategy_progress = {}
         self.symbol = "XAUUSD"
 
@@ -13,6 +14,14 @@ class PureState:
 
 def create_mock_df(t_val=1000):
     return pd.DataFrame([{"t": t_val}])
+
+def append_normalized_events(state, t_val, *tags):
+    state.log_signal_normalize.append({
+        "t": t_val,
+        "signals": {
+            "events": [{"tag": tag} for tag in tags]
+        }
+    })
 
 def test_sequence_match_perfect():
     config = {
@@ -27,7 +36,7 @@ def test_sequence_match_perfect():
     state = MockState()
 
     # Step 1
-    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    append_normalized_events(state, 1000, "STEP1")
     result1 = strategy._evaluate_sequence(create_mock_df(1000), state)
     
     assert state.strategy_progress["test_strat"]["progress_pct"] == 50.0
@@ -35,7 +44,7 @@ def test_sequence_match_perfect():
     assert result1["missing_required"] == True
 
     # Step 2
-    state.signal_history.append({"tag": "STEP2", "t": 1060})
+    append_normalized_events(state, 1060, "STEP2")
     result2 = strategy._evaluate_sequence(create_mock_df(1060), state)
     
     assert state.strategy_progress["test_strat"]["progress_pct"] == 100.0
@@ -55,7 +64,7 @@ def test_sequence_reset_priority():
     state = MockState()
 
     # Step 1
-    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    append_normalized_events(state, 1000, "STEP1")
     strategy._evaluate_sequence(create_mock_df(1000), state)
 
     assert state.strategy_progress["test_strat"]["progress_pct"] == 50.0
@@ -71,7 +80,7 @@ def test_sequence_reset_priority():
     
     # Actually, the requirement says "bất kỳ tag nào trong history[-1]" or "nến hiện tại chứa reset_tags".
     # For now, let's just append RESET_TAG to history.
-    state.signal_history.append({"tag": "RESET_TAG", "t": 1060})
+    append_normalized_events(state, 1060, "RESET_TAG")
     strategy._evaluate_sequence(create_mock_df(1060), state)
     
     # Progress should be reset to 0
@@ -89,19 +98,19 @@ def test_sequence_timeout():
     strategy = TemplateStrategy(config)
     state = MockState()
 
-    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    append_normalized_events(state, 1000, "STEP1")
     strategy._evaluate_sequence(create_mock_df(1000), state)
 
     # 1 candle passes (no relevant tag)
-    state.signal_history.append({"tag": "NOISE", "t": 1060})
+    append_normalized_events(state, 1060, "NOISE")
     strategy._evaluate_sequence(create_mock_df(1060), state)
 
     # 2 candles pass
-    state.signal_history.append({"tag": "NOISE", "t": 1120})
+    append_normalized_events(state, 1120, "NOISE")
     strategy._evaluate_sequence(create_mock_df(1120), state)
 
     # 3 candles pass -> Timeout should trigger on evaluaton!
-    state.signal_history.append({"tag": "NOISE", "t": 1180})
+    append_normalized_events(state, 1180, "NOISE")
     strategy._evaluate_sequence(create_mock_df(1180), state)
     
     # Progress should be reset
@@ -120,11 +129,11 @@ def test_sequence_optional_skip():
     strategy = TemplateStrategy(config)
     state = MockState()
 
-    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    append_normalized_events(state, 1000, "STEP1")
     strategy._evaluate_sequence(create_mock_df(1000), state)
 
     # Next tag is STEP3 directly!
-    state.signal_history.append({"tag": "STEP3", "t": 1060})
+    append_normalized_events(state, 1060, "STEP3")
     strategy._evaluate_sequence(create_mock_df(1060), state)
 
     # Both STEP1 and STEP3 are matched. STEP2 is skipped.
@@ -145,14 +154,14 @@ def test_evaluate_coverage():
     state = MockState()
 
     # Missing required -> None
-    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    append_normalized_events(state, 1000, "STEP1")
     res = strategy.evaluate(create_mock_df(1000), {}, state)
     assert res is None
 
     # Below score threshold -> None
     # Let's change config min score to 3.0 temporarily
     strategy.min_score = 3.0
-    state.signal_history.append({"tag": "STEP2", "t": 1060})
+    append_normalized_events(state, 1060, "STEP2")
     res = strategy.evaluate(create_mock_df(1060), {}, state)
     assert res is None
 
@@ -188,7 +197,7 @@ def test_on_bar_close_coverage():
     assert res["sequence_diagnostics"]["step_status"][0]["status"] == "waiting"
     
     # Match OK
-    state.signal_history.append({"tag": "T1", "t": 1000})
+    append_normalized_events(state, 1000, "T1")
     res = strategy.on_bar_close(ctx)
     assert res["reason_code"] == "OK"
     assert res["symbol"] == "XAUUSD"
@@ -203,7 +212,7 @@ def test_validate_entry_coverage():
     assert strategy.validate_entry({"reason_code": "BACKFILL_NOT_READY"}, {})["reason_code"] == "BACKFILL_NOT_READY"
     
     # Not actionable
-    assert strategy.validate_entry({"is_actionable": False}, {})["reason_code"] == "SEQUENCE_NOT_MATCHED"
+    assert strategy.validate_entry({"is_actionable": False}, {})["reason_code"] == "UNKNOWN"
     
     # OK
     assert strategy.validate_entry({"is_actionable": True, "reason_code": "OK"}, {})["reason_code"] == "OK"
@@ -224,3 +233,63 @@ def test_missing_state_init():
     strategy._evaluate_sequence(create_mock_df(), state)
     assert hasattr(state, "strategy_progress")
 
+
+def test_sequence_fallback_to_signal_history_when_normalized_empty():
+    strategy = TemplateStrategy({
+        "name": "fallback_strat",
+        "min_score_threshold": 2.0,
+        "sequence": [
+            {"tag": "STEP1", "weight": 1.0, "required": True},
+            {"tag": "STEP2", "weight": 1.0, "required": True},
+        ],
+    })
+    state = MockState()
+
+    state.signal_history.append({"tag": "STEP1", "t": 1000})
+    state.signal_history.append({"tag": "STEP2", "t": 1060})
+
+    result = strategy._evaluate_sequence(create_mock_df(1060), state)
+
+    assert result["score"] == 2.0
+    assert result["missing_required"] is False
+
+
+def test_sequence_prioritizes_normalized_over_signal_history():
+    strategy = TemplateStrategy({
+        "name": "priority_strat",
+        "min_score_threshold": 1.0,
+        "sequence": [{"tag": "TARGET", "weight": 1.0, "required": True}],
+    })
+    state = MockState()
+
+    state.signal_history.append({"tag": "WRONG", "t": 1000})
+    append_normalized_events(state, 1000, "TARGET")
+
+    result = strategy._evaluate_sequence(create_mock_df(1000), state)
+
+    assert result["score"] == 1.0
+    assert result["missing_required"] is False
+
+
+def test_sequence_normalized_records_processed_in_ascending_time_order():
+    strategy = TemplateStrategy({
+        "name": "sorted_time_strat",
+        "min_score_threshold": 2.0,
+        "sequence": [
+            {"tag": "STEP1", "weight": 1.0, "required": True},
+            {"tag": "STEP2", "weight": 1.0, "required": True},
+        ],
+    })
+    state = MockState()
+
+    append_normalized_events(state, 1060, "STEP2")
+    append_normalized_events(state, 1000, "STEP1")
+
+    result = strategy._evaluate_sequence(create_mock_df(1060), state)
+
+    assert result["score"] == 2.0
+    assert result["missing_required"] is False
+    progress = state.strategy_progress["sorted_time_strat"]
+    assert progress["origin_timestamp"] == 1000
+    assert progress["sequence"][0]["time"] == 1000
+    assert progress["sequence"][1]["time"] == 1060

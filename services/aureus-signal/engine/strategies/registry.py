@@ -289,7 +289,7 @@ class StrategyRegistry:
                     # No trigger is not a rejection; strategy simply did not emit intent.
                     continue
 
-                logger.debug(
+                logger.info(
                     f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][intent] "
                     f"strategy={name} strategy_id={strategy_id} intent_id={intent.get('intent_id')} "
                     f"reason_code={intent.get('reason_code', 'N/A')} "
@@ -334,8 +334,6 @@ class StrategyRegistry:
                         details={
                             "symbol": symbol,
                             "intent_id": intent.get("intent_id"),
-                            "evaluated_rules": intent.get("evaluated_rules", []),
-                            "evidence_refs": intent.get("evidence_refs", []),
                             "sequence_diagnostics_summary": reject_diag,
                             "t": intent.get("t", bar_ts),
                         },

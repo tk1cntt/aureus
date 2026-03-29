@@ -360,6 +360,12 @@ wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_redis redis-cli"
 wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && .venv/bin/python -m pytest <test_paths> -q"
 ```
 
+10.1. Với test của `services/aureus-signal`, ưu tiên chạy từ đúng working directory của service để tránh lỗi import/collection (`engine.*`):
+
+```
+wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-signal && ../../.venv/bin/python -m pytest tests/test_template_strategy.py tests/test_strategy_determinism.py tests/test_strategy_scenario.py -q"
+```
+
 11. Khi kiểm tra LLM endpoint trong môi trường Docker dev:
 - Không chạy `docker ...` trực tiếp ở PowerShell nếu máy không expose Docker CLI. Luôn chạy qua WSL:
 
@@ -382,3 +388,17 @@ wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-co
 - Luôn chạy trên branch làm việc và kiểm tra `git status --short` ngay sau command thăm dò.
 
 Không cài package tạm vào system Python để tránh lệch môi trường giữa các lần chạy.
+
+13. Dọn sạch data DB nhưng giữ lại `aureus_candles` (WSL + Docker, quote-safe):
+- Không dùng `psql` trực tiếp trên host nếu chưa cài client.
+- Dùng cách ổn định sau để tránh lỗi escaping quote:
+
+```powershell
+wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && cat /mnt/d/Aureus/services/aureus-db-writer/scripts/clear_all_except_aureus_candles.sql | docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus"
+```
+
+- Verify nhanh:
+
+```powershell
+wsl -d Ubuntu-24.04 -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/services/aureus-db-writer/scripts/verify_cleanup_counts.sql"
+```

@@ -334,6 +334,61 @@ class TestStrategyContractV1(unittest.TestCase):
             rejection["details"]["sequence_diagnostics_summary"]["missing_required_tags"],
             ["CHOCH_BULL"],
         )
+        self.assertNotIn("evaluated_rules", rejection["details"])
+        self.assertNotIn("evidence_refs", rejection["details"])
+
+    def test_registry_accepts_template_strategy_with_out_of_order_normalized_records(self):
+        registry = StrategyRegistry(active_spec_version="v1")
+        registry.register(
+            TemplateStrategy(
+                {
+                    "id": 909,
+                    "name": "TEMPLATE_SORTED_ACCEPTED",
+                    "min_score_threshold": 2.0,
+                    "sequence": [
+                        {"tag": "STEP1", "weight": 1.0, "required": True},
+                        {"tag": "STEP2", "weight": 1.0, "required": True},
+                    ],
+                    "exit_config": {"tp": 120},
+                }
+            )
+        )
+
+        state_obj = SimpleNamespace(
+            symbol="XAUUSD",
+            signal_history=[{"tag": "WRONG_HISTORY_TAG", "t": 1710000000}],
+            log_signal_normalize=[
+                {"t": 1710000060, "signals": {"events": [{"tag": "STEP2"}]}},
+                {"t": 1710000000, "signals": {"events": [{"tag": "STEP1"}]}},
+            ],
+            strategy_progress={},
+        )
+        df = pd.DataFrame([{"t": 1710000060, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
+
+        accepted = registry.evaluate_all(df=df, signals={}, state_obj=state_obj)
+
+        self.assertEqual(len(accepted), 1)
+        result = accepted[0]
+        self.assertEqual(result["strategy"], "TEMPLATE_SORTED_ACCEPTED")
+        self.assertEqual(result["strategy_id"], 909)
+        self.assertEqual(result["reason_code"], "OK")
+        self.assertEqual(result["t"], 1710000060)
+        self.assertEqual(result["origin_timestamp"], 1710000000)
+        self.assertEqual(result["side"], "BUY")
+        self.assertEqual(result["entry_type"], "MARKET")
+        self.assertEqual(result["entry_policy"], "IMMEDIATE")
+
+        intent = result["intent"]
+        self.assertEqual(intent["reason_code"], "OK")
+        self.assertEqual(intent["sequence_diagnostics"]["matched_steps"], 2)
+        self.assertEqual(intent["sequence_diagnostics"]["missing_required"], False)
+
+        progress = state_obj.strategy_progress["TEMPLATE_SORTED_ACCEPTED"]
+        self.assertEqual(progress["origin_timestamp"], 1710000000)
+        self.assertEqual(progress["sequence"][0]["time"], 1710000000)
+        self.assertEqual(progress["sequence"][1]["time"], 1710000060)
+
+        self.assertEqual(registry.get_rejections(), [])
 
 
 if __name__ == "__main__":

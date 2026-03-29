@@ -127,37 +127,50 @@ class DBWriter:
             return
         async with self.pg_pool.acquire() as conn:
             if self.tick_buffer:
-                ticks_to_insert = self.tick_buffer[:]
+                ticks_to_ack = self.tick_buffer[:]
                 self.tick_buffer.clear()
-                data_rows, msg_ids, stream_keys = [], [], []
-                for stream, msg_id, payload in ticks_to_insert:
+
+                parsed_rows = 0
+                for stream, msg_id, payload in ticks_to_ack:
                     try:
                         ts_val = payload.get('t') or payload.get('timestamp') or payload.get('time')
-                        if not ts_val: ts_val = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
+                        if not ts_val:
+                            ts_val = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
                         elif isinstance(ts_val, str):
                             try:
                                 f_ts = float(ts_val)
                                 ts_val = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
-                            except Exception: ts_val = datetime.fromisoformat(ts_val)
+                            except Exception:
+                                ts_val = datetime.fromisoformat(ts_val)
                         elif isinstance(ts_val, (int, float)):
                             ts_val = datetime.fromtimestamp(ts_val / (1000.0 if ts_val > 1e11 else 1.0))
-                        
-                        row = (ts_val, payload.get('symbol', 'UNKNOWN'), float(payload.get('bid', 0.0)), float(payload.get('ask', 0.0)), float(payload.get('v', payload.get('vol', payload.get('volume', 0.0)))))
-                        data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
-                    except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: Tick parse error: {e}")
-                if data_rows:
-                    await conn.copy_records_to_table('aureus_ticks', records=data_rows, columns=['time', 'symbol', 'bid', 'ask', 'volume'])
-                    
-                if data_rows:
-                    await conn.copy_records_to_table('aureus_ticks', records=data_rows, columns=['time', 'symbol', 'bid', 'ask', 'volume'])
-                    acks = {}
-                    for s, m in zip(stream_keys, msg_ids):
-                        if s not in acks: acks[s] = []
-                        acks[s].append(m)
+
+                        _ = (
+                            ts_val,
+                            payload.get('symbol', 'UNKNOWN'),
+                            float(payload.get('bid', 0.0)),
+                            float(payload.get('ask', 0.0)),
+                            float(payload.get('v', payload.get('vol', payload.get('volume', 0.0)))),
+                        )
+                        parsed_rows += 1
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Tick parse error: {e}")
+
+                acks = {}
+                for s, m, _ in ticks_to_ack:
+                    if s not in acks:
+                        acks[s] = []
+                    acks[s].append(m)
+
+                if acks:
                     pipe = self.redis.pipeline()
-                    for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
+                    for s, ids in acks.items():
+                        pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
-                    logger.info(f"[GLOBAL] [process_batch] 1... Inserted {len(data_rows)} ticks")
+
+                logger.info(
+                    f"[GLOBAL] [process_batch] 1... Tick persistence disabled: acked {len(ticks_to_ack)} ticks (parsed {parsed_rows})"
+                )
 
             if self.candle_buffer:
                 candles_to_insert = self.candle_buffer[:]

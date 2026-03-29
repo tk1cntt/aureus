@@ -1,6 +1,11 @@
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
+
+from engine.logging_common import get_logger
+
+logger = get_logger(__name__)
 
 @dataclass
 class CandleRecord:
@@ -35,8 +40,52 @@ class CandleRecord:
         }
 
 
+class _LoggedTransientSignals(dict):
+    def __init__(self, symbol: str = "UNKNOWN", *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._symbol = symbol or "UNKNOWN"
+
+    def bind_symbol(self, symbol: str) -> None:
+        self._symbol = symbol or "UNKNOWN"
+
+    def _log_insert(self, key: Any, value: Any) -> None:
+        try:
+            payload = json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:
+            payload = repr(value)
+
+        logger.info(f"[transient_signals] [{self._symbol}] add key={key} payload={payload}")
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        super().__setitem__(key, value)
+        self._log_insert(key, value)
+
+    def update(self, *args, **kwargs):
+        items = dict(*args, **kwargs)
+        for key, value in items.items():
+            self[key] = value
+
+
 class SymbolState:
     """Manages persistent state for a specific symbol (OBs, FVGs, Ranges)."""
+
+    @staticmethod
+    def _coerce_transient_signals(value: Any, symbol: str) -> Dict[str, Any]:
+        if isinstance(value, _LoggedTransientSignals):
+            value.bind_symbol(symbol)
+            return value
+
+        wrapped = _LoggedTransientSignals(symbol=symbol)
+        if isinstance(value, dict):
+            dict.update(wrapped, value)
+
+        return wrapped
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "transient_signals":
+            symbol = self.__dict__.get("symbol", "UNKNOWN")
+            value = self._coerce_transient_signals(value, symbol=symbol)
+        super().__setattr__(name, value)
     
     def __init__(self, symbol: str):
         self.symbol = symbol

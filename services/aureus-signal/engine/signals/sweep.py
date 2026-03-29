@@ -222,15 +222,18 @@ class SweepSignal(BaseSignal):
                             "mitigated": mitigated
                         }
                     }
+
                     logger.info(
-                        f"[t={c_t}] [{symbol}] [calculate] [{ob_idx}] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
+                        f"[t={c_t}] [{symbol}] [sweep] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
                     )
 
+                    '''
                     transient = getattr(state_obj, "transient_signals", None)
                     if isinstance(transient, dict):
                         transient["sweep"] = triggered_sweep
-                        transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
-
+                        # transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
+                        
+                    '''
                     # AI update is orchestrated centrally in runtime engine policy.
                     # Sweep signal layer only emits domain events to transient_signals.
                     # Emitting only ONE sweep signal max per tick to match old parity
