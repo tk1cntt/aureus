@@ -504,6 +504,22 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                         )
 
     asyncio.create_task(listen_for_reload())
+
+    async def ensure_stream_group(stream_key: str, stream_group: str, start_id: str = "0") -> bool:
+        """Ensures Redis stream consumer group exists; recreates it when missing."""
+        try:
+            await r.xgroup_create(stream_key, stream_group, id=start_id, mkstream=True)
+            logger.warning(
+                f"[GLOBAL] [ensure_stream_group] Recreated consumer group '{stream_group}' on stream '{stream_key}'"
+            )
+            return True
+        except Exception as e:
+            if "BUSYGROUP" in str(e):
+                return True
+            logger.error(
+                f"[GLOBAL] [ensure_stream_group] Error: Failed to ensure group '{stream_group}' for stream '{stream_key}': {e}"
+            )
+            return False
     
     # --- Global Command Stream Listener ---
     async def global_command_stream_listener():
@@ -511,8 +527,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         global_group = "engine-global-group"
         global_consumer = f"consumer-{os.getenv('HOSTNAME', 'local')}"
         
-        try: await r.xgroup_create(global_stream, global_group, id="0", mkstream=True)
-        except Exception: pass
+        await ensure_stream_group(global_stream, global_group, start_id="0")
         
         logger.info(f"[GLOBAL] [global_command_stream_listener] 1... Subscribed to global command stream: {global_stream}")
         while True:
@@ -529,6 +544,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     logger.info(f"[GLOBAL] [global_command_stream_listener] 2... LLM model updated to {new_model}")
                             await r.xack(global_stream, global_group, entry_id)
             except Exception as e:
+                if "NOGROUP" in str(e):
+                    logger.warning(
+                        f"[GLOBAL] [global_command_stream_listener] NOGROUP detected. Recreating group '{global_group}' on '{global_stream}'"
+                    )
+                    await ensure_stream_group(global_stream, global_group, start_id="0")
+                    await asyncio.sleep(1)
+                    continue
                 logger.error(f"[GLOBAL] [global_command_stream_listener] Error: {e}")
             await asyncio.sleep(5)
 
@@ -818,6 +840,14 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             await r.xack(stream_key, group_name, entry_id)
 
         except Exception as e:
+            if "NOGROUP" in str(e):
+                logger.warning(
+                    f"[GLOBAL] [run_signal_engine] NOGROUP detected. Recreating consumer group '{group_name}' for subscribed streams"
+                )
+                for stream_key in streams_subscription.keys():
+                    await ensure_stream_group(stream_key, group_name, start_id="0")
+                await asyncio.sleep(1)
+                continue
             logger.error(f"[GLOBAL] [run_signal_engine] Error: Engine loop error: {e}")
             await asyncio.sleep(1)
 

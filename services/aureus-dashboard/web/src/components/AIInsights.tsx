@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrainCircuit, ShieldAlert, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Settings2, Check } from "lucide-react";
+import { BrainCircuit, ShieldCheck, ChevronDown, ChevronUp, Settings2, Check } from "lucide-react";
 
 interface AuditLog {
     trend: string;
@@ -26,8 +26,12 @@ interface AI_Audit {
         Structure?: number;
         Liquidity?: number;
         Momentum?: number;
-        [key: string]: any;
+        [key: string]: number | undefined;
     };
+}
+
+interface ModelApiResponse {
+    model: string;
 }
 
 interface AIInsightsProps {
@@ -52,9 +56,9 @@ export function ModelSelector() {
     useEffect(() => {
         fetch(`${API_BASE}/ai/model`)
             .then(res => res.json())
-            .then(data => setCurrentModel(data.model))
+            .then((data: ModelApiResponse) => setCurrentModel(data.model))
             .catch(err => console.error("Error fetching model:", err));
-    }, []);
+    }, [API_BASE]);
 
     const handleSelect = async (modelId: string) => {
         setIsUpdating(true);
@@ -66,7 +70,7 @@ export function ModelSelector() {
                 body: JSON.stringify({ model: modelId })
             });
             if (res.ok) {
-                const data = await res.json();
+                const data = (await res.json()) as ModelApiResponse;
                 setCurrentModel(data.model);
             }
         } catch (err) {
@@ -146,7 +150,7 @@ export function InstitutionalAudit({ audit }: AIInsightsProps) {
                 <div className="flex-1">
                     <div className="relative">
                         <p className={`text-[11px] text-gray-300 font-medium leading-[1.4] italic pr-6 ${verdictExpanded ? '' : 'line-clamp-2'}`}>
-                            "{audit.key_insight}"
+                            &ldquo;{audit.key_insight}&rdquo;
                         </p>
                         {audit.key_insight.length > 100 && (
                             <button
@@ -250,7 +254,7 @@ export function InstitutionalAudit({ audit }: AIInsightsProps) {
     );
 }
 
-function AuditSection({ title, content, color = "text-gray-400" }: { title: string, content: any, color?: string }) {
+function AuditSection({ title, content, color = "text-gray-400" }: { title: string, content: unknown, color?: string }) {
     // Robustness: LLM sometimes returns objects instead of strings
     const displayContent = React.useMemo(() => {
         if (!content) return "";

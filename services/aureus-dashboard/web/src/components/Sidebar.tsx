@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { Search, LayoutDashboard, BrainCircuit, Activity, BarChart3, Zap } from 'lucide-react';
+import { Search, LayoutDashboard, BrainCircuit, BarChart3, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSymbols } from '@/context/SymbolsContext';
@@ -12,12 +12,17 @@ interface SidebarProps {
     isConnected?: boolean;
 }
 
+interface SymbolAiStatus {
+    sentiment?: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    aci?: number;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
 
 export const Sidebar = ({ onSelectSymbol, selectedSymbol, isConnected = true }: SidebarProps) => {
     const pathname = usePathname();
     const { symbols } = useSymbols();
-    const [statuses, setStatuses] = useState<Record<string, any>>({});
+    const [statuses, setStatuses] = useState<Record<string, SymbolAiStatus>>({});
 
     // Fetch AI statuses only
     useEffect(() => {

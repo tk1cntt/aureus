@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSymbols } from "@/context/SymbolsContext";
 import { Sidebar } from "@/components/Sidebar";
 import ClientOnly from "@/components/ClientOnly";
 import dynamic from "next/dynamic";
 import {
     Play, RotateCcw, TrendingUp, BarChart3, Clock,
-    Zap, Award, ChevronDown, ChevronUp, Database,
-    ArrowUpRight, ArrowDownRight, Target, Trash2, RefreshCw
+    ArrowUpRight, ArrowDownRight
 } from "lucide-react";
 
 // Dynamic import for chart (SSR-incompatible)
@@ -25,31 +24,163 @@ const GRADE_COLORS: Record<string, string> = {
     "D": "text-red-400 bg-red-400/10",
 };
 
+interface Strategy {
+    id: number;
+    name: string;
+}
+
+interface RunStats {
+    total_trades?: number;
+    win_rate?: number;
+}
+
+interface BacktestRun {
+    id: number;
+    symbol: string;
+    stats?: RunStats;
+}
+
+interface Trade {
+    strategy_name?: string;
+    side?: "BUY" | "SELL";
+    entry_price?: number;
+    exit_price?: number;
+    exit_reason?: string;
+    pnl?: number;
+    entry_time?: number;
+    status?: string;
+    sl?: number;
+    tp?: number;
+    signal_context?: {
+        session?: string;
+    };
+}
+
+interface SignalQuality {
+    tag: string;
+    count: number;
+    grade: string;
+    win_rate: number;
+    trade_rate: number;
+    avg_pips: number;
+}
+
+interface BacktestResults {
+    stats?: {
+        total_trades?: number;
+        win_rate?: number;
+        total_pnl?: number;
+        best_trade?: number;
+        worst_trade?: number;
+    };
+    trades?: Trade[];
+    signal_quality?: SignalQuality[];
+}
+
+interface BacktestCandle {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+interface BacktestSignalEvent {
+    time: number;
+    tag: string;
+    [key: string]: unknown;
+}
+
+interface BacktestEquityPoint {
+    time: number;
+    value: number;
+}
+
+interface BacktestSwingPoint {
+    t: number;
+    price: number;
+    is_high: boolean;
+    type: string;
+    breakout_t?: number;
+    is_choch?: boolean;
+    choch_type?: string;
+}
+
+interface BacktestOrderBlock {
+    ob_type: string;
+    t_start: number;
+    top: number;
+    bottom: number;
+    mitigated?: boolean;
+    t_mitigation?: number;
+    capped_time?: number;
+}
+
+interface ChartData extends BacktestResults {
+    candles?: BacktestCandle[];
+    signal_events?: BacktestSignalEvent[];
+    trades?: Trade[];
+    equity_curve?: BacktestEquityPoint[];
+    swing_points?: BacktestSwingPoint[];
+    obs?: BacktestOrderBlock[];
+    digits?: number;
+}
+
+interface BacktestRunResponse {
+    task_id?: string;
+    error?: string;
+}
+
+interface BacktestStatusResponse {
+    status: "COMPLETED" | "FAILED" | string;
+    results?: {
+        run_id?: number;
+    };
+}
+
 export default function BacktestPage() {
     const { symbols } = useSymbols();
-    const [selectedSymbol, setSelectedSymbol] = useState("XAUUSD");
+    const [selectedSymbol, setSelectedSymbol] = useState(() => {
+        if (typeof window === "undefined") return "XAUUSD";
+        return localStorage.getItem("aureus_selected_symbol") || "XAUUSD";
+    });
+    const [runs, setRuns] = useState<BacktestRun[]>([]);
 
-    const [strategies, setStrategies] = useState<any[]>([]);
+    const [strategies, setStrategies] = useState<Strategy[]>([]);
     const [selectedStrategyIds, setSelectedStrategyIds] = useState<number[]>([]);
 
-    useEffect(() => {
-        const saved = localStorage.getItem("aureus_selected_symbol");
-        if (saved) setSelectedSymbol(saved);
-        loadStrategies();
-    }, []);
-
-    const loadStrategies = async () => {
+    const loadStrategies = useCallback(async () => {
         try {
             const res = await fetch(`${API_BASE}/strategies`);
-            const data = await res.json();
+            const data = (await res.json()) as Strategy[];
             setStrategies(data);
             if (data.length > 0) setSelectedStrategyIds([data[0].id]);
-        } catch { }
-    };
+        } catch (err) {
+            console.error("Failed to load strategies", err);
+        }
+    }, []);
+
+    const loadRuns = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/backtest/runs?symbol=${selectedSymbol}&limit=10`);
+            const data = (await res.json()) as BacktestRun[];
+            setRuns(data);
+        } catch (err) {
+            console.error("Failed to load runs", err);
+        }
+    }, [selectedSymbol]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            void loadStrategies();
+        }, 0);
+
+        return () => clearTimeout(timer);
+    }, [loadStrategies]);
 
     // Default dates: end = now, start = end - 7 days (including time)
-    const now = new Date();
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const now = useMemo(() => new Date(), []);
+    const weekAgo = useMemo(() => new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), [now]);
 
     const formatDateTime = (date: Date) => {
         const pad = (n: number) => n.toString().padStart(2, '0');
@@ -64,26 +195,20 @@ export default function BacktestPage() {
     const [startDate, setStartDate] = useState(formatDateTime(weekAgo));
     const [endDate, setEndDate] = useState(formatDateTime(now));
     const [isRunning, setIsRunning] = useState(false);
-    const [chartData, setChartData] = useState<any>(null);
-    const [results, setResults] = useState<any>(null);
-    const [runs, setRuns] = useState<any[]>([]);
+    const [chartData, setChartData] = useState<ChartData | null>(null);
+    const [results, setResults] = useState<BacktestResults | null>(null);
     const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState<"chart" | "trades" | "quality">("chart");
-    const [hoveredSignal, setHoveredSignal] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
     // Load past runs on mount
     useEffect(() => {
-        loadRuns();
-    }, [selectedSymbol]);
+        const timer = setTimeout(() => {
+            void loadRuns();
+        }, 0);
 
-    const loadRuns = async () => {
-        try {
-            const res = await fetch(`${API_BASE}/backtest/runs?symbol=${selectedSymbol}&limit=10`);
-            const data = await res.json();
-            setRuns(data);
-        } catch { }
-    };
+        return () => clearTimeout(timer);
+    }, [loadRuns]);
 
     // Validate date range
     const validateDates = () => {
@@ -118,7 +243,7 @@ export default function BacktestPage() {
                     strategy_ids: selectedStrategyIds
                 }),
             });
-            const { task_id, error: apiError } = await res.json();
+            const { task_id, error: apiError } = (await res.json()) as BacktestRunResponse;
 
             if (apiError) {
                 setError(apiError);
@@ -127,9 +252,15 @@ export default function BacktestPage() {
             }
 
             // Poll for completion
+            if (!task_id) {
+                setError("Backtest task id not returned");
+                setIsRunning(false);
+                return;
+            }
+
             pollStatus(task_id);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to run backtest");
             setIsRunning(false);
         }
     };
@@ -138,7 +269,7 @@ export default function BacktestPage() {
         const interval = setInterval(async () => {
             try {
                 const res = await fetch(`${API_BASE}/backtest/status/${taskId}`);
-                const data = await res.json();
+                const data = (await res.json()) as BacktestStatusResponse;
 
                 if (data.status === "COMPLETED") {
                     clearInterval(interval);
@@ -153,7 +284,8 @@ export default function BacktestPage() {
                     setError("Backtest failed. Check logs.");
                     setIsRunning(false);
                 }
-            } catch {
+            } catch (err) {
+                console.error("Failed to poll status", err);
                 clearInterval(interval);
                 setIsRunning(false);
             }
@@ -164,12 +296,12 @@ export default function BacktestPage() {
     const loadRunData = async (runId: number) => {
         try {
             const res = await fetch(`${API_BASE}/chart/${selectedSymbol}?run_id=${runId}`);
-            const data = await res.json();
+            const data = (await res.json()) as ChartData;
             setChartData(data);
-            setResults(data);
+            setResults(data as BacktestResults);
             setSelectedRunId(runId);
-        } catch (err: any) {
-            setError(`Failed to load run #${runId}: ${err.message}`);
+        } catch (err: unknown) {
+            setError(`Failed to load run #${runId}: ${err instanceof Error ? err.message : "Unknown error"}`);
         }
     };
 
@@ -219,7 +351,7 @@ export default function BacktestPage() {
                                         }}
                                         className="w-full bg-[#0B0E11] border border-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500/50"
                                     >
-                                        {symbols.map((s: any) => {
+                                        {symbols.map((s) => {
                                             const name = typeof s === 'string' ? s : s.name;
                                             return <option key={name} value={name}>{name}</option>;
                                         })}
@@ -294,7 +426,7 @@ export default function BacktestPage() {
                                 <div className="space-y-2">
                                     <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Past Runs</div>
                                     <div className="space-y-1 max-h-40 overflow-y-auto">
-                                        {runs.map((run: any) => (
+                                        {runs.map((run) => (
                                             <button
                                                 key={run.id}
                                                 onClick={() => loadRunData(run.id)}
@@ -334,13 +466,13 @@ export default function BacktestPage() {
                                         <StatCard
                                             label="Win Rate"
                                             value={`${(results?.stats?.win_rate || 0).toFixed(1)}%`}
-                                            color={results?.stats?.win_rate >= 50 ? "text-green-400" : "text-red-400"}
+                                            color={(results?.stats?.win_rate ?? 0) >= 50 ? "text-green-400" : "text-red-400"}
                                         />
                                         <StatCard
                                             label="Net PnL"
                                             value={results?.stats?.total_pnl?.toFixed(2) || "0"}
-                                            color={results?.stats?.total_pnl >= 0 ? "text-blue-400" : "text-red-400"}
-                                            prefix={results?.stats?.total_pnl >= 0 ? "+" : ""}
+                                            color={(results?.stats?.total_pnl ?? 0) >= 0 ? "text-blue-400" : "text-red-400"}
+                                            prefix={(results?.stats?.total_pnl ?? 0) >= 0 ? "+" : ""}
                                         />
                                         <StatCard
                                             label="Best Trade"
@@ -383,7 +515,6 @@ export default function BacktestPage() {
                                             swingPoints={chartData.swing_points || []}
                                             obs={chartData.obs || []}
                                             digits={chartData.digits || 2}
-                                            onEventHover={setHoveredSignal}
                                         />
                                     )}
 
@@ -403,7 +534,7 @@ export default function BacktestPage() {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-gray-800/50">
-                                                        {(results?.trades || []).map((t: any, i: number) => (
+                                                        {(results?.trades || []).map((t, i: number) => (
                                                             <tr key={i} className="hover:bg-gray-800/20 transition-colors">
                                                                 <td className="px-4 py-3 font-bold text-gray-300 text-xs">{t.strategy_name}</td>
                                                                 <td className="px-4 py-3">
@@ -423,8 +554,8 @@ export default function BacktestPage() {
                                                                         {t.exit_reason || "—"}
                                                                     </span>
                                                                 </td>
-                                                                <td className={`px-4 py-3 font-bold font-mono text-xs ${t.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                    {t.pnl > 0 ? '+' : ''}{t.pnl?.toFixed(4)}
+                                                                <td className={`px-4 py-3 font-bold font-mono text-xs ${(t.pnl ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                    {(t.pnl ?? 0) > 0 ? '+' : ''}{(t.pnl ?? 0).toFixed(4)}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-[10px] text-gray-500">
                                                                     {t.signal_context?.session || "—"}
@@ -439,7 +570,7 @@ export default function BacktestPage() {
 
                                     {activeTab === "quality" && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {(results?.signal_quality || []).map((sq: any) => (
+                                            {(results?.signal_quality || []).map((sq) => (
                                                 <div key={sq.tag} className="bg-[#1E222D] p-4 rounded-xl border border-gray-800">
                                                     <div className="flex justify-between items-start mb-3">
                                                         <div>

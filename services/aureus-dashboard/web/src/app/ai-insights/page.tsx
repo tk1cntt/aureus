@@ -6,12 +6,73 @@ import ClientOnly from "@/components/ClientOnly";
 import { BrainCircuit, ShieldCheck, ShieldAlert, BarChart3, TrendingUp, TrendingDown, Info, Clock } from "lucide-react";
 import { InstitutionalAudit, ModelSelector } from "@/components/AIInsights";
 
+interface AiAudit {
+    aci: number;
+    decision: string;
+    key_insight: string;
+    debate_log: {
+        trend: string;
+        liquidity: string;
+        assassin: string;
+        judgement: string;
+        monologue?: string;
+    };
+    llm_latency_ms?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    request_payload?: string;
+    response_payload?: string;
+}
+
+interface SimulatedOrder {
+    trace_id: string;
+    side: "BUY" | "SELL";
+    symbol: string;
+    strategy_name: string;
+    entry_price: number;
+    ai_audit?: AiAudit;
+}
+
+interface SmcState {
+    simulated_orders?: SimulatedOrder[];
+}
+
+interface AiHealth {
+    status?: "ONLINE" | "OFFLINE" | string;
+}
+
+interface AiHistoryItem {
+    time: number;
+    analysis_type?: string;
+    decision?: string;
+    sentiment?: string;
+    aci: number;
+    key_insight?: string;
+    narrative?: string;
+    debate_log: {
+        trend: string;
+        liquidity: string;
+        assassin: string;
+        judgement: string;
+        monologue?: string;
+    };
+    llm_latency_ms?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    request_payload?: string;
+    response_payload?: string;
+}
+
+interface AiLatest {
+    aci?: number;
+}
+
 export default function AIInsightsPage() {
     const [selectedSymbol, setSelectedSymbol] = useState<string>("");
-    const [smcState, setSmcState] = useState<any>(null);
-    const [aiAnalysis, setAiAnalysis] = useState<any>(null);
-    const [aiHistory, setAiHistory] = useState<any[]>([]);
-    const [aiHealth, setAiHealth] = useState<any>(null);
+    const [smcState, setSmcState] = useState<SmcState | null>(null);
+    const [aiAnalysis, setAiAnalysis] = useState<AiLatest | null>(null);
+    const [aiHistory, setAiHistory] = useState<AiHistoryItem[]>([]);
+    const [aiHealth, setAiHealth] = useState<AiHealth | null>(null);
     const [loading, setLoading] = useState(true);
 
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
@@ -34,10 +95,10 @@ export default function AIInsightsPage() {
                     fetch(`${API_BASE}/ai/latest/${selectedSymbol}`),
                     fetch(`${API_BASE}/ai/history/${selectedSymbol}`)
                 ]);
-                const sData = await stateRes.json();
-                const hData = await healthRes.json();
-                const aiData = aiRes.ok ? await aiRes.json() : null;
-                const histData = historyRes.ok ? await historyRes.json() : [];
+                const sData = (await stateRes.json()) as SmcState;
+                const hData = (await healthRes.json()) as AiHealth;
+                const aiData = aiRes.ok ? ((await aiRes.json()) as AiLatest) : null;
+                const histData = historyRes.ok ? ((await historyRes.json()) as AiHistoryItem[]) : [];
 
                 setSmcState(sData);
                 setAiHealth(hData);
@@ -53,12 +114,12 @@ export default function AIInsightsPage() {
         fetchData();
         const interval = setInterval(fetchData, 3000);
         return () => clearInterval(interval);
-    }, [selectedSymbol]);
+    }, [selectedSymbol, API_BASE]);
 
     // Aggregate Stats
-    const allAudits = smcState?.simulated_orders?.filter((o: any) => o.ai_audit) || [];
-    const approved = allAudits.filter((o: any) => o.ai_audit.decision !== "REJECTED");
-    const rejected = allAudits.filter((o: any) => o.ai_audit.decision === "REJECTED");
+    const allAudits = (smcState?.simulated_orders?.filter((o) => o.ai_audit) ?? []) as (SimulatedOrder & { ai_audit: AiAudit })[];
+    const approved = allAudits.filter((o) => o.ai_audit.decision !== "REJECTED");
+    const rejected = allAudits.filter((o) => o.ai_audit.decision === "REJECTED");
     const avgAci = Number(aiAnalysis?.aci || 0);
 
     return (
@@ -110,7 +171,7 @@ export default function AIInsightsPage() {
                             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest px-1">Institutional Audit Feed</h2>
 
                             {allAudits.length > 0 ? (
-                                allAudits.reverse().map((order: any) => (
+                                [...allAudits].reverse().map((order) => (
                                     <div key={order.trace_id} className="bg-[#1E222D] border border-gray-800 rounded-2xl p-4 shadow-xl">
                                         <div className="flex justify-between items-center mb-2">
                                             <div className="flex items-center space-x-3">
@@ -125,7 +186,7 @@ export default function AIInsightsPage() {
                                                             <div className="flex items-center space-x-2 border-l border-gray-800 pl-2 ml-2">
                                                                 <span className="opacity-70 whitespace-nowrap text-[8px] text-gray-400">DR1 Op</span>
                                                                 <span className="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-300 text-[8px]">{order.ai_audit.llm_latency_ms}ms</span>
-                                                                <span className="text-[8px] opacity-70 whitespace-nowrap text-gray-400">{order.ai_audit.prompt_tokens + (order.ai_audit.completion_tokens || 0)} tokens</span>
+                                                                 <span className="text-[8px] opacity-70 whitespace-nowrap text-gray-400">{(order.ai_audit.prompt_tokens ?? 0) + (order.ai_audit.completion_tokens ?? 0)} tokens</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -148,7 +209,7 @@ export default function AIInsightsPage() {
                                     </div>
                                 ))
                             ) : aiHistory.length > 0 ? (
-                                aiHistory.map((hist: any, idx: number) => (
+                                aiHistory.map((hist, idx: number) => (
                                     <div key={`${hist.time}-${idx}`} className="bg-[#1E222D]/60 border border-gray-800/50 rounded-2xl p-4 shadow-lg">
                                         <div className="flex justify-between items-center mb-2">
                                             <div className="flex items-center space-x-3">
@@ -163,7 +224,7 @@ export default function AIInsightsPage() {
                                                             <div className="flex items-center space-x-2 border-l border-gray-800 pl-2 ml-2">
                                                                 <span className="opacity-70 whitespace-nowrap text-[8px] text-gray-400">DR1 Op</span>
                                                                 <span className="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-300 text-[8px]">{hist.llm_latency_ms}ms</span>
-                                                                <span className="text-[8px] opacity-70 whitespace-nowrap text-gray-400">{hist.prompt_tokens + (hist.completion_tokens || 0)} tokens</span>
+                                                                 <span className="text-[8px] opacity-70 whitespace-nowrap text-gray-400">{(hist.prompt_tokens ?? 0) + (hist.completion_tokens ?? 0)} tokens</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -184,8 +245,8 @@ export default function AIInsightsPage() {
 
                                         <InstitutionalAudit audit={{
                                             aci: hist.aci,
-                                            decision: hist.decision || hist.sentiment,
-                                            key_insight: hist.key_insight || hist.narrative,
+                                            decision: hist.decision ?? hist.sentiment ?? "UNKNOWN",
+                                            key_insight: hist.key_insight ?? hist.narrative ?? "",
                                             debate_log: hist.debate_log,
                                             llm_latency_ms: hist.llm_latency_ms,
                                             prompt_tokens: hist.prompt_tokens,
@@ -220,4 +281,3 @@ function StatBox({ label, value, icon }: { label: string, value: string | number
         </div>
     );
 }
-

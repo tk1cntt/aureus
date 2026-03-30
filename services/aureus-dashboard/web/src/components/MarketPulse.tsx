@@ -63,7 +63,7 @@ export const MarketPulse: React.FC<MarketPulseProps> = ({ analysis }) => {
                         {analysis.sentiment} BIAS
                     </span>
                     <p className="text-sm text-gray-200 font-medium leading-relaxed italic">
-                        "{analysis.narrative}"
+                        &ldquo;{analysis.narrative}&rdquo;
                     </p>
                 </div>
 

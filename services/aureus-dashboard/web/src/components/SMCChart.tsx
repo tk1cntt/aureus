@@ -1,13 +1,45 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
-import { Target, Settings } from 'lucide-react';
+import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, LineSeries, createSeriesMarkers, SeriesMarker, Time } from 'lightweight-charts';
+
+interface CandleData {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+interface SwingPoint {
+    t: number;
+    price: number;
+    is_high?: boolean;
+    type?: string;
+    is_choch?: boolean;
+    breakout_t?: number | null;
+    choch_type?: 'Up' | 'Down' | string;
+}
+
+interface OrderBlock {
+    ob_type?: 'BULLISH' | 'BEARISH' | string;
+    mitigated?: boolean;
+    t_mitigation?: number | null;
+    capped_time?: number | null;
+    t_start?: number | null;
+    top?: number;
+    bottom?: number;
+}
+
+interface SmcStateData {
+    swing_points?: SwingPoint[];
+    obs?: OrderBlock[];
+}
 
 interface SMCChartProps {
     symbol: string;
-    data: any[];
-    smcState: any;
+    data: CandleData[];
+    smcState: SmcStateData;
     colors?: {
         backgroundColor?: string;
         lineColor?: string;
@@ -35,7 +67,6 @@ export const SMCChart = ({
     chartType = "candles",
     colors: {
         backgroundColor = '#0B0E11',
-        lineColor = '#2962FF',
         textColor = '#D9D9D9',
     } = {},
     settings = {
@@ -57,7 +88,7 @@ export const SMCChart = ({
     const zigzagSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const obSeriesPoolRef = useRef<ISeriesApi<"Candlestick">[]>([]);
     const chochSeriesPoolRef = useRef<ISeriesApi<"Line">[]>([]);
-    const seriesMarkersRef = useRef<any>(null);
+    const seriesMarkersRef = useRef<{ setMarkers: (markers: SeriesMarker<Time>[]) => void } | null>(null);
     const isInitialDataRef = useRef(true);
     const lastVisibleBarsRef = useRef<number>(settings.visibleBars || 150);
     const [isAutoFollow, setIsAutoFollow] = useState(true);
@@ -90,22 +121,8 @@ export const SMCChart = ({
     }, [handleSaveView]);
 
     // Interaction detection: if user drags or zooms, we pause auto-follow
-    const handleTimeScaleChange = useCallback(() => {
-        if (!chartRef.current) return;
-
-        // If it's the initial load, we don't want to trigger this
-        if (isInitialDataRef.current) return;
-
-        // Lightweight-charts doesn't explicitly tell us if a change was programmatic
-        // so we check if the user is currently zoomed/scrolled away from the right edge
-        // OR if they recently interacted. 
-        // For simplicity, any timeScale change that isn't from our own setData effect
-        // should ideally be user-driven.
-        // However, a better way is to check the logical range.
-    }, []);
-
     // Helper: Calculate Adaptive Zoom based on volatility
-    const calculateAdaptiveZoom = useCallback((candles: any[]) => {
+    const calculateAdaptiveZoom = useCallback((candles: CandleData[]) => {
         if (candles.length < 50) return settings.visibleBars || 150;
 
         // Take last 150 candles for analysis
@@ -210,20 +227,10 @@ export const SMCChart = ({
             priceFormat,
         });
 
-        const obSeries = chart.addSeries(CandlestickSeries, {
-            upColor: 'rgba(38, 166, 154, 0.2)',
-            downColor: 'rgba(239, 83, 80, 0.2)',
-            borderVisible: true,
-            wickVisible: false,
-            borderColor: 'rgba(38, 166, 154, 0.5)',
-            visible: settings.showOB,
-            priceFormat,
-        });
-
         const seriesMarkers = createSeriesMarkers(mainSeries, []);
 
-        mainSeriesRef.current = mainSeries as any;
-        zigzagSeriesRef.current = zigzagSeries as any;
+        mainSeriesRef.current = mainSeries;
+        zigzagSeriesRef.current = zigzagSeries;
         seriesMarkersRef.current = seriesMarkers;
         chartRef.current = chart;
         isInitialDataRef.current = true;
@@ -278,10 +285,10 @@ export const SMCChart = ({
         if (!mainSeriesRef.current || !data || data.length === 0) return;
 
         if (chartType === "line") {
-            const lineData = data.map(c => ({ time: c.time, value: c.close }));
+            const lineData = data.map(c => ({ time: c.time as Time, value: c.close }));
             (mainSeriesRef.current as ISeriesApi<"Line">).setData(lineData);
         } else {
-            (mainSeriesRef.current as ISeriesApi<"Candlestick">).setData(data);
+            (mainSeriesRef.current as ISeriesApi<"Candlestick">).setData(data.map((c) => ({ ...c, time: c.time as Time })));
         }
 
         // Apply Adaptive Zoom (ONLY if Auto-Follow is enabled)
@@ -307,7 +314,7 @@ export const SMCChart = ({
                             priceScale.setVisibleRange(priceRange);
                         }
 
-                        setIsAutoFollow(false); // If they have a saved view, stop auto-follow
+                        isInitialDataRef.current = false;
                     } catch (e) {
                         console.error("Failed to load saved chart layout", e);
                     }
@@ -329,7 +336,7 @@ export const SMCChart = ({
                 });
             }
         }
-    }, [data, chartType, calculateAdaptiveZoom, isAutoFollow]);
+    }, [data, chartType, calculateAdaptiveZoom, isAutoFollow, symbol]);
 
     // 3. Update markers (HH, LL), ZigZag line, CHOCH lines, and OBs
     useEffect(() => {
@@ -339,22 +346,20 @@ export const SMCChart = ({
         chochSeriesPoolRef.current.forEach(series => {
             try {
                 chartRef.current?.removeSeries(series);
-            } catch (e) { } // Ignore if already removed
+            } catch { } // Ignore if already removed
         });
         chochSeriesPoolRef.current = [];
 
         // --- 1. Markers & ZigZag & CHOCH Lines ---
         if (smcState.swing_points && data.length > 0) {
-            const sortedPoints = [...smcState.swing_points].sort((a: any, b: any) => a.t - b.t);
-            const markerItems: any[] = [];
-            const zigzagItems: any[] = [];
+            const sortedPoints = [...smcState.swing_points].sort((a, b) => a.t - b.t);
+            const markerItems: Array<{ time: number; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowDown' | 'arrowUp'; text: string; size: number }> = [];
+            const zigzagItems: Array<{ time: number; value: number }> = [];
 
             const firstCandleTime = data[0].time;
             const lastCandleTime = data[data.length - 1].time;
-            let lastT = 0;
-
-            sortedPoints.forEach((p: any) => {
-                let t = p.t;
+            sortedPoints.forEach((p) => {
+                const t = p.t;
                 if (t < firstCandleTime || t > lastCandleTime) return;
 
                 // Marker
@@ -363,7 +368,7 @@ export const SMCChart = ({
                     position: p.is_high ? 'aboveBar' : 'belowBar',
                     color: p.is_high ? '#FFFF00' : '#00FFFF', // High contrast Yellow/Cyan
                     shape: p.is_high ? 'arrowDown' : 'arrowUp',
-                    text: p.type,
+                    text: p.type ?? '',
                     size: 2, // Make them larger
                 });
 
@@ -372,7 +377,7 @@ export const SMCChart = ({
 
                 // Independent CHOCH Line Segment
                 if (p.is_choch && p.breakout_t && settings.showCHOCH) {
-                    let b_t = p.breakout_t;
+                    const b_t = p.breakout_t;
                     // Only draw if within bounds
                     if (b_t >= firstCandleTime && b_t <= lastCandleTime) {
                         const chochSeries = chartRef.current!.addSeries(LineSeries, {
@@ -384,8 +389,8 @@ export const SMCChart = ({
                             lastValueVisible: false,
                         });
                         chochSeries.setData([
-                            { time: t, value: p.price },
-                            { time: b_t, value: p.price }
+                            { time: t as Time, value: p.price },
+                            { time: b_t as Time, value: p.price }
                         ]);
                         chochSeriesPoolRef.current.push(chochSeries);
                     }
@@ -403,14 +408,14 @@ export const SMCChart = ({
             }
 
             // --- FINAL DEDUPLICATION (Safety for crashes) ---
-            const dedupeAndSort = (items: any[]) => {
+            const dedupeAndSort = <T extends { time: number }>(items: T[]): T[] => {
                 if (items.length === 0) return [];
 
                 // 1. Sort by time ascending
                 const sorted = [...items].sort((a, b) => a.time - b.time);
 
                 // 2. Filter for strictly ascending time
-                const unique = [];
+                const unique: T[] = [];
                 let seenT = -1;
                 for (const item of sorted) {
                     // Skip invalid times and values
@@ -427,19 +432,25 @@ export const SMCChart = ({
             const finalMarkers = dedupeAndSort(markerItems);
             const finalZigzag = dedupeAndSort(zigzagItems);
 
-            if (seriesMarkersRef.current) seriesMarkersRef.current.setMarkers(settings.showLabels ? finalMarkers : []);
-            zigzagSeriesRef.current.setData(settings.showZigzag ? finalZigzag : []);
+            if (seriesMarkersRef.current) {
+                const markers = (settings.showLabels ? finalMarkers : []).map((m) => ({ ...m, time: m.time as Time }));
+                seriesMarkersRef.current.setMarkers(markers);
+            }
+            zigzagSeriesRef.current.setData((settings.showZigzag ? finalZigzag : []).map((z) => ({ ...z, time: z.time as Time })));
         }
 
         // --- 2. Order Blocks ---
         // Cleanup old OB pool
         obSeriesPoolRef.current.forEach(series => {
-            try { chartRef.current?.removeSeries(series); } catch (e) { }
+            try { chartRef.current?.removeSeries(series); } catch { }
         });
         obSeriesPoolRef.current = [];
 
         if (smcState.obs && data.length > 0 && settings.showOB) {
-            smcState.obs.forEach((ob: any) => {
+            smcState.obs.forEach((ob) => {
+                if (ob.top == null || ob.bottom == null || ob.t_start == null) return;
+                const obTop = ob.top;
+                const obBottom = ob.bottom;
                 // Determine 3-color state: Fresh Green, Fresh Red, or Mitigated Grey
                 const isFreshBullish = ob.ob_type === 'BULLISH' && !ob.mitigated;
                 const isFreshBearish = ob.ob_type === 'BEARISH' && !ob.mitigated;
@@ -456,19 +467,21 @@ export const SMCChart = ({
                 }
 
                 // Determine effective end time
-                const endTime = ob.mitigated ? ob.t_mitigation : (ob.capped_time || data[data.length - 1].time);
+                const endTime = ob.mitigated
+                    ? (ob.t_mitigation ?? ob.capped_time ?? data[data.length - 1].time)
+                    : (ob.capped_time ?? data[data.length - 1].time);
                 // Drawing rule: OB always starts at its origin candle (t_start)
                 const startTime = ob.t_start;
 
-                const obCandleData: any[] = [];
-                data.forEach((c: any) => {
+                const obCandleData: CandleData[] = [];
+                data.forEach((c) => {
                     if (c.time >= startTime && c.time <= endTime) {
                         obCandleData.push({
                             time: c.time,
-                            open: ob.top,
-                            high: ob.top,
-                            low: ob.bottom,
-                            close: ob.bottom,
+                            open: obTop,
+                            high: obTop,
+                            low: obBottom,
+                            close: obBottom,
                         });
                     }
                 });
@@ -483,7 +496,7 @@ export const SMCChart = ({
                         priceLineVisible: false,
                         lastValueVisible: false,
                     });
-                    series.setData(obCandleData);
+                    series.setData(obCandleData.map((c) => ({ ...c, time: c.time as Time })));
                     obSeriesPoolRef.current.push(series);
                 }
             });
@@ -495,7 +508,7 @@ export const SMCChart = ({
         const chart = chartRef.current;
         if (!chart) return;
 
-        const handleVisibleRangeChange = (newVisibleRange: any) => {
+        const handleVisibleRangeChange = (newVisibleRange: unknown) => {
             if (newVisibleRange) {
                 const logicalRange = chart.timeScale().getVisibleLogicalRange();
                 const priceRange = chart.priceScale('right').getVisibleRange();

@@ -198,6 +198,45 @@ Nếu server bị treo không giải phóng cổng, hãy diệt các process b�
 wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml logs -f [SERVICE_NAME]"
 ```
 
+### Playbook: Lỗi `npm i` bị `ERESOLVE` ở `services/aureus-dashboard/web`
+
+#### 1) Triệu chứng thường gặp
+- Chạy `npm i` trong `services/aureus-dashboard/web` báo lỗi:
+  - `ERESOLVE could not resolve`
+  - conflict giữa `react@19.x` và `react-beautiful-dnd@13.1.1`.
+
+#### 2) Root cause đã xác nhận
+- `react-beautiful-dnd@13.1.1` chỉ hỗ trợ peer React tới `^18`, không tương thích React `19.x`.
+- Dashboard web đang dùng React `19.x` (theo `package.json`) nên `npm i` mặc định sẽ fail.
+
+#### 3) Cách xử lý chuẩn (durable fix)
+```powershell
+# (A) Gỡ package cũ không tương thích
+cd D:\Aureus\services\aureus-dashboard\web
+npm uninstall react-beautiful-dnd @types/react-beautiful-dnd
+
+# (B) Cài package thay thế tương thích React 19
+npm install @hello-pangea/dnd
+
+# (C) Cập nhật import trong code
+# from: react-beautiful-dnd
+# to:   @hello-pangea/dnd
+
+# (D) Chạy lại cài đặt mặc định để verify
+npm i
+```
+
+#### 4) Workaround tạm thời (không khuyến nghị lâu dài)
+```powershell
+cd D:\Aureus\services\aureus-dashboard\web
+npm i --legacy-peer-deps
+```
+
+#### 5) Checklist verify hoàn tất
+- [x] `npm i` chạy thành công không còn `ERESOLVE`.
+- [x] Không còn phụ thuộc `react-beautiful-dnd` trong `package.json`.
+- [x] Import drag-and-drop đã chuyển sang `@hello-pangea/dnd`.
+
 ### Playbook: Điều tra & xử lý lỗi MT5 không gửi data sang Gateway (TCP 5556)
 
 #### 1) Triệu chứng thường gặp
@@ -257,6 +296,42 @@ Sau khi chạy lệnh trên, bắt buộc verify lại:
 - [x] Port `5556` đã `LISTEN`.
 - [x] MT5 gửi lại tick/candle thành công.
 - [x] Dashboard hiển thị dữ liệu realtime.
+
+---
+
+### Playbook: Lỗi `NOGROUP` sau khi clear Redis/DB (Signal Engine)
+
+#### 1) Triệu chứng thường gặp
+- Log lặp trong `aureus-signal`:
+  - `NOGROUP No such key 'aureus:sys:config' or consumer group 'engine-global-group' ...`
+  - `NOGROUP No such key 'aureus:stream:{symbol}:candle' or consumer group 'aureus-signal-group' ...`
+- Pipeline không xử lý candle mới sau khi `FLUSHALL` hoặc clear Redis volume.
+
+#### 2) Root cause đã xác nhận
+- Redis Stream key + Consumer Group bị mất sau khi clear DB/Redis.
+- Trước đây group chỉ được tạo ở startup; khi mất giữa runtime thì loop `XREADGROUP` báo `NOGROUP` liên tục.
+
+#### 3) Cơ chế tự phục hồi đã triển khai
+- File: `services/aureus-signal/engine/live_engine.py`
+- Đã thêm helper `ensure_stream_group(stream_key, stream_group, start_id="0")`.
+- Khi bắt `NOGROUP` trong:
+  - `global_command_stream_listener` → tự tạo lại `engine-global-group` trên stream `aureus:sys:config`.
+  - `run_signal_engine` → lặp qua toàn bộ `streams_subscription` và tự tạo lại `aureus-signal-group`.
+- Kết quả: không cần restart service thủ công sau khi clear Redis; engine tự recover và tiếp tục consume.
+
+#### 4) Quy trình verify nhanh (bắt buộc chạy trong WSL)
+```powershell
+# (A) Xem log signal engine để xác nhận detect + recover NOGROUP
+wsl -d Ubuntu-24.04 -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail -n 200"
+
+# (B) Kiểm tra service vẫn Up sau khi recover
+wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev"
+```
+
+Dấu hiệu pass:
+- Có log `NOGROUP detected. Recreating group ...`.
+- Có log `Recreated consumer group ...`.
+- Sau đó engine quay lại xử lý stream bình thường (không lặp lỗi `NOGROUP` vô hạn).
 
 ---
 
@@ -401,4 +476,16 @@ wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && cat /mnt/d/Aureus/services/
 
 ```powershell
 wsl -d Ubuntu-24.04 -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/services/aureus-db-writer/scripts/verify_cleanup_counts.sql"
+```
+
+14. Khi chạy command phức tạp qua `run_command` (PowerShell host + `wsl ... bash -lc`), bắt buộc quote-safe để tránh lỗi parser như `unexpected EOF` hoặc `'||' is not a valid statement separator`:
+- Không dùng vòng lặp shell (`while`, `for`) hoặc `||` trực tiếp ở lớp PowerShell.
+- Gói toàn bộ logic Linux vào **một chuỗi** bên trong `bash -lc "..."`.
+- Nếu command dài, tách thành nhiều lệnh độc lập (mỗi lệnh một `run_command`) thay vì chain phức tạp.
+- Ưu tiên command kiểm tra đơn giản, ví dụ:
+
+```powershell
+wsl -d Ubuntu-24.04 -u root bash -lc "docker ps --format '{{.Names}}\t{{.Ports}}'"
+wsl -d Ubuntu-24.04 -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .HostConfig.PortBindings}}'"
+wsl -d Ubuntu-24.04 -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .NetworkSettings.Ports}}'"
 ```

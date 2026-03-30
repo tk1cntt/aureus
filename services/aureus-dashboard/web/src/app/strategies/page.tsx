@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSymbols } from "@/context/SymbolsContext";
 import { Sidebar } from "@/components/Sidebar";
 import ClientOnly from "@/components/ClientOnly";
-import { BrainCircuit, Plus, Settings, CheckCircle2, Circle, Trash2, Info, GripVertical, Search, Globe } from "lucide-react";
-// @ts-ignore - types not installed for react-beautiful-dnd
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { BrainCircuit, Plus, Settings, CheckCircle2, Circle, Trash2, Info, GripVertical, Search } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from "@hello-pangea/dnd";
 
 interface StrategyStep {
     tag: string;
@@ -24,6 +23,14 @@ interface Strategy {
     sequence: StrategyStep[];
     symbols?: string[];
     assigned_symbols?: string[];
+    config?: {
+        sequence?: StrategyStep[];
+    } | string;
+    created_at?: string;
+}
+
+interface ApiError {
+    detail?: string;
 }
 
 export default function StrategiesPage() {
@@ -36,11 +43,11 @@ export default function StrategiesPage() {
             setSelectedSymbol(saved);
         }
     }, []);
-    const [strategies, setStrategies] = useState<any[]>([]);
+    const [strategies, setStrategies] = useState<Strategy[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-    const [assigningStrategy, setAssigningStrategy] = useState<any>(null);
+    const [assigningStrategy, setAssigningStrategy] = useState<Strategy | null>(null);
     const [symbolSearch, setSymbolSearch] = useState("");
     const [editStrategyId, setEditStrategyId] = useState<number | null>(null);
     const [newStrategy, setNewStrategy] = useState<Strategy>({
@@ -63,23 +70,23 @@ export default function StrategiesPage() {
 
 
     // 2. Fetch all strategy templates
-    const fetchStrategies = async () => {
+    const fetchStrategies = useCallback(async () => {
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE}/strategies`);
-            const data = await res.json();
+            const data = (await res.json()) as Strategy[];
             setStrategies(data);
         } catch (err) {
             console.error("Failed to fetch strategies", err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [API_BASE]);
 
 
     useEffect(() => {
         fetchStrategies();
-    }, []); // Only fetch strategies once on mount
+    }, [fetchStrategies]); // Only fetch strategies once on mount
 
     const toggleSymbolForStrategy = async (strategyId: number, symbol: string) => {
         try {
@@ -120,7 +127,7 @@ export default function StrategiesPage() {
                 });
                 fetchStrategies();
             } else {
-                const err = await res.json();
+                const err = (await res.json()) as ApiError;
                 alert(err.detail || "Failed to save strategy");
             }
         } catch (err) {
@@ -135,7 +142,7 @@ export default function StrategiesPage() {
             if (res.ok) {
                 fetchStrategies();
             } else {
-                const err = await res.json();
+                const err = (await res.json()) as ApiError;
                 alert(err.detail || "Failed to delete strategy");
             }
         } catch (err) {
@@ -143,7 +150,8 @@ export default function StrategiesPage() {
         }
     };
 
-    const openEditModal = (strat: any) => {
+    const openEditModal = (strat: Strategy) => {
+        if (strat.id == null) return;
         setEditStrategyId(strat.id);
         const config = (typeof strat.config === 'string' ? JSON.parse(strat.config) : strat.config) || {};
         setNewStrategy({
@@ -180,7 +188,7 @@ export default function StrategiesPage() {
         });
     };
 
-    const updateStep = (index: number, field: string, value: any) => {
+    const updateStep = (index: number, field: keyof StrategyStep, value: StrategyStep[keyof StrategyStep]) => {
         const newSeq = [...newStrategy.sequence];
         newSeq[index] = { ...newSeq[index], [field]: value };
         setNewStrategy({ ...newStrategy, sequence: newSeq });
@@ -320,7 +328,7 @@ export default function StrategiesPage() {
                                         <div className="space-y-2 border-t border-gray-800/50 pt-3">
                                             <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Signal Logic</label>
                                             <div className="flex flex-wrap gap-1.5">
-                                                {(typeof strat.config === 'string' ? JSON.parse(strat.config) : strat.config)?.sequence?.map((step: any, idx: number) => (
+                                                {(typeof strat.config === 'string' ? JSON.parse(strat.config) : strat.config)?.sequence?.map((step: StrategyStep, idx: number) => (
                                                     <div key={idx} className="flex items-center space-x-1 bg-gray-900/80 border border-gray-800 px-1.5 py-0.5 rounded text-[9px]">
                                                         <span className={step.required ? 'text-blue-400 font-bold' : 'text-gray-500'}>{step.tag}</span>
                                                         <span className="text-gray-700">|</span>
@@ -333,11 +341,11 @@ export default function StrategiesPage() {
                                         <div className="mt-4 pt-3 border-t border-gray-800 flex justify-between items-center text-[10px]">
                                             <div className="flex space-x-3">
                                                 <span className="text-gray-500">
-                                                    Created <span className="text-gray-400">{new Date(strat.created_at).toLocaleDateString()}</span>
+                                                    Created <span className="text-gray-400">{strat.created_at ? new Date(strat.created_at).toLocaleDateString() : "N/A"}</span>
                                                 </span>
                                             </div>
                                             <button
-                                                onClick={() => deleteStrategy(strat.id)}
+                                                onClick={() => strat.id != null && deleteStrategy(strat.id)}
                                                 className="flex items-center space-x-1 text-gray-600 hover:text-red-400 transition-colors"
                                             >
                                                 <Trash2 className="h-3 w-3" />
@@ -402,7 +410,7 @@ export default function StrategiesPage() {
                                             return (
                                                 <button
                                                     key={sym}
-                                                    onClick={() => toggleSymbolForStrategy(assigningStrategy.id, sym)}
+                                                    onClick={() => assigningStrategy.id != null && toggleSymbolForStrategy(assigningStrategy.id, sym)}
                                                     className={`flex items-center justify-between p-3 rounded-lg border transition-all ${isActive
                                                         ? 'bg-blue-600/10 border-blue-500/40 text-blue-400'
                                                         : 'bg-gray-900 border-gray-800 text-gray-500 hover:border-gray-700 hover:text-gray-300'
@@ -416,7 +424,7 @@ export default function StrategiesPage() {
                                 </div>
                                 {allSymbols.filter(s => s.toLowerCase().includes(symbolSearch.toLowerCase())).length === 0 && (
                                     <div className="text-center py-12 text-gray-600 italic text-sm">
-                                        No markets matching "{symbolSearch}"
+                                        No markets matching &ldquo;{symbolSearch}&rdquo;
                                     </div>
                                 )}
                             </div>
@@ -516,7 +524,7 @@ export default function StrategiesPage() {
                                         setNewStrategy({ ...newStrategy, sequence: items });
                                     }}>
                                         <Droppable droppableId="sequence-list">
-                                            {(provided: any) => (
+                                            {(provided: DroppableProvided) => (
                                                 <div
                                                     {...provided.droppableProps}
                                                     ref={provided.innerRef}
@@ -524,7 +532,7 @@ export default function StrategiesPage() {
                                                 >
                                                     {newStrategy.sequence.map((step, idx) => (
                                                         <Draggable key={`step-${idx}`} draggableId={`step-${idx}`} index={idx}>
-                                                            {(provided: any) => (
+                                                            {(provided: DraggableProvided) => (
                                                                 <div
                                                                     ref={provided.innerRef}
                                                                     {...provided.draggableProps}

@@ -1,18 +1,76 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, LineSeries, createSeriesMarkers } from 'lightweight-charts';
+import { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, LineSeries, createSeriesMarkers, Time } from 'lightweight-charts';
 import { Settings } from 'lucide-react';
 
+interface Candle {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+interface SignalEvent {
+    time: number;
+    tag: string;
+    price?: number;
+    direction?: string;
+    ob_type?: string;
+    [key: string]: unknown;
+}
+
+interface Trade {
+    entry_time?: number;
+    side?: 'BUY' | 'SELL';
+    entry_price?: number;
+    exit_time?: number;
+    status?: string;
+    pnl?: number;
+    exit_reason?: string;
+    sl?: number;
+    tp?: number;
+}
+
+interface EquityPoint {
+    time: number;
+    value: number;
+}
+
+interface SwingPoint {
+    t: number;
+    price: number;
+    is_high: boolean;
+    type: string;
+    is_choch?: boolean;
+    breakout_t?: number;
+    choch_type?: 'Up' | 'Down' | string;
+}
+
+interface OrderBlock {
+    ob_type: 'BULLISH' | 'BEARISH' | string;
+    mitigated?: boolean;
+    t_mitigation?: number;
+    capped_time?: number;
+    t_start: number;
+    top: number;
+    bottom: number;
+}
+
+interface TimePoint {
+    time: number;
+}
+
 interface BacktestChartProps {
-    candles: any[];
-    signalEvents: any[];
-    trades: any[];
-    equityCurve: any[];
-    swingPoints?: any[];
-    obs?: any[];
+    candles: Candle[];
+    signalEvents: SignalEvent[];
+    trades: Trade[];
+    equityCurve: EquityPoint[];
+    swingPoints?: SwingPoint[];
+    obs?: OrderBlock[];
     digits?: number;
-    onEventHover?: (event: any | null) => void;
+    onEventHover?: (event: SignalEvent | null) => void;
 }
 
 // Color map for different signal event types
@@ -31,20 +89,20 @@ function getSignalStyle(tag: string) {
     for (const [key, style] of Object.entries(SIGNAL_COLORS)) {
         if (tag.toUpperCase().includes(key)) return style;
     }
-    return { color: '#9E9E9E', shape: 'circle' as any, label: '•' };
+    return { color: '#9E9E9E', shape: 'circle' as const, label: '•' };
 }
 
 // Deduplication helper (from SMCChart)
-function dedupeAndSort(items: any[]) {
+function dedupeAndSort<T extends TimePoint>(items: T[]): T[] {
     if (items.length === 0) return [];
-    const sorted = [...items].sort((a, b) => a.time - b.time);
-    const unique = [];
+    const sorted = [...items].sort((a, b) => Number(a.time) - Number(b.time));
+    const unique: T[] = [];
     let seenT = -1;
     for (const item of sorted) {
-        if (item.time == null || isNaN(item.time)) continue;
-        if (item.time > seenT) {
+        if (item.time == null || Number.isNaN(Number(item.time))) continue;
+        if (Number(item.time) > seenT) {
             unique.push(item);
-            seenT = item.time;
+            seenT = Number(item.time);
         }
     }
     return unique;
@@ -64,8 +122,9 @@ export default function BacktestChart({
     const equityContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const equityChartRef = useRef<IChartApi | null>(null);
-    const [hoveredEvent, setHoveredEvent] = useState<any | null>(null);
+    const [hoveredEvent, setHoveredEvent] = useState<SignalEvent | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+    const [chartContainerWidth, setChartContainerWidth] = useState(600);
 
     // Chart display settings (matching SMCChart)
     const [settings, setSettings] = useState({
@@ -129,7 +188,7 @@ export default function BacktestChart({
             priceFormat,
         });
 
-        candleSeries.setData(candles);
+        candleSeries.setData(candles.map((c) => ({ ...c, time: c.time as Time })));
 
         // 2. ZigZag line (from SMCChart logic)
         let zigzagSeries: ISeriesApi<"Line"> | null = null;
@@ -146,10 +205,10 @@ export default function BacktestChart({
 
             const firstCandleTime = candles[0].time;
             const lastCandleTime = candles[candles.length - 1].time;
-            const sortedPoints = [...swingPoints].sort((a: any, b: any) => a.t - b.t);
-            const zigzagItems: any[] = [];
+            const sortedPoints = [...swingPoints].sort((a, b) => Number(a.t) - Number(b.t));
+            const zigzagItems: Array<{ time: number; value: number }> = [];
 
-            sortedPoints.forEach((p: any) => {
+            sortedPoints.forEach((p) => {
                 const t = p.t;
                 if (t < firstCandleTime || t > lastCandleTime) return;
                 zigzagItems.push({ time: t, value: p.price });
@@ -163,19 +222,19 @@ export default function BacktestChart({
                 }
             }
 
-            zigzagSeries.setData(dedupeAndSort(zigzagItems));
+            zigzagSeries.setData(dedupeAndSort(zigzagItems).map((z) => ({ ...z, time: z.time as Time })));
         }
 
         // 3. HH/LL Markers + CHOCH lines (from SMCChart logic)
-        const markers: any[] = [];
+        const markers: Array<{ time: number; position: 'aboveBar' | 'belowBar'; color: string; shape: 'arrowUp' | 'arrowDown' | 'circle' | 'square'; text: string; size: number }> = [];
         const chochSeriesPool: ISeriesApi<"Line">[] = [];
 
         if (swingPoints.length > 0) {
             const firstCandleTime = candles[0].time;
             const lastCandleTime = candles[candles.length - 1].time;
-            const sortedPoints = [...swingPoints].sort((a: any, b: any) => a.t - b.t);
+            const sortedPoints = [...swingPoints].sort((a, b) => Number(a.t) - Number(b.t));
 
-            sortedPoints.forEach((p: any) => {
+            sortedPoints.forEach((p) => {
                 const t = p.t;
                 if (t < firstCandleTime || t > lastCandleTime) return;
 
@@ -204,8 +263,8 @@ export default function BacktestChart({
                             lastValueVisible: false,
                         });
                         chochSeries.setData([
-                            { time: t, value: p.price },
-                            { time: b_t, value: p.price }
+                            { time: t as Time, value: p.price },
+                            { time: b_t as Time, value: p.price }
                         ]);
                         chochSeriesPool.push(chochSeries);
                     }
@@ -229,6 +288,7 @@ export default function BacktestChart({
 
         // 5. Trade entry/exit markers
         for (const trade of trades) {
+            if (!trade.entry_time || !trade.side || trade.entry_price == null) continue;
             markers.push({
                 time: trade.entry_time,
                 position: trade.side === 'BUY' ? 'belowBar' : 'aboveBar',
@@ -239,25 +299,26 @@ export default function BacktestChart({
             });
 
             if (trade.exit_time && trade.status === 'CLOSED') {
-                const isWin = trade.pnl > 0;
+                const pnl = trade.pnl ?? 0;
+                const isWin = pnl > 0;
                 markers.push({
                     time: trade.exit_time,
                     position: trade.side === 'BUY' ? 'aboveBar' : 'belowBar',
                     color: isWin ? '#00E676' : '#FF1744',
                     shape: 'square',
-                    text: `${trade.exit_reason || 'EXIT'} ${isWin ? '+' : ''}${trade.pnl.toFixed(digits)}`,
+                    text: `${trade.exit_reason || 'EXIT'} ${isWin ? '+' : ''}${pnl.toFixed(digits)}`,
                     size: 2,
                 });
             }
         }
 
         // Sort and set all markers
-        createSeriesMarkers(candleSeries, dedupeAndSort(markers));
+        createSeriesMarkers(candleSeries, dedupeAndSort(markers).map((m) => ({ ...m, time: m.time as Time })));
 
         // 6. Order Block boxes (from SMCChart logic)
         const obSeriesPool: ISeriesApi<"Candlestick">[] = [];
         if (settings.showOB && obs.length > 0) {
-            obs.forEach((ob: any) => {
+            obs.forEach((ob) => {
                 const isFreshBullish = ob.ob_type === 'BULLISH' && !ob.mitigated;
                 const isFreshBearish = ob.ob_type === 'BEARISH' && !ob.mitigated;
 
@@ -265,11 +326,13 @@ export default function BacktestChart({
                 if (isFreshBullish) finalColor = 'rgba(0, 255, 0, 0.3)';
                 else if (isFreshBearish) finalColor = 'rgba(255, 0, 0, 0.3)';
 
-                const endTime = ob.mitigated ? ob.t_mitigation : (ob.capped_time || candles[candles.length - 1].time);
+                const endTime: number = ob.mitigated
+                    ? (ob.t_mitigation ?? ob.capped_time ?? candles[candles.length - 1].time)
+                    : (ob.capped_time ?? candles[candles.length - 1].time);
                 const startTime = ob.t_start;
 
-                const obCandleData: any[] = [];
-                candles.forEach((c: any) => {
+                const obCandleData: Candle[] = [];
+                candles.forEach((c) => {
                     if (c.time >= startTime && c.time <= endTime) {
                         obCandleData.push({
                             time: c.time,
@@ -291,7 +354,7 @@ export default function BacktestChart({
                         priceLineVisible: false,
                         lastValueVisible: false,
                     });
-                    series.setData(obCandleData);
+                    series.setData(obCandleData.map((o) => ({ ...o, time: o.time as Time })));
                     obSeriesPool.push(series);
                 }
             });
@@ -300,7 +363,8 @@ export default function BacktestChart({
         // 7. SL/TP lines for trades
         for (const trade of trades) {
             if (trade.entry_time && trade.sl && trade.tp) {
-                const endTime = trade.exit_time || candles[candles.length - 1]?.time || trade.entry_time + 3600;
+                const fallbackEndTime = Number(trade.entry_time) + 3600;
+                const endTime: number = trade.exit_time ?? candles[candles.length - 1]?.time ?? fallbackEndTime;
 
                 const slSeries = chart.addSeries(LineSeries, {
                     color: '#FF1744',
@@ -311,8 +375,8 @@ export default function BacktestChart({
                     crosshairMarkerVisible: false,
                 });
                 slSeries.setData([
-                    { time: trade.entry_time, value: trade.sl },
-                    { time: endTime, value: trade.sl },
+                    { time: trade.entry_time as Time, value: trade.sl },
+                    { time: endTime as Time, value: trade.sl },
                 ]);
 
                 const tpSeries = chart.addSeries(LineSeries, {
@@ -324,8 +388,8 @@ export default function BacktestChart({
                     crosshairMarkerVisible: false,
                 });
                 tpSeries.setData([
-                    { time: trade.entry_time, value: trade.tp },
-                    { time: endTime, value: trade.tp },
+                    { time: trade.entry_time as Time, value: trade.tp },
+                    { time: endTime as Time, value: trade.tp },
                 ]);
             }
         }
@@ -338,8 +402,8 @@ export default function BacktestChart({
                 return;
             }
 
-            const time = param.time as number;
-            const nearby = signalEvents.find(e => Math.abs(e.time - time) < 120);
+            const time = Number(param.time);
+            const nearby = signalEvents.find((e) => Math.abs(Number(e.time) - time) < 120);
             if (nearby) {
                 setHoveredEvent(nearby);
                 setTooltipPos({ x: param.point.x, y: param.point.y });
@@ -357,8 +421,10 @@ export default function BacktestChart({
         const handleResize = () => {
             if (container && chart) {
                 chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+                setChartContainerWidth(container.clientWidth);
             }
         };
+        setChartContainerWidth(container.clientWidth);
         const resizeObserver = new ResizeObserver(handleResize);
         resizeObserver.observe(container);
 
@@ -366,7 +432,7 @@ export default function BacktestChart({
             resizeObserver.disconnect();
             chart.remove();
         };
-    }, [candles, signalEvents, trades, swingPoints, obs, digits, settings]);
+    }, [candles, signalEvents, trades, swingPoints, obs, digits, settings, onEventHover]);
 
     // Equity curve chart
     useEffect(() => {
@@ -402,7 +468,7 @@ export default function BacktestChart({
         });
 
         areaSeries.setData(equityCurve.map(p => ({
-            time: p.time,
+            time: p.time as Time,
             value: p.value,
         })));
 
@@ -463,7 +529,7 @@ export default function BacktestChart({
                     <div
                         className="absolute z-50 pointer-events-none bg-[#1E222D]/95 backdrop-blur-sm border border-gray-700 rounded-lg p-3 shadow-2xl max-w-xs"
                         style={{
-                            left: Math.min(tooltipPos.x + 16, (chartContainerRef.current?.clientWidth || 600) - 250),
+                            left: Math.min(tooltipPos.x + 16, chartContainerWidth - 250),
                             top: Math.max(tooltipPos.y - 60, 0),
                         }}
                     >
@@ -471,7 +537,7 @@ export default function BacktestChart({
                             {hoveredEvent.tag}
                         </div>
                         <div className="text-[10px] text-gray-400 mb-2">
-                            {new Date(hoveredEvent.time * 1000).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                            {new Date(Number(hoveredEvent.time) * 1000).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
                         </div>
                         {hoveredEvent.price && (
                             <div className="text-xs text-gray-300">

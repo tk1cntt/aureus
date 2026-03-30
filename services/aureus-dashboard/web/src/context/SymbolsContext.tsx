@@ -8,6 +8,8 @@ interface SymbolData {
     description?: string;
 }
 
+type SymbolApiItem = string | Partial<SymbolData>;
+
 interface SymbolsContextType {
     symbols: SymbolData[];
     loading: boolean;
@@ -29,15 +31,15 @@ export const SymbolsProvider = ({ children }: { children: ReactNode }) => {
         try {
             const res = await fetch(`${API_BASE}/symbols`);
             if (!res.ok) throw new Error("Failed to fetch symbols");
-            const data = await res.json();
+            const data = (await res.json()) as SymbolApiItem[];
 
             // Normalize: API returns objects {name, ...} or plain strings
-            const normalized: SymbolData[] = data.map((s: any) => {
+            const normalized: SymbolData[] = data.map((s) => {
                 if (typeof s === 'string') {
                     return { name: s, digits: 2 }; // Default digits if missing
                 }
                 return {
-                    name: s.name,
+                    name: s.name ?? 'UNKNOWN',
                     digits: s.digits ?? 2,
                     description: s.description
                 };
@@ -45,9 +47,9 @@ export const SymbolsProvider = ({ children }: { children: ReactNode }) => {
 
             setSymbols(normalized);
             setError(null);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("SymbolsContext fetch error:", err);
-            setError(err.message);
+            setError(err instanceof Error ? err.message : "Failed to fetch symbols");
         } finally {
             setLoading(false);
         }

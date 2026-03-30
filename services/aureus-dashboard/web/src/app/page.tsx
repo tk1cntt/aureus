@@ -6,9 +6,119 @@ import { Sidebar } from "@/components/Sidebar";
 import { SMCChart } from "@/components/SMCChart";
 import { ConfluenceOverlay } from "@/components/ConfluenceOverlay";
 import ClientOnly from "@/components/ClientOnly";
-import { Activity, Shield, Zap, Settings, RefreshCw, BrainCircuit, Clock } from "lucide-react";
-import { AIConfidenceMeter, InstitutionalAudit } from "@/components/AIInsights";
+import { Activity, Zap, Settings, RefreshCw, BrainCircuit, Clock } from "lucide-react";
+import { InstitutionalAudit } from "@/components/AIInsights";
 import { MarketPulse } from "@/components/MarketPulse";
+
+interface Candle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+interface SwingPoint {
+  t: number;
+  price: number;
+  breakout_t?: number | null;
+  is_high?: boolean;
+  type?: string;
+  is_choch?: boolean;
+  choch_type?: string;
+}
+
+interface OrderBlock {
+  ob_type?: string;
+  top?: number;
+  bottom?: number;
+  t_start?: number | null;
+  t_mitigation?: number | null;
+  capped_time?: number | null;
+}
+
+interface AiAudit {
+  aci: number;
+  decision: string;
+  key_insight: string;
+  debate_log: {
+    trend: string;
+    liquidity: string;
+    assassin: string;
+    judgement: string;
+    monologue?: string;
+  };
+  llm_latency_ms?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  request_payload?: string;
+  response_payload?: string;
+}
+
+interface SimulatedOrder {
+  trace_id: string;
+  status: string;
+  strategy_name: string;
+  side: "BUY" | "SELL";
+  entry_price: number;
+  sl: number;
+  tp: number;
+  ai_audit?: AiAudit;
+}
+
+interface StepProgress {
+  tag: string;
+  weight: number;
+  required: boolean;
+  status: "matched" | "waiting" | "missed";
+  time?: number;
+}
+
+interface StrategyProgress {
+  strategy: string;
+  progress_pct: number;
+  sequence: StepProgress[];
+}
+
+interface ClosedOrder {
+  trace_id: string;
+  strategy_name: string;
+  close_time: number;
+  pnl: number;
+  ai_audit?: AiAudit;
+}
+
+interface SmcState {
+  obs?: OrderBlock[];
+  strategy_progress?: Record<string, StrategyProgress>;
+  simulated_orders?: SimulatedOrder[];
+  active_orders?: SimulatedOrder[];
+  closed_orders?: ClosedOrder[];
+  swing_points?: SwingPoint[];
+}
+
+interface ChartApiData {
+  candles?: Candle[];
+  swing_points?: SwingPoint[];
+  digits?: number;
+}
+
+interface AiAnalysis {
+  narrative: string;
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  aci: number;
+  timestamp: number;
+  debate_log?: {
+    trend: string;
+    liquidity: string;
+    skeptic: string;
+    monologue?: string;
+  };
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  llm_latency_ms?: number;
+  total_latency_ms?: number;
+}
 
 export default function DashboardPage() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
@@ -22,9 +132,9 @@ export default function DashboardPage() {
       setSelectedSymbol("XAUUSD");
     }
   }, []);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [smcState, setSmcState] = useState<any>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [chartData, setChartData] = useState<Candle[]>([]);
+  const [smcState, setSmcState] = useState<SmcState | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [precision, setPrecision] = useState(2);
   const { symbols: allSymbols } = useSymbols();
@@ -102,23 +212,23 @@ export default function DashboardPage() {
           fetch(`${API_BASE}/ai/latest/${selectedSymbol}`)
         ]);
 
-        const cData = await chartRes.json();
-        const sData = await stateRes.json();
-        const aiData = aiRes.ok ? await aiRes.json() : null;
+        const cData = (await chartRes.json()) as ChartApiData;
+        const sData = (await stateRes.json()) as SmcState;
+        const aiData = aiRes.ok ? ((await aiRes.json()) as AiAnalysis) : null;
 
         // Shift all timestamps to GMT+7 for chart display
-        const shiftedCandles = (cData.candles || []).map((c: any) => ({
+        const shiftedCandles = (cData.candles || []).map((c) => ({
           ...c,
           time: c.time + GMT7_OFFSET,
         }));
 
-        const shiftedSwingPoints = (cData.swing_points || []).map((sp: any) => ({
+        const shiftedSwingPoints = (cData.swing_points || []).map((sp) => ({
           ...sp,
           t: sp.t + GMT7_OFFSET,
           ...(sp.breakout_t != null ? { breakout_t: sp.breakout_t + GMT7_OFFSET } : {}),
         }));
 
-        const shiftedObs = (sData.obs || []).map((ob: any) => ({
+        const shiftedObs = (sData.obs || []).map((ob) => ({
           ...ob,
           t_start: ob.t_start != null ? ob.t_start + GMT7_OFFSET : ob.t_start,
           t_mitigation: ob.t_mitigation != null ? ob.t_mitigation + GMT7_OFFSET : ob.t_mitigation,
@@ -149,7 +259,7 @@ export default function DashboardPage() {
     // Polling for real-time updates every 2 seconds
     const interval = setInterval(fetchData, 2000);
     return () => clearInterval(interval);
-  }, [selectedSymbol]);
+  }, [selectedSymbol, API_BASE]);
 
   if (!selectedSymbol) {
     return (
@@ -239,7 +349,7 @@ export default function DashboardPage() {
                 <SMCChart
                   symbol={selectedSymbol}
                   data={chartData}
-                  smcState={smcState}
+                  smcState={smcState ?? {}}
                   chartType={chartType}
                   settings={settings}
                   precision={precision}
@@ -267,7 +377,7 @@ export default function DashboardPage() {
               </div>
 
               {/* Pending AI Verification */}
-              {smcState?.simulated_orders?.some((o: any) => o.status === 'PENDING_AI') && (
+              {smcState?.simulated_orders?.some((o) => o.status === 'PENDING_AI') && (
                 <>
                   <div className="text-xs font-bold text-amber-500 uppercase tracking-wider px-1 mt-4 flex items-center space-x-2">
                     <Clock className="h-3 w-3 animate-pulse" />
@@ -275,8 +385,8 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2 mt-2">
                     {smcState.simulated_orders
-                      .filter((o: any) => o.status === 'PENDING_AI')
-                      .map((order: any) => (
+                      .filter((o) => o.status === 'PENDING_AI')
+                      .map((order) => (
                         <div key={order.trace_id} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 shadow-sm animate-pulse">
                           <div className="flex justify-between items-start">
                             <div>
@@ -296,7 +406,7 @@ export default function DashboardPage() {
                 Active Trades ({smcState?.active_orders?.length || 0})
               </div>
               <div className="space-y-2">
-                {smcState?.active_orders?.map((order: any) => (
+                {smcState?.active_orders?.map((order) => (
                   <div key={order.trace_id} className="bg-[#1E222D] border border-gray-800 rounded-xl p-3 shadow-sm">
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex flex-col">
@@ -342,7 +452,7 @@ export default function DashboardPage() {
                 Recent Results
               </div>
               <div className="space-y-2">
-                {smcState?.closed_orders?.map((order: any) => (
+                {smcState?.closed_orders?.map((order) => (
                   <div key={order.trace_id} className="space-y-1">
                     <div className="bg-[#1E222D]/40 border border-gray-800/50 rounded-xl p-2.5 flex justify-between items-center hover:bg-[#1E222D]/60 transition-colors">
                       <div>

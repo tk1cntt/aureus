@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ReactNode } from "react";
+import { ReactNode, useSyncExternalStore } from "react";
 
 interface ClientOnlyProps {
     children: ReactNode;
@@ -12,11 +12,11 @@ interface ClientOnlyProps {
  * (like Bitdefender chosing bis_skin_checked attributes).
  */
 export default function ClientOnly({ children }: ClientOnlyProps) {
-    const [hasMounted, setHasMounted] = useState(false);
-
-    useEffect(() => {
-        setHasMounted(true);
-    }, []);
+    const hasMounted = useSyncExternalStore(
+        () => () => undefined,
+        () => true,
+        () => false
+    );
 
     if (!hasMounted) {
         return null; // Or a loading skeleton if preferred
