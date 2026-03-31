@@ -289,4 +289,13 @@ Plans:
 5. Snapshot gap detection + auto-recovery
 6. Data continuity between pre-computed and live snapshots
 
+## Backlog
 
+### Phase 999.1: Fix swing_points snapshot truncation causing historical CHOCH replays (BACKLOG)
+
+**Goal:** Increase DB swing_points_snapshot retention to cover full 1500-candle warmup window to prevent loss of `is_choch=True` metadata, which currently causes `structure.py` to replay historical CHOCH events on engine restart.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
