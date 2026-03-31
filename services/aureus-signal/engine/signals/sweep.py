@@ -175,9 +175,9 @@ class SweepSignal(BaseSignal):
                         continue
 
                     mitigation_age = c_t - t_mitigation_int
-                    if mitigation_age <= 0 or mitigation_age > 300:
+                    if mitigation_age < 0 or mitigation_age > 300:
                         logger.debug(
-                            f"[t={c_t}] [{symbol}] [calculate] Skip sweep emit: mitigated age={mitigation_age}s outside <= 300s"
+                            f"[t={c_t}] [{symbol}] [calculate] Skip sweep emit: mitigated age={mitigation_age}s outside 0-300s"
                         )
                         continue
 
@@ -195,18 +195,31 @@ class SweepSignal(BaseSignal):
                     rec_tag = str(rec.get("tag", "")).strip().lower()
                     rec_data = rec.get("data") if isinstance(rec.get("data"), dict) else {}
 
-                    rec_price_direct = self._to_float(rec.get("price_swept"))
-                    rec_price_data = self._to_float(rec_data.get("price_swept"))
-                    rec_price = rec_price_data if rec_price_data is not None else rec_price_direct
+                    rec_source_t = rec_data.get("source_t")
+                    rec_ob_type = rec_data.get("ob_type")
 
                     if rec_tag == "sweep":
                         rec_value = rec.get("value")
                         if rec_value is None:
                             rec_value = rec_data.get("value")
                         rec_value_str = str(rec_value or "").strip().lower()
+                        
+                        if rec_source_t is not None and rec_ob_type is not None:
+                            return (
+                                rec_value_str == status_tag 
+                                and rec_source_t == ob.get("t_start") 
+                                and rec_ob_type == ob.get("ob_type", "UNKNOWN")
+                            )
+
+                        rec_price_direct = self._to_float(rec.get("price_swept"))
+                        rec_price_data = self._to_float(rec_data.get("price_swept"))
+                        rec_price = rec_price_data if rec_price_data is not None else rec_price_direct
                         return rec_value_str == status_tag and rec_price == target_price
 
                     # Backward compatibility for legacy history shape: tag == sweep_*.
+                    rec_price_direct = self._to_float(rec.get("price_swept"))
+                    rec_price_data = self._to_float(rec_data.get("price_swept"))
+                    rec_price = rec_price_data if rec_price_data is not None else rec_price_direct
                     return rec_tag == status_tag and rec_price == target_price
 
                 already_swept = any(_same_sweep_event(s) for s in history)

@@ -54,7 +54,7 @@ class _LoggedTransientSignals(dict):
         except Exception:
             payload = repr(value)
 
-        logger.info(f"[transient_signals] [{self._symbol}] add key={key} payload={payload}")
+        # logger.info(f"[transient_signals] [{self._symbol}] add key={key} payload={payload}")
 
     def __setitem__(self, key: Any, value: Any) -> None:
         super().__setitem__(key, value)

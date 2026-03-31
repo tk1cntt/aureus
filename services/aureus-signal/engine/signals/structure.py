@@ -81,7 +81,7 @@ class StructureSignal(BaseSignal):
                 ]
             }
             symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
-            logger.info(f"[structure] [{symbol}] [ob_state] {transient['ob_state']}")
+            # logger.info(f"[structure] [{symbol}] [ob_state] {transient['ob_state']}")
 
         self._verify_mitigations(df, state_obj)
 
