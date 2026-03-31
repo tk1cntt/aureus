@@ -189,6 +189,61 @@ class TestSweepSignalBehavior(unittest.TestCase):
         self.assertIsNone(result)
         self.assertNotIn("sweep", state.transient_signals)
 
+    def test_clean_breakout_emits_after_broken_pending_second_outside_candle(self):
+        state = _DummyState()
+        state.obs = [
+            {
+                "ob_type": "BULLISH",
+                "bottom": 1999.0,
+                "top": 2000.0,
+                "t_start": 1700000000,
+                "status": "BROKEN_PENDING",
+                "break_counter": 1,
+                "mitigated": False,
+            }
+        ]
+        df = self._df([
+            {"t": 1700000360, "o": 1998.8, "h": 1998.9, "l": 1997.9, "c": 1998.2},
+        ])
+
+        result = self.signal.calculate(df, state)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["tag"], "sweep")
+        self.assertEqual(result["value"], "clean_breakout_bull")
+        self.assertEqual(state.obs[0]["status"], "CLEAN_BREAKOUT")
+        self.assertIn("sweep", state.transient_signals)
+
+    def test_clean_breakout_respects_history_dedup_for_same_tick_and_price(self):
+        state = _DummyState()
+        state.obs = [
+            {
+                "ob_type": "BULLISH",
+                "bottom": 1999.0,
+                "top": 2000.0,
+                "t_start": 1700000000,
+                "status": "BROKEN_PENDING",
+                "break_counter": 1,
+                "mitigated": False,
+            }
+        ]
+        state.signal_history = [
+            {
+                "tag": "sweep",
+                "value": "clean_breakout_bull",
+                "t": 1700000360,
+                "data": {"price_swept": 1999.0},
+            }
+        ]
+        df = self._df([
+            {"t": 1700000360, "o": 1998.8, "h": 1998.9, "l": 1997.9, "c": 1998.2},
+        ])
+
+        result = self.signal.calculate(df, state)
+
+        self.assertIsNone(result)
+        self.assertNotIn("sweep", state.transient_signals)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -213,7 +213,7 @@ class StructureSignal(BaseSignal):
                         if c_t == latest_t:
                             latest_bear_mitigation = signal
                         break
-        '''             
+        '''
         if hasattr(state_obj, 'transient_signals') and isinstance(state_obj.transient_signals, dict):
             if latest_bull_mitigation is not None:
                 state_obj.transient_signals['ob'] = latest_bull_mitigation

@@ -62,6 +62,7 @@ class SweepSignal(BaseSignal):
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
                             ob["status"] = "CLEAN_BREAKOUT"
+                            ob["_just_swept"] = True  # Flag to trigger signal this tick
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
@@ -78,7 +79,7 @@ class SweepSignal(BaseSignal):
                             ob["_just_swept"] = True
                     elif c_l <= ob_top:
                         ob["status"] = "TOUCHED"
-
+                        ob["_just_swept"] = True
             else: # BEARISH
                 if status == "BROKEN_PENDING":
                     # Check for 2 candles complete outside
@@ -86,6 +87,7 @@ class SweepSignal(BaseSignal):
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
                             ob["status"] = "CLEAN_BREAKOUT"
+                            ob["_just_swept"] = True  # Flag to trigger signal this tick
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
@@ -102,6 +104,7 @@ class SweepSignal(BaseSignal):
                             ob["_just_swept"] = True
                     elif c_h >= ob_bottom:
                         ob["status"] = "TOUCHED"
+                        ob["_just_swept"] = True
 
         # Garbage Collection đã bị gỡ bỏ hoàn toàn.
         # Engine dựa vào chu kì Daily Reset (5h sáng GMT+7) thông qua lệnh RECALCULATE
@@ -227,13 +230,11 @@ class SweepSignal(BaseSignal):
                         f"[t={c_t}] [{symbol}] [sweep] SWEEP DETECTED: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
                     )
 
-                    '''
                     transient = getattr(state_obj, "transient_signals", None)
                     if isinstance(transient, dict):
                         transient["sweep"] = triggered_sweep
                         # transient["ob_state"] = state_obj.obs  # Emit OBs to Redis
-                        
-                    '''
+
                     # AI update is orchestrated centrally in runtime engine policy.
                     # Sweep signal layer only emits domain events to transient_signals.
                     # Emitting only ONE sweep signal max per tick to match old parity

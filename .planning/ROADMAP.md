@@ -211,6 +211,16 @@ Plans:
 Plans:
 - [ ] TBD (run /gsd-plan-phase 15.12 to break down)
 
+### Phase 15.13: Sweep signal gap analysis (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 15.12
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.13 to break down)
+
 ## Phase 19: Custom UI & Dashboard
 
 **Requirements:** UI-01→08, API-01→06

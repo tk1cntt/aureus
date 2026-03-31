@@ -184,8 +184,26 @@ class TestSweepEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(state_payload, str)
 
         state = json.loads(state_payload)
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
-        self.assertIn("sweep_bull", tags)
+        normalized_history = state.get("signal_history_normalized", [])
+        sweep_values = []
+
+        for candle_record in normalized_history:
+            signals = candle_record.get("signals") if isinstance(candle_record, dict) else {}
+            events = signals.get("events") if isinstance(signals, dict) else []
+            if not isinstance(events, list):
+                continue
+
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                if str(event.get("tag") or "").strip().lower() != "sweep":
+                    continue
+
+                event_value = str(event.get("value") or "").strip().lower()
+                if event_value:
+                    sweep_values.append(event_value)
+
+        self.assertIn("sweep_bull", sweep_values)
 
 
 if __name__ == "__main__":

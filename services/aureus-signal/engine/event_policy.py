@@ -8,27 +8,29 @@ _AI_TAG_TO_TRIGGER = {
     "choch_down": "CHANGE_OF_CHARACTER_BEARISH",
     "bos_up": "BREAK_OF_STRUCTURE_BULLISH",
     "bos_down": "BREAK_OF_STRUCTURE_BEARISH",
-    
+
     # OBs
     "ob_bull_new": "ORDER_BLOCK_BULLISH",
     "ob_bear_new": "ORDER_BLOCK_BEARISH",
     "ob_bull_mitigated": "ORDER_BLOCK_BULLISH_MITIGATED",
     "ob_bear_mitigated": "ORDER_BLOCK_BEARISH_MITIGATED",
-    
+
     # FVGs
     "fvg_bull_new": "FAIR_VALUE_GAP_BULLISH",
     "fvg_bear_new": "FAIR_VALUE_GAP_BEARISH",
     "fvg_bull_mitigated": "FAIR_VALUE_GAP_BULLISH_MITIGATED",
     "fvg_bear_mitigated": "FAIR_VALUE_GAP_BEARISH_MITIGATED",
-    
+
     # Sweep States (Bull)
     "sweep_bull": "LIQUIDITY_SWEEP_BULLISH",
+    "sweep_touched_bull": "LIQUIDITY_SWEEP_TOUCHED_BULLISH",
     "sweep_broken_pending_bull": "LIQUIDITY_SWEEP_BROKEN_PENDING_BULLISH",
     "stop_hunt_bull": "LIQUIDITY_STOP_HUNT_BULLISH",
     "clean_breakout_bull": "CLEAN_BREAKOUT_BULLISH",
-    
+
     # Sweep States (Bear)
     "sweep_bear": "LIQUIDITY_SWEEP_BEARISH",
+    "sweep_touched_bear": "LIQUIDITY_SWEEP_TOUCHED_BEARISH",
     "sweep_broken_pending_bear": "LIQUIDITY_SWEEP_BROKEN_PENDING_BEARISH",
     "stop_hunt_bear": "LIQUIDITY_STOP_HUNT_BEARISH",
     "clean_breakout_bear": "CLEAN_BREAKOUT_BEARISH",
