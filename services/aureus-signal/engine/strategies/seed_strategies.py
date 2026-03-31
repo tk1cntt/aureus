@@ -14,7 +14,7 @@ async def seed_system_strategies(pool):
     """
     strategies = [
         {
-            "name": "TREND_CONT",
+            "name": "TREND_CONT_BULL",
             "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
             "min_score": 3.0,
             "config": {
@@ -25,16 +25,36 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 2.0,
-                    "sl": {"type": "FIXED_PIPS", "value": 15},
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
                     "tp": {"type": "RR_RATIO", "value": 3.0},
-                    "trailing": {"type": "SWING_LOW", "activation_pips": 20},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_down"]
                 }
             }
         },
         {
-            "name": "SESSION_SWEEP",
+            "name": "TREND_CONT_BEAR",
+            "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
+            "min_score": 3.0,
+            "config": {
+                "min_score_threshold": 0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30 }
+                ],
+                "trade_execution": {
+                    "size": 1.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
+            "name": "ORDER_FLOW_BULL",
             "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps with tighter stops.",
             "min_score": 6.0,
             "config": {
@@ -46,16 +66,37 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 1.5,
-                    "sl": {"type": "FIXED_PIPS", "value": 10},
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
                     "tp": {"type": "RR_RATIO", "value": 2.5},
-                    "trailing": {"type": "BREAKEVEN", "activation_pips": 15},
+                    "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_down"]
                 }
             }
         },
         {
-            "name": "ORDER_FLOW_DOM",
+            "name": "ORDER_FLOW_BEAR",
+            "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps with tighter stops.",
+            "min_score": 6.0,
+            "config": {
+                "min_score_threshold": 6.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 3.5, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]},
+                    {"tag": "sweep_bear", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "size": 1.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
+                    "tp": {"type": "RR_RATIO", "value": 2.5},
+                    "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
+                    "capital_risk_pct": 0.5,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
+            "name": "SESSION_SWEEP_BULL",
             "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
             "min_score": 6.0,
             "config": {
@@ -65,12 +106,32 @@ async def seed_system_strategies(pool):
                     {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
-                    "size": 3.0,
-                    "sl": {"type": "FIXED_PIPS", "value": 12},
+                    "size": 1.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
                     "tp": {"type": "RR_RATIO", "value": 4.0},
-                    "trailing": {"type": "SWING_LOW", "activation_pips": 15},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.5,
                     "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "SESSION_SWEEP_BEAR",
+            "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
+            "min_score": 6.0,
+            "config": {
+                "min_score_threshold": 6.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "sweep_bear", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "size": 1.0,
+                    "sl": {"type": "FIXED_PIPS", "value": 500},
+                    "tp": {"type": "RR_RATIO", "value": 4.0},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.5,
+                    "early_exits": ["choch_up"]
                 }
             }
         }

@@ -235,6 +235,8 @@ def test_missing_state_init():
 
 
 def test_sequence_fallback_to_signal_history_when_normalized_empty():
+    # TEST BEHAVIOR UPDATE: We NO LONGER fallback to signal_history. 
+    # If events are not in log_signal_normalize, sequence matcher ignores them.
     strategy = TemplateStrategy({
         "name": "fallback_strat",
         "min_score_threshold": 2.0,
@@ -245,13 +247,16 @@ def test_sequence_fallback_to_signal_history_when_normalized_empty():
     })
     state = MockState()
 
+    # Appending to legacy signal_history ONLY
     state.signal_history.append({"tag": "STEP1", "t": 1000})
     state.signal_history.append({"tag": "STEP2", "t": 1060})
 
     result = strategy._evaluate_sequence(create_mock_df(1060), state)
 
-    assert result["score"] == 2.0
-    assert result["missing_required"] is False
+    # Sequence progress should NOT advance since source_records=log_signal_normalize=[]
+    assert result["score"] == 0.0
+    assert result["missing_required"] is True
+    assert result["matched_steps"] == 0
 
 
 def test_sequence_prioritizes_normalized_over_signal_history():
@@ -293,3 +298,37 @@ def test_sequence_normalized_records_processed_in_ascending_time_order():
     assert progress["origin_timestamp"] == 1000
     assert progress["sequence"][0]["time"] == 1000
     assert progress["sequence"][1]["time"] == 1060
+
+def test_sequence_resets_upon_new_step0_when_complete():
+    strategy = TemplateStrategy({
+        "name": "reset_strat",
+        "min_score_threshold": 2.0,
+        "sequence": [
+            {"tag": "STEP1", "weight": 1.0, "required": True},
+            {"tag": "STEP2", "weight": 1.0, "required": True},
+        ],
+    })
+    state = MockState()
+
+    # Match full sequence first
+    append_normalized_events(state, 1000, "STEP1")
+    append_normalized_events(state, 1060, "STEP2")
+    res1 = strategy._evaluate_sequence(create_mock_df(1060), state)
+
+    assert res1["score"] == 2.0
+    assert res1["missing_required"] is False
+    assert res1["matched_steps"] == 2
+    
+    # Progress is at len(sequence) = 2. Now a new STEP1 arrives: it should reset and match step 0
+    append_normalized_events(state, 1100, "STEP1")
+    res2 = strategy._evaluate_sequence(create_mock_df(1100), state)
+
+    # Score should be 1.0 because it's only matched STEP1 of the new cycle
+    assert res2["score"] == 1.0
+    assert res2["missing_required"] is True
+    assert res2["matched_steps"] == 1
+    
+    progress = state.strategy_progress["reset_strat"]
+    assert progress["origin_timestamp"] == 1100
+    assert progress["current_step_index"] == 1
+    assert progress["sequence"][0]["time"] == 1100

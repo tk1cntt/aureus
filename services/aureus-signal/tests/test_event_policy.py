@@ -5,7 +5,11 @@ import unittest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from engine.event_policy import evaluate_ai_trigger_events
+from engine.event_policy import (
+    _AI_TAG_TO_TRIGGER,
+    _TRIGGER_PRIORITY,
+    evaluate_ai_trigger_events,
+)
 
 
 class TestEventPolicy(unittest.TestCase):
@@ -39,6 +43,23 @@ class TestEventPolicy(unittest.TestCase):
                 "CLEAN_BREAKOUT_BEARISH",
             ],
         )
+
+    def test_evaluate_ai_trigger_events_covers_all_ai_tag_mappings(self):
+        transient_signals = {
+            tag: {"tag": "coverage"}
+            for tag in _AI_TAG_TO_TRIGGER.keys()
+        }
+
+        events = evaluate_ai_trigger_events(transient_signals)
+
+        expected = [
+            event
+            for event in _TRIGGER_PRIORITY
+            if event in set(_AI_TAG_TO_TRIGGER.values())
+        ]
+
+        self.assertEqual(events, expected)
+        self.assertEqual(set(events), set(_AI_TAG_TO_TRIGGER.values()))
 
 
 if __name__ == "__main__":

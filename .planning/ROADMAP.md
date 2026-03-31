@@ -64,6 +64,16 @@ See `.planning/archive/` for full archives.
 4. Instrument definition (XAUUSD CurrencyPair) with correct price/size precision
 5. Existing live tables unaffected
 
+### Phase 15.15: Align strategy with new tags
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.15 to break down)
+
 ---
 
 ## Phase 17: Signal Actor & Strategy Adapter
@@ -220,6 +230,36 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 15.13 to break down)
+
+### Phase 15.14: Suspicious sweep event reconciliation (INSERTED)
+
+**Goal:** Loại bỏ bất nhất sweep event bằng cách xác nhận suspicious runtime conditions và chỉnh emission/gating để `triggered_sweep` trả về đúng tín hiệu hợp lệ.
+**Requirements**: SWEEP-EVENT-RECONCILIATION
+**Depends on:** Phase 15.13
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] Plan 01: Reconcile suspicious sweep events and mitigation timing (`15.14-01-PLAN.md`)
+
+### Phase 15.14.1: Giờ các tag thay đổi thì phần strategy cũng cần thay đổi theo tag mới (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 15.14
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.14.1 to break down)
+
+### Phase 15.15: Align strategy with new tags (INSERTED)
+
+**Goal:** Align strategy tag consumption with the updated transient signal taxonomy so strategy conditions and AI trigger events remain consistent.
+**Requirements**: PHASE-15.15-TAG-ALIGNMENT
+**Depends on:** Phase 15.14.1
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] Plan 01: Align strategy behavior with updated tag taxonomy (`15.15-01-PLAN.md`)
 
 ## Phase 19: Custom UI & Dashboard
 

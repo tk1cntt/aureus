@@ -151,11 +151,10 @@ class TemplateStrategy(BaseStrategy):
                         s["status"] = "waiting" if s.get("required", False) else "missed"
                         s["time"] = None
 
-        normalized_log = getattr(state_obj, "log_signal_normalize", None)
-        history = getattr(state_obj, "signal_history", [])
-
-        use_normalized = isinstance(normalized_log, list) and len(normalized_log) > 0
-        source_records = normalized_log if use_normalized else history
+        normalized_log = getattr(state_obj, "log_signal_normalize", [])
+        
+        # We now STRICTLY rely on normalized signal events. No fallback to raw history.
+        source_records = normalized_log if isinstance(normalized_log, list) else []
         current_history_idx = len(source_records) - 1
 
         # 2. Process new signals/events
@@ -165,24 +164,23 @@ class TemplateStrategy(BaseStrategy):
                 for record_index in range(last_processed_index + 1, current_history_idx + 1)
             ]
 
-            if use_normalized:
-                def _normalized_record_sort_key(item: tuple[int, Any]) -> tuple[int, Any, int]:
-                    record_index, raw_record = item
-                    if not isinstance(raw_record, dict):
-                        return (1, 0, record_index)
-
-                    record_time = raw_record.get("t")
-                    if isinstance(record_time, (int, float)):
-                        return (0, record_time, record_index)
-
+            def _normalized_record_sort_key(item: tuple[int, Any]) -> tuple[int, Any, int]:
+                record_index, raw_record = item
+                if not isinstance(raw_record, dict):
                     return (1, 0, record_index)
 
-                pending_records.sort(key=_normalized_record_sort_key)
+                record_time = raw_record.get("t")
+                if isinstance(record_time, (int, float)):
+                    return (0, record_time, record_index)
+
+                return (1, 0, record_index)
+
+            pending_records.sort(key=_normalized_record_sort_key)
 
             for _, record in pending_records:
                 events_to_process: List[Dict[str, Any]] = []
 
-                if use_normalized and isinstance(record, dict):
+                if isinstance(record, dict):
                     record_time = record.get("t")
                     signals_obj = record.get("signals") if isinstance(record.get("signals"), dict) else {}
                     events_obj = signals_obj.get("events") if isinstance(signals_obj.get("events"), list) else []
@@ -194,14 +192,24 @@ class TemplateStrategy(BaseStrategy):
                         if ev_tag is None:
                             continue
                         events_to_process.append({"tag": ev_tag, "t": record_time})
-                elif isinstance(record, dict):
-                    events_to_process.append(record)
 
                 for latest_signal in events_to_process:
                     latest_tag = latest_signal.get("tag")
                     if latest_tag is None:
                         continue
                     latest_time = latest_signal.get("t")
+
+                    # Check if sequence is already completed but a new step 0 event occurs
+                    if current_step_index >= len(self.sequence) and len(self.sequence) > 0:
+                        first_step_tag = self.sequence[0]["tag"]
+                        if latest_tag == first_step_tag:
+                            current_step_index = 0
+                            origin_timestamp = None
+                            matched_timestamps = []
+                            last_matched_candle_idx = -1
+                            for s in sequence_progress:
+                                s["status"] = "waiting" if s.get("required", False) else "missed"
+                                s["time"] = None
 
                     # Check for matching steps
                     while current_step_index < len(self.sequence):
