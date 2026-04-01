@@ -17,7 +17,7 @@ If a missing relevant tool is later needed, expand the tool set and retry.
 
 Mỗi lần chạy command lỗi thì hãy đọc file RUN_SERVICES.md để biết cách chạy command. Nếu vẫn lỗi xảy ra thì sau khi sửa đc hãy update vào file RUN_SERVICES.md.
 
-This project is indexed by GitNexus as **Aureus** (8708 symbols, 12277 relationships, 136 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Aureus** (3186 symbols, 7657 relationships, 184 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

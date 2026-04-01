@@ -750,8 +750,6 @@ async def brain_worker(queue, r, db_pool, validator, manager):
             
             if task_type == 'PULSE':
                 await execute_pulse(payload, r, db_pool, validator)
-            elif task_type == 'AUDIT':
-                await execute_audit(payload, r, db_pool, validator, manager)
                 
             queue.task_done()
         except Exception as e:
@@ -772,21 +770,7 @@ async def queue_periodic_ai_analysis(queue, validator, symbol, df, state, start_
     except Exception as e:
         logger.error(f"[{symbol}] [queue_periodic_ai_analysis] Error: Error queueing pulse for {symbol}: {e}")
 
-async def queue_ai_audit_task(ai_queue, validator, symbol, df, state, order):
-    """Queues an institutional audit task with necessary market data."""
-    try:
-        global _queue_counter
-        _queue_counter += 1
-        # Pass df and state references to the worker for fresh hybrid evaluation
-        await ai_queue.put((PRIO_TRADE, _queue_counter, 'AUDIT', {
-            'symbol': symbol,
-            'df': df.copy() if df is not None else None, # Snapshot
-            'state': state,
-            'order': order,
-            'start_time': time.time()
-        }))
-    except Exception as e:
-        logger.error(f"[{symbol}] [queue_ai_audit_task] Error: Error queueing audit: {e}")
+
 
 async def execute_pulse(payload, r, db_pool, validator):
     """Executes the LLM call and stores periodic narrative."""
@@ -830,49 +814,7 @@ async def execute_pulse(payload, r, db_pool, validator):
     except Exception as e:
         logger.error(f"[{symbol}] [execute_pulse] Error: {e}")
 
-async def execute_audit(payload, r, db_pool, validator, manager):
-    """Executes the Hybrid audit flow and processes trade decision."""
-    symbol = payload['symbol']
-    df = payload['df']
-    state = payload['state']
-    order = payload['order']
-    start_time = payload['start_time']
-    
-    try:
-        # Hybrid Call (Algo + AI)
-        audit_result = await validator.validate_trigger(symbol, df, state, order)
-        
-        # Process Decision (manager handles orders)
-        await manager.handle_ai_decision(order, audit_result)
-        
-        # Persistence
-        ts_db = datetime.fromtimestamp(audit_result['timestamp'], tz=timezone.utc)
-        total_latency = int((time.time() - start_time) * 1000)
-        
-        await db_pool.execute("""
-            INSERT INTO aureus_ai_analysis (
-                time, symbol, aci, debate_log, analysis_type, 
-                decision, key_insight, trigger_id,
-                prompt_tokens, completion_tokens, llm_latency_ms, total_latency_ms, 
-                request_payload, response_payload,
-                algo_score, algo_breakdown, audit_source
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        """, 
-        ts_db, symbol, audit_result['aci'], json.dumps(audit_result['debate_log']), 'AUDIT',
-        audit_result['decision'], audit_result['key_insight'], order.get('trace_id'),
-        audit_result.get('prompt_tokens'), audit_result.get('completion_tokens'),
-        audit_result.get('llm_latency_ms', 0), total_latency, 
-        audit_result.get('request_payload', ''), audit_result.get('raw_response'),
-        audit_result.get('algo_score'), json.dumps(audit_result.get('algo_breakdown', {})),
-        audit_result.get('audit_source', 'HYBRID')
-        )
 
-        logger.info(f"[{symbol}] [execute_audit] 1... Hybrid Audit Complete: Decision={audit_result.get('decision')} (Algo: {audit_result.get('algo_score')})")
-    except Exception as e:
-        logger.error(f"[{symbol}] [execute_audit] Error: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
 
 
 async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, strategy_registry, lock):

@@ -99,9 +99,7 @@ async def brain_worker(queue, r, db_pool, validator, manager):
         try:
             priority, _counter, task_type, payload = await queue.get()
 
-            if task_type == 'PULSE':
-                await execute_pulse(payload, r, db_pool, validator)
-            elif task_type == 'AUDIT':
+            if task_type == 'AUDIT':
                 await execute_audit(payload, r, db_pool, validator, manager)
 
             queue.task_done()
@@ -110,43 +108,7 @@ async def brain_worker(queue, r, db_pool, validator, manager):
             await asyncio.sleep(1)
 
 
-async def execute_pulse(payload, r, db_pool, validator):
-    """Executes the LLM call and stores periodic narrative."""
-    symbol = payload['symbol']
-    context = payload['context']
-    start_time = payload['start_time']
 
-    try:
-        start_llm = time.perf_counter()
-        analysis = await validator.brain.generate_pulse(context)
-        llm_latency = int((time.perf_counter() - start_llm) * 1000)
-
-        analysis['symbol'] = symbol
-        analysis['timestamp'] = int(datetime.now().timestamp())
-        analysis['llm_latency_ms'] = llm_latency
-        analysis['request_payload'] = context
-
-        await r.set(f"aureus:ai:latest:{symbol}", json.dumps(analysis))
-
-        ts_db = datetime.fromtimestamp(analysis['timestamp'], tz=timezone.utc)
-        total_latency = int((time.time() - start_time) * 1000)
-
-        await db_pool.execute("""
-            INSERT INTO aureus_ai_analysis (
-                time, symbol, aci, sentiment, narrative, debate_log,
-                prompt_tokens, completion_tokens, llm_latency_ms, total_latency_ms,
-                request_payload, response_payload, analysis_type
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        """,
-        ts_db, symbol, analysis['aci'], analysis['sentiment'], analysis['narrative'], json.dumps(analysis['debate_log']),
-        analysis.get('prompt_tokens'), analysis.get('completion_tokens'),
-        llm_latency, total_latency, context, analysis.get('raw_response'), 'PULSE'
-        )
-
-        logger.info(f"[{symbol}] [execute_pulse] AI Pulse Complete: {analysis['sentiment']} (ACI: {analysis['aci']}) | Latency: {llm_latency}ms / {total_latency}ms")
-    except Exception as e:
-        logger.error(f"[{symbol}] [execute_pulse] Error: {e}")
 
 
 async def execute_audit(payload, r, db_pool, validator, manager):
