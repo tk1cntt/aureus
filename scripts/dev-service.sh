@@ -13,10 +13,10 @@ cd "$PROJECT_ROOT"
 # but using docker-compose.dev.yml is already isolated from prod source paths.
 
 echo "🔨 Building Dev containers..."
-docker compose -f docker-compose.dev.yml --env-file .env build aureus-gateway-dev aureus-db-writer-dev aureus-signal-dev aureus-dashboard-api-dev
+docker compose -f docker-compose.dev.yml --env-file .env build aureus-gateway-dev aureus-db-writer-dev aureus-signal-dev aureus-strategy-executor-dev aureus-dashboard-api-dev
 
 echo "🚀 Starting Dev services..."
-docker compose -f docker-compose.dev.yml --env-file .env up -d redis-dev timescaledb-dev aureus-gateway-dev aureus-db-writer-dev aureus-signal-dev aureus-dashboard-api-dev
+docker compose -f docker-compose.dev.yml --env-file .env up -d redis-dev timescaledb-dev aureus-gateway-dev aureus-db-writer-dev aureus-signal-dev aureus-strategy-executor-dev aureus-dashboard-api-dev
 
 echo "--------------------------------------------------------"
 echo "✅ Dev Docker Services are running!"

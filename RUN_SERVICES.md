@@ -84,6 +84,43 @@ Kết quả mong đợi:
 
 *(WEB của Dashboard có thể chạy native như phần bên dưới.)*
 
+### 2.3 Build & chạy Strategy Executor (Decoupled Worker)
+Service `aureus-strategy-executor-dev` là worker bất đồng bộ, lắng nghe signal stream từ `aureus-signal-dev` (qua `aureus:stream:{symbol}:signals`) và chạy strategy evaluation, trade simulation, AI trigger độc lập.
+
+**Yêu cầu**: `aureus-signal-dev` phải chạy trước (nó là Producer).
+
+```powershell
+# Build + chạy cả Aggregator và Executor
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev aureus-strategy-executor-dev"
+```
+
+Service được khởi động:
+- `aureus-signal-dev` (Signal Aggregator — tính toán indicators, emit signal stream)
+- `aureus-strategy-executor-dev` (Strategy Executor — consume signal stream, evaluate strategies)
+
+#### Kiểm tra nhanh
+```powershell
+# Trạng thái containers
+wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev aureus-strategy-executor-dev"
+
+# Xem log executor (có verbose logging)
+wsl -d Ubuntu-24.04 -u root bash -c "docker logs --tail 100 -f aureus-strategy-executor-dev"
+
+# Xem log aggregator
+wsl -d Ubuntu-24.04 -u root bash -c "docker logs --tail 100 -f aureus-signal-dev"
+```
+
+Dấu hiệu pass:
+- Executor log: `[EXECUTOR] Entering main loop. Listening on: [...]`
+- Executor log: `📥 Received ... message(s)` (khi có candle mới từ MT5)
+- Executor log: `📊 Deserialized | t=... | log_signal_normalize=... records`
+- Nếu không có candle: `⏳ Waiting for signals...` mỗi ~60s
+
+#### Troubleshooting
+- Nếu executor restart liên tục: kiểm tra `aureus-signal-dev` có đang chạy và emit stream hay không.
+- Nếu không nhận message: kiểm tra Redis stream tồn tại bằng `docker exec aureus_redis_dev redis-cli XLEN aureus:stream:XAUUSD:signals`.
+
+
 ### 2.2 Build & chạy Mini Monitoring Stack (Prometheus + Grafana + Exporter)
 Dùng lệnh sau để build và chạy các service monitoring trong `docker-compose.dev.yml`:
 

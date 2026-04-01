@@ -41,10 +41,10 @@ fi
 cd ../../workspace/aureus
 
 echo "🔨 Building Prod logic containers..."
-docker compose -f docker-compose.prod.yml --env-file .env.prod build aureus-gateway aureus-db-writer aureus-signal aureus-dashboard-api
+docker compose -f docker-compose.prod.yml --env-file .env.prod build aureus-gateway aureus-db-writer aureus-signal aureus-strategy-executor aureus-dashboard-api
 
 echo "🚀 Starting / Restarting Production Docker services..."
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d redis timescaledb aureus-gateway aureus-db-writer aureus-signal aureus-dashboard-api
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d redis timescaledb aureus-gateway aureus-db-writer aureus-signal aureus-strategy-executor aureus-dashboard-api
 
 echo "--------------------------------------------------------"
 echo "✅ Prod Docker Deployment completed successfully!"
