@@ -105,6 +105,35 @@ services:
       - ./services/aureus-signal/brain:/app/brain
       - ./logs:/app/logs
 
+  aureus-strategy-executor-dev:
+    build:
+      context: ./services/aureus-signal
+    container_name: aureus-strategy-executor-dev
+    depends_on:
+      - redis-dev
+      - timescaledb-dev
+      - aureus-signal-dev
+    networks:
+      - aureus_dev_net
+    restart: always
+    environment:
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - DATABASE_URL=postgresql://aureus:${DB_PASSWORD:-aureus_password}@timescaledb-dev:5432/aureus
+      - LOG_LEVEL=DEBUG
+      - SYMBOLS=XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD
+      - LLM_BASE_URL=http://host.docker.internal:8005/v1
+      - PYTHONUNBUFFERED=1
+      - LOG_FILE=/app/logs/aureus-strategy-executor.log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "main_executor.py"]
+    volumes:
+      - ./services/aureus-signal:/app
+      - ./services/aureus-signal/brain:/app/brain
+      - ./logs:/app/logs
+
+
   nautilus_trader-dev:
     image: ghcr.io/nautechsystems/nautilus_trader:nightly
     container_name: nautilus-trader-dev

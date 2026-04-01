@@ -300,6 +300,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
     streams_subscription = {f"aureus:stream:{s}:signals": ">" for s in symbols_list}
 
     logger.info(f"[EXECUTOR] Entering main loop. Listening on: {list(streams_subscription.keys())}")
+    poll_count = 0
 
     while True:
         try:
@@ -308,8 +309,13 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                 streams_subscription,
                 count=100, block=5000
             )
+            poll_count += 1
             if not messages:
+                if poll_count % 12 == 0:  # Log every ~60s (12 * 5s block)
+                    logger.info(f"[EXECUTOR] ⏳ Waiting for signals... (poll #{poll_count}, no messages)")
                 continue
+
+            logger.info(f"[EXECUTOR] 📥 Received {sum(len(e) for _, e in messages)} message(s) from {len(messages)} stream(s)")
 
             for stream_key, entries in messages:
                 # Extract symbol from stream key: aureus:stream:{symbol}:signals
@@ -321,7 +327,14 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                 for entry_id, data in entries:
                     try:
                         payload_raw = data.get("payload")
+                        eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
+                        logger.info(
+                            f"[EXECUTOR][{symbol}] 📨 Entry {eid_str} | "
+                            f"payload_size={len(payload_raw) if payload_raw else 0} bytes | "
+                            f"keys={list(data.keys())}"
+                        )
                         if not payload_raw:
+                            logger.warning(f"[EXECUTOR][{symbol}] ⚠️ Empty payload in entry {eid_str}, skipping")
                             await r.xack(stream_key, group_name, entry_id)
                             continue
 
@@ -329,6 +342,13 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         ts_unix = payload.get("t", 0)
                         log_signal_normalize = payload.get("log_signal_normalize", [])
                         signals_snapshot = payload.get("signals_snapshot", {})
+                        logger.info(
+                            f"[EXECUTOR][{symbol}] 📊 Deserialized | t={ts_unix} | "
+                            f"log_signal_normalize={len(log_signal_normalize)} records | "
+                            f"signals_snapshot_keys={list(signals_snapshot.keys()) if isinstance(signals_snapshot, dict) else 'N/A'} | "
+                            f"swing_points={len(payload.get('swing_points', []))} | "
+                            f"transient_signals={list(payload.get('transient_signals', {}).keys()) if payload.get('transient_signals') else 'empty'}"
+                        )
 
                         # Reconstruct minimal state-like object for evaluate_all
                         from engine.state import SymbolState
