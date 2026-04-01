@@ -86,6 +86,18 @@ Plans:
 Plans:
 - [ ] TBD (run /gsd-plan-phase 15.16 to break down)
 
+---
+
+### Phase 15.17: Decouple Strategy Engine (INSERTED)
+
+**Goal:** Tách Strategy Executor ra khỏi Signal Aggregator để chuyển sang mô hình 2 microservices độc lập
+**Requirements**: TBD
+**Depends on:** Phase 15.16
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.17 to break down)
+
 ## Phase 17: Signal Actor & Strategy Adapter
 
 **Requirements:** NAUTILUS-01→06, PARITY-01→03

@@ -50,61 +50,6 @@ def load_symbols_config(path="symbols.json"):
 
 
 
-
-def enrich_strategy_decisions_with_contract_metadata(strategy_results: list[dict], normalized_snapshot: dict) -> list[dict]:
-    """Adds required contract metadata to strategy decision payloads."""
-    enriched: list[dict] = []
-    for result in strategy_results:
-        decision = dict(result)
-        decision["spec_version"] = SPEC_VERSION
-        decision["engine_version"] = ENGINE_VERSION
-        decision["strategy_version"] = str(decision.get("strategy_version") or "v0")
-        decision["normalized_signal_snapshot"] = normalized_snapshot
-        enriched.append(decision)
-    return enriched
-
-
-def enrich_registry_rejections_with_contract_metadata(
-    symbol: str,
-    rejections: list[dict],
-    normalized_snapshot: dict,
-    default_t: int,
-) -> list[dict]:
-    """Adds required contract metadata to strategy registry rejection payloads."""
-    enriched: list[dict] = []
-    for record in rejections:
-        item = dict(record)
-        details = dict(item.get("details") or {})
-        event_t = int(details.get("t") or default_t)
-
-        item["symbol"] = symbol
-        item["status"] = "REJECTED"
-        item["spec_version"] = SPEC_VERSION
-        item["engine_version"] = ENGINE_VERSION
-        item["strategy_version"] = str(details.get("strategy_version") or item.get("strategy_version") or "v0")
-        item["reason_code"] = str(item.get("reason_code") or "UNKNOWN_REJECTION")
-        item["t"] = event_t
-        item["origin_timestamp"] = int(details.get("origin_timestamp") or details.get("t") or event_t)
-        item["normalized_signal_snapshot"] = normalized_snapshot
-        item["details"] = details
-        enriched.append(item)
-
-    return enriched
-
-
-async def emit_registry_rejections(redis_client: Any, symbol: str, enriched_rejections: list[dict]):
-    """Publishes registry rejection records to orders stream for downstream observability."""
-    for rejection in enriched_rejections:
-        payload = dict(rejection)
-        payload.setdefault("symbol", symbol)
-        await redis_client.xadd(
-            f"aureus:stream:{symbol}:orders",
-            {
-                "type": "ORDER_REJECTED",
-                "data": json.dumps(payload),
-            },
-        )
-
 def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
     """Executes all signal calculators for current candle and appends one normalized CandleRecord."""
     if df is None or len(df) == 0:
