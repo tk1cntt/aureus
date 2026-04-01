@@ -136,6 +136,9 @@ class SymbolState:
         # Transient Signals (Cleared every candle cycle)
         self.transient_signals: Dict[str, Any] = {}
         
+        # Current tick transient state
+        self.current_signal: Optional[Dict[str, Any]] = None
+        
         # Performance Tracking
         self.net_pnl: float = 0.0
         self.win_count: int = 0
@@ -411,6 +414,7 @@ class SymbolState:
         self.simulated_orders = data.get('active_orders', []) + data.get('closed_orders', [])
         self.strategy_progress = data.get('strategy_progress', {})
         self.candle_actors = data.get('candle_actors', {})
+        self.current_signal = data.get('current_signal')
         
         # Quantitative / Hybrid
         self.aci = data.get('aci', 50)
@@ -475,6 +479,7 @@ class SymbolState:
             "strategy_transition_history": self.strategy_transition_history,
             "strategy_validator_failures": self.strategy_validator_failures,
             "order_rejections": self.order_rejections,
+            "current_signal": self.current_signal,
         }
 
     def _append_bounded(self, ledger: List[Dict[str, Any]], entry: Dict[str, Any], max_items: int) -> None:

@@ -75,8 +75,13 @@ def evaluate_ai_trigger_events(transient_signals: Any) -> List[str]:
         return []
 
     normalized: Dict[str, bool] = {}
-    for tag in transient_signals.keys():
-        trigger = _AI_TAG_TO_TRIGGER.get(str(tag))
+    for tag, signal_data in transient_signals.items():
+        lookup_tag = str(tag)
+        if isinstance(signal_data, dict) and signal_data.get("value"):
+            if lookup_tag in ["choch", "sweep", "ob", "fvg", "bos"]:
+                lookup_tag = str(signal_data["value"])
+            
+        trigger = _AI_TAG_TO_TRIGGER.get(lookup_tag)
         if trigger:
             normalized[trigger] = True
 

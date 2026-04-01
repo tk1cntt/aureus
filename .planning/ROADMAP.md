@@ -76,6 +76,16 @@ Plans:
 
 ---
 
+### Phase 15.16: Investigate CHOCH-strategy backtest mismatch (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 15.15
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 15.16 to break down)
+
 ## Phase 17: Signal Actor & Strategy Adapter
 
 **Requirements:** NAUTILUS-01→06, PARITY-01→03

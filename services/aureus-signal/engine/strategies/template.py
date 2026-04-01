@@ -191,6 +191,11 @@ class TemplateStrategy(BaseStrategy):
                         ev_tag = ev.get("tag")
                         if ev_tag is None:
                             continue
+                            
+                        ev_val = ev.get("value")
+                        if ev_val and isinstance(ev_val, str) and ev_tag in ["choch", "sweep", "ob", "fvg", "bos"]:
+                            ev_tag = ev_val
+                            
                         events_to_process.append({"tag": ev_tag, "t": record_time})
 
                 for latest_signal in events_to_process:

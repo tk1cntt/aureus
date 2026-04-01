@@ -130,6 +130,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
 
+    state.current_signal = record.to_dict()
     state.log_signal_normalize_add(record)
     logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
 

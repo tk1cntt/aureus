@@ -36,6 +36,7 @@ Plan: 1 of 3
 - Phase 15.13 inserted after Phase 15.12: Sweep signal gap analysis (URGENT)
 - Phase 15.14 inserted after Phase 15.13: Suspicious sweep event reconciliation (URGENT)
 - Phase 15.15 inserted after Phase 15.14.1: Align strategy with new tags (URGENT)
+- Phase 15.16 inserted after Phase 15.15: Investigate CHOCH-strategy backtest mismatch (URGENT)
 - 2026-03-27: Phase 15.10 được mở lại để đồng bộ contract `signal_history/log_signal` sau khi rollback một phần.
 - `SymbolState.log_signal` hiện ở legacy signature (`tag`, `timestamp`, `value`, `data`) nhưng nhiều call-site vẫn truyền metadata kwargs (`category`, `explain`, `inputs`) trong:
   - `services/aureus-signal/engine/live_engine.py`
