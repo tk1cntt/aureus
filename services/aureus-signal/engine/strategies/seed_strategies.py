@@ -160,6 +160,37 @@ async def seed_system_strategies(pool):
             except Exception as e:
                 logger.error(f"[GLOBAL] [seed_system_strategies] Error: Failed to seed strategy {strat['name']}: {e}")
 
+        # --- Auto-assign strategies to symbols if no assignments exist ---
+        try:
+            existing_count = await conn.fetchval("SELECT COUNT(*) FROM aureus_symbol_strategies")
+            if existing_count == 0:
+                symbols_env = os.getenv("SYMBOLS", "XAUUSD")
+                symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]
+
+                all_templates = await conn.fetch("SELECT id, name FROM aureus_strategy_templates")
+                assigned = 0
+                for tmpl in all_templates:
+                    for symbol in symbols_list:
+                        await conn.execute(
+                            """
+                            INSERT INTO aureus_symbol_strategies (symbol, strategy_id, is_active)
+                            VALUES ($1, $2, true)
+                            ON CONFLICT (symbol, strategy_id) DO NOTHING
+                            """,
+                            symbol, tmpl["id"]
+                        )
+                        assigned += 1
+                logger.info(
+                    f"[GLOBAL] [seed_system_strategies] Auto-assigned {assigned} strategy-symbol pairs "
+                    f"({len(all_templates)} strategies × {len(symbols_list)} symbols)"
+                )
+            else:
+                logger.info(
+                    f"[GLOBAL] [seed_system_strategies] {existing_count} existing assignments found, skipping auto-assign"
+                )
+        except Exception as e:
+            logger.error(f"[GLOBAL] [seed_system_strategies] Error during auto-assign: {e}")
+
 if __name__ == "__main__":
     # For manual testing
     load_dotenv()

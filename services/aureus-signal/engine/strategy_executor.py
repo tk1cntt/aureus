@@ -7,6 +7,7 @@ Consumes signal payloads emitted by the Signal Aggregator and runs strategy eval
 trade simulation, and AI trigger logic independently.
 """
 import asyncio
+import traceback
 import os
 import json
 import time
@@ -350,6 +351,31 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             f"transient_signals={list(payload.get('transient_signals', {}).keys()) if payload.get('transient_signals') else 'empty'}"
                         )
 
+                        # --- Dump transient signal values for debugging ---
+                        transient = payload.get("transient_signals", {})
+                        if transient:
+                            for tkey, tval in transient.items():
+                                logger.info(
+                                    f"[EXECUTOR][{symbol}] 🔔 transient[{tkey}] = "
+                                    f"{json.dumps(tval, default=str, ensure_ascii=False)[:500]}"
+                                )
+
+                        # --- Dump current_signal for debugging ---
+                        cur_sig = payload.get("current_signal", {})
+                        if cur_sig:
+                            logger.info(
+                                f"[EXECUTOR][{symbol}] 📋 current_signal = "
+                                f"{json.dumps(cur_sig, default=str, ensure_ascii=False)[:800]}"
+                            )
+
+                        # --- Last log_signal_normalize entry ---
+                        if log_signal_normalize:
+                            last_rec = log_signal_normalize[-1]
+                            logger.info(
+                                f"[EXECUTOR][{symbol}] 📝 last_log_signal_normalize = "
+                                f"{json.dumps(last_rec, default=str, ensure_ascii=False)[:800]}"
+                            )
+
                         # Reconstruct minimal state-like object for evaluate_all
                         from engine.state import SymbolState
                         executor_state = SymbolState(symbol)
@@ -360,6 +386,15 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         executor_state.current_signal = payload.get("current_signal", {})
                         # Restore swing_points for context
                         executor_state.swing_points = payload.get("swing_points", [])
+                        # Restore last_candle for trade_manager._calculate_sl_tp
+                        executor_state.last_candle = {
+                            "t": str(ts_unix),
+                            "o": str(payload.get("open", 0)),
+                            "h": str(payload.get("high", 0)),
+                            "l": str(payload.get("low", 0)),
+                            "c": str(payload.get("close", 0)),
+                            "v": str(payload.get("volume", 0)),
+                        }
 
                         # evaluate_all expects df — we pass None since executor doesn't build candles
                         # StrategyRegistry.evaluate_all uses df only for bar_ts extraction
@@ -367,10 +402,19 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         import pandas as pd
                         mini_df = pd.DataFrame([{"t": ts_unix, "c": payload.get("close", 0)}])
 
-                        strategy_results = symbol_strategies[symbol].evaluate_all(
+                        # --- Pre-evaluate debug ---
+                        registry = symbol_strategies[symbol]
+                        strat_list = getattr(registry, 'strategies', None) or getattr(registry, '_strategies', None) or []
+                        logger.info(
+                            f"[EXECUTOR][{symbol}] 🎯 evaluate_all | "
+                            f"loaded_strategies={len(strat_list)} | "
+                            f"registry_attrs={[a for a in dir(registry) if not a.startswith('__') and 'strat' in a.lower()]}"
+                        )
+
+                        strategy_results = registry.evaluate_all(
                             mini_df, signals_snapshot, executor_state
                         )
-                        registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
+                        registry_rejections = registry.get_rejections(clear=True)
 
                         accepted_count = len(strategy_results) if strategy_results else 0
                         rejection_count = len(registry_rejections) if registry_rejections else 0
@@ -427,7 +471,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
                     except Exception as e:
                         eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                        logger.error(f"[EXECUTOR][{symbol}] Error processing entry {eid_str}: {e}")
+                        logger.error(f"[EXECUTOR][{symbol}] Error processing entry {eid_str}: {e}\n{traceback.format_exc()}")
                         await r.xack(stream_key, group_name, entry_id)
 
         except Exception as e:
