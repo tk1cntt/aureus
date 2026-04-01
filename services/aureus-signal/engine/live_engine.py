@@ -689,88 +689,31 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 redis_client=r,
                             )
 
-                            # TODO: Từ phần này trở xuống là làm những gì?
-                            strategy_results = symbol_strategies[symbol].evaluate_all(df, signals, state)
-                            registry_rejections = symbol_strategies[symbol].get_rejections(clear=True)
-
-                            accepted_count = len(strategy_results) if strategy_results else 0
-                            rejection_count = len(registry_rejections) if registry_rejections else 0
-                            logger.info(
-                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
-                                f"t={ts_unix} accepted={accepted_count} rejections={rejection_count} "
-                                f"execution_mode={execution_mode}"
+                            # --- Emit signal payload to per-symbol stream for Strategy Executor ---
+                            signal_payload = {
+                                "t": ts_unix,
+                                "open": float(data.get("o", 0)),
+                                "high": float(data.get("h", 0)),
+                                "low": float(data.get("l", 0)),
+                                "close": float(data.get("c", 0)),
+                                "volume": int(float(data.get("v", data.get("vol", 0)))),
+                                "log_signal_normalize": [
+                                    rec if isinstance(rec, dict) else rec.to_dict()
+                                    for rec in (state.log_signal_normalize or [])
+                                ],
+                                "current_signal": state.current_signal or {},
+                                "transient_signals": state.transient_signals or {},
+                                "swing_points": state.swing_points or [],
+                                "signals_snapshot": build_normalized_signal_snapshot(signals, state),
+                            }
+                            await r.xadd(
+                                f"aureus:stream:{symbol}:signals",
+                                {"payload": json.dumps(signal_payload, default=str)},
+                                maxlen=1000,
                             )
-                            logger.info(
-                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
-                                f"strategy_results={strategy_results} "
+                            logger.debug(
+                                f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
                             )
-                            logger.info(
-                                f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][snapshot] "
-                                f"registry_rejections={registry_rejections} "
-                            )
-
-                            normalized_snapshot = None
-                            if strategy_results or registry_rejections:
-                                normalized_snapshot = build_normalized_signal_snapshot(signals, state)
-
-                            if strategy_results:
-                                strategy_results = enrich_strategy_decisions_with_contract_metadata(
-                                    strategy_results,
-                                    normalized_snapshot,
-                                )
-
-                            if registry_rejections:
-                                logger.debug(
-                                    f"{PIPELINE_LOG_PREFIX}[{symbol}][D][post_evaluate_all][emit_rejections] "
-                                    f"t={ts_unix} count={len(registry_rejections)}"
-                                )
-                                enriched_rejections = enrich_registry_rejections_with_contract_metadata(
-                                    symbol=symbol,
-                                    rejections=registry_rejections,
-                                    normalized_snapshot=normalized_snapshot or {},
-                                    default_t=ts_unix,
-                                )
-                                await emit_registry_rejections(r, symbol, enriched_rejections)
-
-                            if execution_mode == "simulated":
-                                await trade_manager.update_orders(symbol, data, state)
-                            
-                            if strategy_results:
-                                logger.debug(
-                                    f"{PIPELINE_LOG_PREFIX}{symbol}[to_process_triggers] "
-                                    f"t={ts_unix} accepted_count={len(strategy_results)}"
-                                )
-                                pending_order = await trade_manager.process_triggers(
-                                    symbol,
-                                    strategy_results,
-                                    state,
-                                    ai_validator,
-                                    execution_mode=execution_mode,
-                                )
-                                logger.debug(
-                                    f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][process_triggers_done] "
-                                    f"t={ts_unix} pending_ai={bool(pending_order)}"
-                                )
-                                if pending_order:
-                                    await queue_ai_audit_task(ai_queue, ai_validator, symbol, df, state, pending_order)
-                                
-                                # TODO: Phần này là làm gì? Add vào log_signal có ý nghĩa gì?
-                                for res in strategy_results:
-                                    logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
-                                    state.log_signal(
-                                        f"strat:{res['strategy']}",
-                                        res['t'],
-                                        value=res['strategy'],
-                                        data={
-                                            "category": "strategy",
-                                            "explain": "Strategy triggered",
-                                        },
-                                    )
-                            else:
-                                logger.debug(
-                                    f"{PIPELINE_LOG_PREFIX}{symbol}[D][post_evaluate_all][no_accepted] "
-                                    f"t={ts_unix}"
-                                )
 
                             await r.xack(stream_key, group_name, entry_id)
 
