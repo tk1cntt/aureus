@@ -351,10 +351,12 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             f"transient_signals={list(payload.get('transient_signals', {}).keys()) if payload.get('transient_signals') else 'empty'}"
                         )
 
-                        # --- Dump transient signal values for debugging ---
+                        # --- Dump transient signal values for debugging (skip ob_state — too verbose) ---
                         transient = payload.get("transient_signals", {})
                         if transient:
                             for tkey, tval in transient.items():
+                                if tkey == "ob_state":
+                                    continue
                                 logger.info(
                                     f"[EXECUTOR][{symbol}] 🔔 transient[{tkey}] = "
                                     f"{json.dumps(tval, default=str, ensure_ascii=False)[:500]}"
@@ -368,13 +370,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 f"{json.dumps(cur_sig, default=str, ensure_ascii=False)[:800]}"
                             )
 
-                        # --- Last log_signal_normalize entry ---
-                        if log_signal_normalize:
-                            last_rec = log_signal_normalize[-1]
-                            logger.info(
-                                f"[EXECUTOR][{symbol}] 📝 last_log_signal_normalize = "
-                                f"{json.dumps(last_rec, default=str, ensure_ascii=False)[:800]}"
-                            )
+
 
                         # Reconstruct minimal state-like object for evaluate_all
                         from engine.state import SymbolState
