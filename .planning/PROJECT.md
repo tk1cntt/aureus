@@ -1,82 +1,53 @@
 # PROJECT
 
 ## What This Is
-A planning control document for the current Aureus milestone. It defines the active objective, expected value, and requirement sources used by the GSD workflow.
+A planning control document for Aureus milestone evolution. It captures shipped outcomes, active scope, and requirement sources used by the GSD workflow.
 
 ## Core Value
-- Validate strategy effectiveness through deterministic, reproducible backtesting.
-- Leverage NautilusTrader's production-grade execution engine instead of building custom.
-- Maximize reporting value with minimal effort — Grafana for monitoring, Custom UI for interaction.
-- Prevent regression through parity validation between backtest and live signal pipelines.
+- Validate strategy behavior through deterministic, reproducible evidence.
+- Keep signal/strategy contracts observable and stable before deeper integration.
+- Leverage Nautilus execution infrastructure while minimizing custom execution complexity.
+- Preserve clear milestone auditability (plans, summaries, and known gaps).
 
-## Current Milestone: v1.3 Backtesting & Measurement Engine
-
-**Goal:** Integrate NautilusTrader BacktestEngine with Aureus signal pipeline. Aureus signals run via `AureusSignalActor` (Nautilus Actor), strategies wrapped by `AureusStrategyAdapter` (Nautilus Strategy). Nautilus handles order execution, SL/TP matching, fill simulation. Results persist to TimescaleDB → Custom UI + Grafana.
-
-**Target features:**
-- Strategy quality validation (independent of Nautilus) — scenario tests + replay baselines
-- Nautilus BacktestEngine with bar-based execution (O→H→L→C, adaptive ordering)
-- `AureusSignalActor` — runs all 18 signals per bar inside Nautilus
-- `AureusStrategyAdapter` — wraps any BaseStrategy for Nautilus order submission
-- Performance metrics: Win Rate, PnL, Drawdown, Sharpe, Profit Factor, Avg R:R
-- Signal Quality Calculator per signal tag
-- Custom UI: backtest runner, candlestick chart with overlays, equity curve
-- Grafana: supplementary dashboards for aggregate stats and monitoring
-- Parity validation: backtest signals === live signals on same data
-
-**Key architecture decision:** Strategy quality must be validated independently (Phase 15.5) before Nautilus integration, so poor backtest results can be attributed correctly. Nautilus handles execution/fills, Aureus owns signal logic. Same strategy codebase for live and backtest.
+## Current Milestone
+**Status:** Milestone planning reset required for next version (`/gsd-new-milestone`).
 
 ## Current State
-**Latest shipped:** v1.2 Strategy Sequence Engine (2026-03-22)
+**Latest shipped:** v1.3 Backtesting & Measurement Engine (closed as Proceed anyway, 2026-04-03)
 
-All strategy evaluation now runs through `TemplateStrategy` with JSON-driven config (context_filters, sequence, trade_execution). Legacy hardcoded strategies fully deprecated.
+- Milestone archived into `.planning/milestones/v1.3-ROADMAP.md` and `.planning/milestones/v1.3-REQUIREMENTS.md`.
+- Core progress in this cycle concentrated on stabilization/diagnosis artifacts (15.6, 15.7, 15.9, 15.10).
+- Several v1.3 requirement groups remained incomplete at close time and are tracked in `.planning/MILESTONES.md` under **Known Gaps**.
 
 **Existing Nautilus infra (live):**
 - `aureus-nautilus-node` — AureusMarketDataClient (Redis→Bar), AureusExecutionClient (orders→Nautilus)
 - `aureus-nautilus-bridge` — order routing + execution reconciliation
 - `aureus-bridge-metrics-exporter` — Prometheus metrics
 - Grafana dashboard: `aureus_nautilus_flow.json` (orders, latency, PnL, SLO signals)
-- Docker services: nautilus_trader-dev, aureus-nautilus-node-dev, aureus-nautilus-bridge-dev
 
 ## Archived Milestones
 
-**v1.2 Strategy Sequence Engine (Shipped 2026-03-22)**
-- O(1) state machine sequence engine in TemplateStrategy
-- 3-pillar strategy framework (What/When/How)
-- Legacy strategy deprecation and registry unification
-
-<details>
-<summary><b>Archived: v1.1 Signal Optimization</b></summary>
-
-**Goal:** Improve signal decision accuracy and deterministic behavior first, then optimize performance without changing trading intent.
-
-**Target features:**
-- Deterministic signal parity hardening across key signal modules
-- Correctness-first validation for structure/OB/FVG/sweep/trend outputs
-- Performance-safe optimization guarded by parity and regression checks
-</details>
+- **v1.3 Backtesting & Measurement Engine** (Shipped 2026-04-03, Proceed anyway with known gaps)
+- **v1.2 Strategy Sequence Engine** (Shipped 2026-03-22)
+- **v1.1 Signal Optimization** (Shipped 2026-03-22)
 
 ## Requirements
-- Source of truth: `.planning/REQUIREMENTS.md`
-- Roadmap and phase mapping: `.planning/ROADMAP.md`
-- Integration plan: conversation artifact `implementation_plan.md`
-- Nautilus research: conversation artifact `nautilus_research.md`
+- v1.3 requirement archive: `.planning/milestones/v1.3-REQUIREMENTS.md`
+- v1.3 roadmap archive: `.planning/milestones/v1.3-ROADMAP.md`
+- Next milestone requirements will be created via `/gsd-new-milestone`
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
+**After each phase transition:**
+1. Move validated requirements to shipped context.
+2. Record new constraints/decisions.
+3. Update technical debt and active blockers.
 
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+**After each milestone:**
+1. Archive roadmap + requirements.
+2. Log known gaps (if any) explicitly in `MILESTONES.md`.
+3. Reset active milestone scope.
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-04-03 after v1.3 milestone closure_
