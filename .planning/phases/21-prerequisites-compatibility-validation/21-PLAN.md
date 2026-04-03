@@ -11,29 +11,31 @@ autonomous: true
 requirements_addressed: [PREP-01, PREP-02]
 ---
 
-# Phase 21 Plan: TradingAgents Compatibility Validation (Docker on WSL)
+# Phase 21 Plan: TradingAgents Decision Provider Validation (Docker on WSL)
 
 ## Objective
 
-Validate TradingAgents compatibility with Aureus symbol universe in an isolated Docker-on-WSL environment. Produce a measurable compatibility report and apply hard-stop/pivot gate before any integration code.
+Validate TradingAgents as a **decision provider** (Option A) for Aureus in an isolated Docker-on-WSL environment. Test whether `propagate(ticker, date)` returns valid Buy/Sell/Hold decisions for `XAUUSD` and `BTCUSD`. Produce a compatibility report and apply hard-stop/pivot gate.
+
+**Scope:** Only Option A (AI decision signals). NOT testing OHLCV data extraction or direct Alpha Vantage API.
 
 ## must_haves (goal-backward verification)
 
 1. Docker test container runs TradingAgents successfully on WSL
-2. Symbol compatibility tested for XAUUSD and BTCUSD
-3. Latency measurements recorded (L1 upstream, L2 internal publish)
-4. Rate-limit behavior documented under W1 and W2 workloads
-5. Compatibility report produced with explicit PROCEED or PAUSE_AND_PIVOT decision
-6. Integration option recommendation (decision provider vs data extraction vs direct API)
+2. `propagate("XAUUSD", date)` returns a valid trading decision
+3. `propagate("BTCUSD", date)` returns a valid trading decision
+4. Decision latency measured and documented
+5. Rate-limit behavior under Alpha Vantage free tier documented
+6. LLM cost estimate per decision call documented
+7. Compatibility report produced with explicit PROCEED or PAUSE_AND_PIVOT decision
 
 ---
 
 ## Task 1: Create aureus-trading-agents service scaffold
 
 <read_first>
-- implementation_plan_tradingagents.md (SWOT analysis and original plan)
-- .planning/phases/21-prerequisites-compatibility-validation/21-RESEARCH.md (research findings)
-- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (locked decisions D-01 through D-22)
+- .planning/phases/21-prerequisites-compatibility-validation/21-RESEARCH.md
+- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (D-01 through D-05, D-23)
 </read_first>
 
 <action>
@@ -42,7 +44,6 @@ Create directory `services/aureus-trading-agents/` with:
 1. `requirements.txt`:
 ```
 tradingagents>=0.2.3
-aiohttp>=3.9.0
 ```
 
 2. `Dockerfile`:
@@ -51,7 +52,6 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# System deps for compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ git && \
     rm -rf /var/lib/apt/lists/*
@@ -66,93 +66,98 @@ CMD ["python", "test_compatibility.py"]
 
 3. `.env.example`:
 ```
-ALPHA_VANTAGE_API_KEY=your_key_here
+# Required: LLM provider (at least one)
 OPENAI_API_KEY=your_key_here
+# GOOGLE_API_KEY=your_key_here
+# ANTHROPIC_API_KEY=your_key_here
+
+# Required: Market data backend
+ALPHA_VANTAGE_API_KEY=your_key_here
 ```
 
-4. `README.md` with service purpose and usage instructions.
+4. `README.md` explaining this is the Phase 21 validation container for TradingAgents decision provider compatibility.
 </action>
 
 <acceptance_criteria>
 - `services/aureus-trading-agents/` directory exists
 - `services/aureus-trading-agents/Dockerfile` contains `FROM python:3.13-slim`
 - `services/aureus-trading-agents/requirements.txt` contains `tradingagents`
-- `services/aureus-trading-agents/.env.example` contains `ALPHA_VANTAGE_API_KEY`
+- `services/aureus-trading-agents/.env.example` contains `OPENAI_API_KEY` and `ALPHA_VANTAGE_API_KEY`
 </acceptance_criteria>
 
 ---
 
-## Task 2: Create compatibility test script
+## Task 2: Create decision provider compatibility test script
 
 <read_first>
-- .planning/phases/21-prerequisites-compatibility-validation/21-RESEARCH.md (API surface, propagate() usage)
-- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (D-06 through D-13 thresholds)
+- .planning/phases/21-prerequisites-compatibility-validation/21-RESEARCH.md (propagate() API, TradingAgentsGraph usage)
+- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (D-06 through D-13 thresholds, D-23 Option A)
 </read_first>
 
 <action>
-Create `services/aureus-trading-agents/test_compatibility.py` that:
+Create `services/aureus-trading-agents/test_compatibility.py`:
 
 1. **Test 1 — Import & Install Check:**
-   - `import tradingagents`
-   - Print version, installed path
+   - `from tradingagents.graph.trading_graph import TradingAgentsGraph`
+   - `from tradingagents.default_config import DEFAULT_CONFIG`
+   - Print version, confirm import success
 
-2. **Test 2 — Symbol Compatibility (W1 baseline):**
-   - Call `TradingAgentsGraph.propagate("XAUUSD", <today>)`
-   - Call `TradingAgentsGraph.propagate("BTCUSD", <today>)`
-   - Record: success/fail, error message if failed, response structure
+2. **Test 2 — XAUUSD Decision (HARD GATE):**
+   - `config = DEFAULT_CONFIG.copy()`
+   - `ta = TradingAgentsGraph(debug=True, config=config)`
+   - `_, decision = ta.propagate("XAUUSD", "<yesterday_date>")`
+   - Record: success/fail, decision content (buy/sell/hold), reasoning text, elapsed time
 
-3. **Test 3 — Data Tool Extraction:**
-   - Attempt to access TradingAgents' internal data-fetching tools directly
-   - Import from `tradingagents.dataflows` or equivalent module
-   - Try to fetch raw OHLCV for XAUUSD, BTCUSD
-   - Record: available endpoints, data format, fields present
+3. **Test 3 — BTCUSD Decision (HARD GATE):**
+   - Same as Test 2 but with `"BTCUSD"`
+   - Record same metrics
 
-4. **Test 4 — Latency Measurement:**
-   - Time each `propagate()` call (L1 — upstream fetch latency)
-   - Time data tool raw fetch separately if available
-   - Run W1 workload: 2 symbols × poll every 60s × 30 minutes
-   - Calculate: avg, p50, p95, p99 for each operation
+4. **Test 4 — Decision Quality Check:**
+   - Validate decision contains actionable signal (buy/sell/hold keyword)
+   - Validate reasoning text is non-empty
+   - Check response structure completeness
 
-5. **Test 5 — Rate-limit Behavior:**
-   - Run W2 workload: 6 symbols × poll every 15s × 20 minutes
-   - Count: total requests, 429 errors, throttle events, consecutive throttle bursts
-   - Calculate: 429 rate, max consecutive burst, retry success rate
+5. **Test 5 — Latency Profile:**
+   - Run 3 decision calls per symbol (6 total)
+   - Measure wall-clock time per call
+   - Calculate: avg, min, max, p95
 
-6. **Test 6 — Alpha Vantage Direct Comparison:**
-   - Call Alpha Vantage API directly for XAUUSD (FX endpoint) and BTCUSD (crypto endpoint)
-   - Record: OHLCV availability, latency, rate-limit behavior
-   - Compare with TradingAgents wrapper results
+6. **Test 6 — Rate-limit & Cost Estimation:**
+   - Count Alpha Vantage API calls triggered by each `propagate()` (monitor stderr/logs)
+   - Document any 429 errors
+   - Estimate LLM token usage and cost per decision
 
-7. **Output:** Write JSON results to `/app/output/results.json` with structure:
+7. **Output:** Write JSON results to `/app/output/results.json`:
 ```json
 {
   "timestamp": "ISO8601",
-  "environment": {"python": "3.13", "tradingagents": "version", "docker": true},
-  "symbol_compatibility": {"XAUUSD": {"status": "pass|fail", "error": null}, ...},
-  "data_extraction": {"available": true|false, "ohlcv_fields": [...], "format": "..."},
-  "latency": {"L1": {"avg_ms": N, "p50_ms": N, "p95_ms": N, "p99_ms": N}, "L2": {...}},
-  "rate_limit": {"total_requests": N, "throttle_429": N, "rate_pct": N, "max_burst": N, "retry_success_rate": N},
-  "alpha_vantage_direct": {"xauusd": {...}, "btcusd": {...}},
-  "recommendation": "option_a|option_b|option_c|pivot",
-  "decision": "PROCEED_TO_PHASE_22|PAUSE_AND_PIVOT"
+  "environment": {"python": "3.13", "tradingagents": "version"},
+  "symbol_tests": {
+    "XAUUSD": {"status": "pass|fail", "decision": "buy|sell|hold", "reasoning_length": N, "error": null},
+    "BTCUSD": {"status": "pass|fail", "decision": "buy|sell|hold", "reasoning_length": N, "error": null}
+  },
+  "latency": {"avg_s": N, "min_s": N, "max_s": N, "p95_s": N, "per_call": [...]},
+  "rate_limit": {"total_av_calls": N, "throttle_429": N, "max_burst": N},
+  "cost_estimate": {"llm_tokens_per_call": N, "estimated_cost_usd_per_call": N},
+  "decision": "PROCEED_TO_PHASE_22|PAUSE_AND_PIVOT",
+  "decision_reason": "..."
 }
 ```
 
-8. **Apply go/no-go logic** from D-08 through D-15:
-   - Symbol hard gate: XAUUSD and BTCUSD must succeed in W1
-   - Rate-limit gate: 429 rate ≤ 1%, no burst > 3
-   - Latency gate: L1 avg ≤ 800ms, p95 ≤ 1500ms
-   - Auto-determine recommendation based on test results
+8. **Apply go/no-go logic** from D-08 through D-13:
+   - XAUUSD and BTCUSD must return valid decisions (D-08)
+   - Latency avg ≤ 30s, p95 ≤ 60s (D-09)
+   - Decision contains actionable signal (D-10)
+   - Rate-limit ≤ 1%, no burst > 3 (D-11)
 </action>
 
 <acceptance_criteria>
 - `services/aureus-trading-agents/test_compatibility.py` exists
-- Script imports `tradingagents` and handles ImportError gracefully
-- Script tests both XAUUSD and BTCUSD symbols
-- Script measures and reports latency (avg, p95)
-- Script counts rate-limit events (429 errors)
+- Script imports `TradingAgentsGraph` and handles ImportError
+- Script calls `propagate("XAUUSD", date)` and `propagate("BTCUSD", date)`
+- Script measures and reports latency per call
 - Script outputs JSON to `/app/output/results.json`
-- Script prints PROCEED_TO_PHASE_22 or PAUSE_AND_PIVOT at end
+- Script prints `PROCEED_TO_PHASE_22` or `PAUSE_AND_PIVOT` at end
 </acceptance_criteria>
 
 ---
@@ -169,32 +174,34 @@ Create `services/aureus-trading-agents/test_compatibility.py` that:
 On WSL, execute:
 
 ```bash
-# Build the test container
 cd services/aureus-trading-agents
+
+# Build
 docker build -t aureus-ta-validation:test .
 
-# Create .env from .env.example with actual API keys
+# Prepare env
 cp .env.example .env
-# (user fills in ALPHA_VANTAGE_API_KEY and OPENAI_API_KEY)
+# User fills: OPENAI_API_KEY, ALPHA_VANTAGE_API_KEY
 
-# Run the validation
+# Run
+mkdir -p output
 docker run --rm \
   --env-file .env \
   -v $(pwd)/output:/app/output \
   aureus-ta-validation:test
 
-# Check results
-cat output/results.json | python -m json.tool
+# Check
+cat output/results.json | python3 -m json.tool
 ```
 
-Note: This task requires user to provide API keys. The script must handle missing keys gracefully and report which tests were skipped.
+**Note:** Requires user-provided API keys. Script handles missing keys gracefully.
 </action>
 
 <acceptance_criteria>
-- Docker image builds successfully (`aureus-ta-validation:test`)
+- Docker image `aureus-ta-validation:test` builds successfully
 - Container runs without crash
-- `output/results.json` is produced with all required sections
-- Script handles missing API keys by skipping relevant tests and reporting them
+- `output/results.json` is produced
+- Script reports missing API keys instead of crashing if keys absent
 </acceptance_criteria>
 
 ---
@@ -202,28 +209,29 @@ Note: This task requires user to provide API keys. The script must handle missin
 ## Task 4: Generate compatibility report
 
 <read_first>
-- services/aureus-trading-agents/output/results.json (test output)
-- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (D-20, D-21, D-22 — report structure)
+- services/aureus-trading-agents/output/results.json
+- .planning/phases/21-prerequisites-compatibility-validation/21-CONTEXT.md (D-20, D-21, D-22)
 </read_first>
 
 <action>
-Parse `results.json` and generate `.planning/phases/21-prerequisites-compatibility-validation/21-COMPATIBILITY-REPORT.md` with required sections:
+Parse `results.json` and generate `21-COMPATIBILITY-REPORT.md` in phase directory:
 
-1. **Environment** — Docker version, Python version, TradingAgents version, WSL distro
-2. **Test Matrix** — symbols tested, cadence, duration for W1/W2
-3. **Latency Results** — table with avg/p50/p95/p99 for L1 and L2
-4. **Rate-limit Results** — total requests, 429 count, burst max, retry success rate
-5. **Symbol Compatibility** — per-symbol pass/fail with error details
-6. **Integration Option Analysis** — viability assessment for Option A (decision provider), Option B (data extraction), Option C (direct API)
-7. **Decision** — `PROCEED_TO_PHASE_22` or `PAUSE_AND_PIVOT` with justification
-8. **Pivot Recommendation** (if fail) — alternative provider + impact assessment
+1. **Environment** — Docker, Python, TradingAgents version, LLM provider used
+2. **Test Matrix** — symbols tested, number of calls, test duration
+3. **Symbol Compatibility** — per-symbol pass/fail with decision content
+4. **Decision Quality** — signal type (buy/sell/hold), reasoning quality assessment
+5. **Latency Results** — avg/min/max/p95 per `propagate()` call
+6. **Rate-limit Results** — Alpha Vantage call count, 429 events, burst behavior
+7. **Cost Estimate** — LLM tokens/cost per decision, projected monthly cost at target cadence
+8. **Decision** — `PROCEED_TO_PHASE_22` or `PAUSE_AND_PIVOT`
+9. **Pivot Recommendation** (if fail) — alternative approach + impact
 </action>
 
 <acceptance_criteria>
 - `21-COMPATIBILITY-REPORT.md` exists in phase directory
-- Report contains all 8 sections from D-21
-- Decision field is explicitly `PROCEED_TO_PHASE_22` or `PAUSE_AND_PIVOT`
-- Report references actual measured values from results.json, not placeholder estimates
+- Report contains all 8+ sections from D-21
+- Decision field is `PROCEED_TO_PHASE_22` or `PAUSE_AND_PIVOT`
+- Report uses actual measured values, not placeholders
 </acceptance_criteria>
 
 ---
@@ -231,21 +239,20 @@ Parse `results.json` and generate `.planning/phases/21-prerequisites-compatibili
 ## Verification
 
 ```bash
-# 1. Verify scaffold exists
-test -d services/aureus-trading-agents && echo "PASS: service dir exists"
-test -f services/aureus-trading-agents/Dockerfile && echo "PASS: Dockerfile exists"
-test -f services/aureus-trading-agents/test_compatibility.py && echo "PASS: test script exists"
-test -f services/aureus-trading-agents/requirements.txt && echo "PASS: requirements exists"
+# 1. Scaffold
+test -d services/aureus-trading-agents && echo "PASS: service dir"
+test -f services/aureus-trading-agents/Dockerfile && echo "PASS: Dockerfile"
+test -f services/aureus-trading-agents/test_compatibility.py && echo "PASS: test script"
 
-# 2. Verify Docker build (on WSL)
-docker build -t aureus-ta-validation:test services/aureus-trading-agents/ && echo "PASS: Docker build"
+# 2. Docker build (WSL)
+docker build -t aureus-ta-validation:test services/aureus-trading-agents/ && echo "PASS: build"
 
-# 3. Verify report
-test -f .planning/phases/21-prerequisites-compatibility-validation/21-COMPATIBILITY-REPORT.md && echo "PASS: report exists"
-grep -q "PROCEED_TO_PHASE_22\|PAUSE_AND_PIVOT" .planning/phases/21-prerequisites-compatibility-validation/21-COMPATIBILITY-REPORT.md && echo "PASS: decision present"
+# 3. Report
+test -f .planning/phases/21-prerequisites-compatibility-validation/21-COMPATIBILITY-REPORT.md && echo "PASS: report"
+grep -q "PROCEED_TO_PHASE_22\|PAUSE_AND_PIVOT" .planning/phases/21-prerequisites-compatibility-validation/21-COMPATIBILITY-REPORT.md && echo "PASS: decision"
 ```
 
 ---
 
 *Phase: 21-prerequisites-compatibility-validation*
-*Plan created: 2026-04-03*
+*Plan created: 2026-04-03 (revised: Option A only)*

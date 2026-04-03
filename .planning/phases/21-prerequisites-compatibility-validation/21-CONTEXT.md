@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Validate TradingAgents compatibility in an isolated Docker-on-WSL environment before any integration code begins. Produce a compatibility report covering symbol support, latency, and rate-limit behavior. Apply hard-stop/pivot gate based on measurable criteria.
+Validate TradingAgents as a **decision provider** (Option A — AI trading signals, NOT raw OHLCV data) in an isolated Docker-on-WSL environment before any integration code begins. Produce a compatibility report covering symbol support, decision quality, latency, and rate-limit behavior. Apply hard-stop/pivot gate based on measurable criteria.
 
 </domain>
 
@@ -18,6 +18,9 @@ Validate TradingAgents compatibility in an isolated Docker-on-WSL environment be
 - **D-02:** Integration target is `services/aureus-signal`, **NOT** `services/aureus-nautilus-node`.
 - **D-03:** Communication contract from `aureus-trading-agents` → `aureus-signal` will be determined after validation passes (likely Redis stream canonical format for minimal code change).
 
+### Integration Approach (LOCKED)
+- **D-23:** Use TradingAgents exclusively as a **decision provider** (Option A). The `propagate(ticker, date)` API returns Buy/Sell/Hold decisions with AI reasoning — these are published as supplementary AI signals to `aureus-signal`. Aureus keeps Redis stream as the sole source for OHLCV candle data. OHLCV extraction (Option B) and direct Alpha Vantage API (Option C) are **out of scope**.
+
 ### Validation Environment
 - **D-04:** All validation runs inside **Docker on WSL**. No local virtualenv.
 - **D-05:** Single Dockerfile for test container. No docker-compose needed for Phase 21 (validation-only, no integration).
@@ -27,12 +30,12 @@ Validate TradingAgents compatibility in an isolated Docker-on-WSL environment be
 - **D-07 (W2 — stress):** 6 symbols (2 core + 4 from universe), poll every 15s, run 20 minutes.
 
 ### Pass/Fail Thresholds (Go/No-Go)
-- **D-08 (Symbol — HARD GATE):** `XAUUSD` and `BTCUSD` must map and fetch successfully 100% in W1.
-- **D-09 (Latency L1 — upstream fetch):** avg ≤ 800ms, p95 ≤ 1500ms.
-- **D-10 (Latency L2 — internal publish):** avg ≤ 120ms, p95 ≤ 300ms.
-- **D-11 (Rate-limit):** 429/throttle events ≤ 1% of total requests. No burst of >3 consecutive throttles.
+- **D-08 (Symbol — HARD GATE):** `propagate("XAUUSD", date)` and `propagate("BTCUSD", date)` must return a valid decision (not error) 100% in W1.
+- **D-09 (Latency — decision round-trip):** avg ≤ 30s, p95 ≤ 60s (LLM inference is expected to be slow; this is acceptable for batch decision signals).
+- **D-10 (Decision quality):** Response must contain actionable signal (buy/sell/hold) with reasoning text.
+- **D-11 (Rate-limit):** Alpha Vantage 429/throttle events ≤ 1% of total underlying API calls. No burst of >3 consecutive throttles.
 - **D-12 (Retry success):** ≥ 99% of retried requests succeed.
-- **D-13 (Data freshness):** Candle lag >65s in ≤ 2% of samples.
+- **D-13 (LLM cost estimate):** Document estimated cost per decision call for budgeting.
 
 ### Decision Rule
 - **D-14:** Fail any hard gate (D-08, D-11 burst) → **STOP + PIVOT** immediately.
@@ -63,6 +66,7 @@ Validate TradingAgents compatibility in an isolated Docker-on-WSL environment be
 - User wants this to feel like a "quality gate" — measurable, not subjective.
 - Must be reproducible: anyone can re-run the Docker test and get comparable results.
 - If TradingAgents doesn't support FX/metal symbols at all, stop immediately — don't try workarounds.
+- **Option A only:** TradingAgents supplements aureus-signal with AI decisions. It does NOT replace the existing Redis OHLCV data pipeline.
 
 </specifics>
 
@@ -89,7 +93,7 @@ Validate TradingAgents compatibility in an isolated Docker-on-WSL environment be
 ## Existing Code Insights
 
 ### Reusable Assets
-- `aureus-nautilus-node/data_client.py` — `REQUIRED_FIELDS` tuple defines canonical candle schema (open/high/low/close/volume/timestamp). The new service must normalize to this same schema.
+- `aureus-nautilus-node/data_client.py` — `REQUIRED_FIELDS` shows existing candle schema. Not directly relevant for Option A (decision provider), but useful as reference for understanding Aureus data contract.
 - Existing Docker infrastructure in project (docker-compose files, WSL setup) for reference.
 
 ### Established Patterns
@@ -97,7 +101,7 @@ Validate TradingAgents compatibility in an isolated Docker-on-WSL environment be
 - Metric naming convention: `duplicates_total`, `malformed_payload_total`, etc.
 
 ### Integration Points
-- `aureus-signal` engine consumes candle data — this is where `aureus-trading-agents` output will eventually be consumed (Phase 22+).
+- `aureus-signal` engine — `aureus-trading-agents` will publish AI decision signals here (Phase 22+).
 - For Phase 21, no integration needed — validation is standalone.
 
 </code_context>
