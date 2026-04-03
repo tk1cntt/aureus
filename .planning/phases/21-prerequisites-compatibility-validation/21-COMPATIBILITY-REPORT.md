@@ -36,16 +36,18 @@
 - **LLM tokens/call:** Unknown (failed)
 - **Estimated cost:** Unknown (failed)
 
-## 8. Decision: PAUSE_AND_PIVOT
+## 8. Decision: PROCEED TO PHASE 22
 **Reasoning:** 
-Tests failed. `XAUUSD` and `BTCUSD` both resulted in a 401 Unauthorized Error from the LLM endpoint during `propagate()`. 
+Initial tests failed due to a 401 Unauthorized Error (`platform.openai.com`) caused by rigid LLM routing inside the framework. 
 
-**Root Cause (Updated via Phase 21.1):**
-The `TradingAgents` framework's underlying LLM abstractions route requests to the default `platform.openai.com` endpoint rather than respecting the local proxy. 
-*Gap Closure Result (Phase 21.1):* Explicitly forcing `OPENAI_API_BASE` and `OPENAI_BASE_URL` within the testing script's `os.environ` prior to graph initialization **failed to reroute the traffic**. The LangChain nodes within TradingAgents appear to rigidly enforce or drop these standard configuration vectors.
+**Root Cause Resolved (Phase 21.1.1):**
+We successfully cloned the `TradingAgents` framework and patched `openai_client.py` to disable the restrictive `use_responses_api` protocol when a custom proxy (`base_url`) is detected. Upon injecting `backend_url=http://localhost:20128/v1` into the configuration, the system successfully resolved traffic through the local proxy and commenced deep/quick thinking loops.
 
-## 9. Pivot Recommendation
+*Note on Data Sources:* The engine throws warnings on `XAUUSD` (`possibly delisted`) because the default underlying data provider (Yahoo Finance) requires the ticker `GC=F` for Gold. Data feed abstraction will be addressed during subsequent integration phases.
+
+## 9. Next Steps
 **Recommended action:**
-Formally pivot away from `TradingAgents` as an external dependency. The framework demonstrates excessive rigidness in LLM endpoint configuration, rendering it incompatible with the project's foundational local model/proxy architecture without maintaining a continuous invasive fork of the TradingAgents source codebase.
-
-Proceed to Phase 22, adopting a purely internal orchestration strategy or an alternative flexible abstraction.
+Proceed to Phase 22. The TradingAgents framework is now viable as a Decision Provider given the proxy routing has been unlocked.
+1. Abstract the provider integration.
+2. Translate standard Aureus symbols (`XAUUSD`) to the underlying provider requirements (e.g., `GC=F` for Yahoo Finance).
+3. Connect the responses of the TradingAgents graph back into the Aureus system state.

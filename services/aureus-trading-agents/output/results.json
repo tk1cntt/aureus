@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-04-03T14:50:03.469888Z",
+  "environment": {
+    "python": "3.13.12",
+    "tradingagents": "installed"
+  },
+  "symbol_tests": {
+    "XAUUSD": {
+      "status": "fail",
+      "decision": null,
+      "reasoning_length": 0,
+      "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: any-key. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}"
+    },
+    "BTCUSD": {
+      "status": "fail",
+      "decision": null,
+      "reasoning_length": 0,
+      "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: any-key. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}"
+    }
+  },
+  "latency": {
+    "avg_s": 0,
+    "min_s": 0,
+    "max_s": 0,
+    "p95_s": 0,
+    "per_call": []
+  },
+  "rate_limit": {
+    "total_av_calls": 0,
+    "throttle_429": 0,
+    "max_burst": 0
+  },
+  "cost_estimate": {
+    "llm_tokens_per_call": 0,
+    "estimated_cost_usd_per_call": 0
+  },
+  "decision": "PAUSE_AND_PIVOT",
+  "decision_reason": "XAUUSD failed | BTCUSD failed"
+}

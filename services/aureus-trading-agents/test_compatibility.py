@@ -49,8 +49,12 @@ def run_tests():
     llm_model = os.getenv("TA_LLM_MODEL", "cx/gpt-5.4")
     config["deep_think_llm"] = llm_model
     config["quick_think_llm"] = llm_model
-    # Note: OPENAI_API_BASE should be set in environment (.env)
-
+    
+    # Inject backend URL explicitly into the configuration so TradingAgents graphs 
+    # it into OpenAIClient as self.base_url. Without this, it defaults to None 
+    # and bypasses the proxy entirely despite os.environ logic.
+    config["backend_url"] = "http://localhost:20128/v1"
+    
     try:
         ta = TradingAgentsGraph(debug=True, config=config)
     except Exception as e:
