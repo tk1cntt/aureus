@@ -49,6 +49,16 @@
 Plans:
 - [x] TBD (run /gsd-plan-phase 21.1 to break down) (completed 2026-04-03)
 
+### Phase 21.1.1: Patch TradingAgents Source Code for LLM Proxy Support (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 21.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 21.1.1 to break down)
+
 ## Phase 22: Provider Abstraction Extraction
 
 **Requirements:** PROV-01, PROV-02, PROV-03
