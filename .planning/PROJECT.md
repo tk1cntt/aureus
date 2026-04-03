@@ -22,7 +22,7 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 
 ## Current State
 **Latest shipped:** v1.3 Backtesting & Measurement Engine (closed as Proceed anyway, 2026-04-03)
-
+- Phase 21 (TradingAgents Compatibility Validation) complete. Evaluation resulted in explicit PAUSE_AND_PIVOT decision due to proxy handling issues. Awaiting direction on gap closure vs pivot.
 - Milestone archived into `.planning/milestones/v1.3-ROADMAP.md` and `.planning/milestones/v1.3-REQUIREMENTS.md`.
 - Core progress in the previous cycle concentrated on stabilization/diagnosis artifacts (15.6, 15.7, 15.9, 15.10).
 - v1.4 focuses on market-data provider architecture and controlled integration safety.
