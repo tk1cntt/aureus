@@ -40,11 +40,12 @@
 **Reasoning:** 
 Tests failed. `XAUUSD` and `BTCUSD` both resulted in a 401 Unauthorized Error from the LLM endpoint during `propagate()`. 
 
-**Root Cause:**
-The `TradingAgents` framework's underlying LLM abstractions (likely LangChain) routed the request to the default `platform.openai.com` endpoint rather than respecting the local proxy defined in `OPENAI_API_BASE=http://localhost:20128/v1` inside the Docker container, leading to an immediate HTTP 401 given the dummy `any-key`. 
+**Root Cause (Updated via Phase 21.1):**
+The `TradingAgents` framework's underlying LLM abstractions route requests to the default `platform.openai.com` endpoint rather than respecting the local proxy. 
+*Gap Closure Result (Phase 21.1):* Explicitly forcing `OPENAI_API_BASE` and `OPENAI_BASE_URL` within the testing script's `os.environ` prior to graph initialization **failed to reroute the traffic**. The LangChain nodes within TradingAgents appear to rigidly enforce or drop these standard configuration vectors.
 
 ## 9. Pivot Recommendation
 **Recommended action:**
-Before definitively pivoting away from TradingAgents as a decision provider, implement an immediate **Configuration Fix Gap** to explicitly inject the proxy base URL into the `TradingAgentsGraph` initialization (via LangChain overrides or explicit kwargs), as `OPENAI_API_BASE` env var support appears broken in the current TradingAgents `DEFAULT_CONFIG` setup. 
+Formally pivot away from `TradingAgents` as an external dependency. The framework demonstrates excessive rigidness in LLM endpoint configuration, rendering it incompatible with the project's foundational local model/proxy architecture without maintaining a continuous invasive fork of the TradingAgents source codebase.
 
-Alternatively, if testing with real OpenAI keys, provide a valid `.env` configuration.
+Proceed to Phase 22, adopting a purely internal orchestration strategy or an alternative flexible abstraction.

@@ -39,6 +39,16 @@
 
 ---
 
+### Phase 21.1: TradingAgents LLM Proxy Configuration Fix Gap (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 21
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] TBD (run /gsd-plan-phase 21.1 to break down) (completed 2026-04-03)
+
 ## Phase 22: Provider Abstraction Extraction
 
 **Requirements:** PROV-01, PROV-02, PROV-03
