@@ -105,7 +105,8 @@ class SweepSignal(BaseSignal):
                     elif c_h >= ob_bottom:
                         ob["status"] = "TOUCHED"
                         ob["_just_swept"] = True
-
+            if status != "PENDING":
+                logger.info(f"[t={ob.get('t_start')}] [{ob.get('symbol')}][_update_ob_states] OB Status: {ob.get('status')}")
         # Garbage Collection đã bị gỡ bỏ hoàn toàn.
         # Engine dựa vào chu kì Daily Reset (5h sáng GMT+7) thông qua lệnh RECALCULATE
         # để dọn rác 1 lần/ngày. Đảm bảo Dashboard lưu giữ toàn bộ OB màu xám lịch sử.
@@ -252,5 +253,9 @@ class SweepSignal(BaseSignal):
                     # Sweep signal layer only emits domain events to transient_signals.
                     # Emitting only ONE sweep signal max per tick to match old parity
                     break
+                else:
+                    logger.info(
+                        f"[t={c_t}] [{symbol}] [sweep] Sweep already detected: {current_status}/{mitigated_status} ({mitigation_age}s) : {status_tag} @ {target_price}/{c_c}"
+                    )
 
         return triggered_sweep

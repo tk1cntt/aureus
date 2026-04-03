@@ -283,7 +283,6 @@ class StructureSignal(BaseSignal):
                 if ob:
                     symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
                     ob['symbol'] = symbol
-                    ob['breakout_t'] = breakout_t
 
                     add_ob = getattr(state_obj, 'add_ob', None)
                     if callable(add_ob):
@@ -327,7 +326,7 @@ class StructureSignal(BaseSignal):
                     # AI trigger orchestration moved to live_engine event policy.
 
                     # self._register_sweep_targets(state_obj, ob, points[pivot_idx])
-                    
+                    logger.info(f"[t={candle['t']}] [{symbol}] [choch] CHOCH DETECTED: {tag} @ {pivot_price}")
                     return {
                         "tag": "choch",
                         "t": int(candle['t']), 

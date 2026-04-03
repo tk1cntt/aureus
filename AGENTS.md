@@ -1,23 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Mọi trao đổi phải dùng tiếng Việt.
-
-Đặt tên milestone, task, phase, sub-task hoặc tên file, folder phải là tiếng Anh.
-
-Never guess. Verify first.
-
-Before making any assumption, check the actual state. Read the file. Run the command. Query the database. Test the output.
-If you cannot verify, ask the user. Do NOT fabricate, hallucinate, or assume any information.
-
-Expose a relevant superset of tools, not the full registry and not a minimal exact set.
-Include tools needed for both the current request and the most plausible next steps after analysis.
-Exclude only tools that are clearly irrelevant.
-If a missing relevant tool is later needed, expand the tool set and retry.
-
-Mỗi lần chạy command lỗi thì hãy đọc file RUN_SERVICES.md để biết cách chạy command. Nếu vẫn lỗi xảy ra thì sau khi sửa đc hãy update vào file RUN_SERVICES.md.
-
-This project is indexed by GitNexus as **Aureus** (3186 symbols, 7657 relationships, 184 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Aureus** (3147 symbols, 6538 relationships, 130 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -25,6 +9,7 @@ This project is indexed by GitNexus as **Aureus** (3186 symbols, 7657 relationsh
 
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
 - **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
@@ -44,6 +29,7 @@ This project is indexed by GitNexus as **Aureus** (3186 symbols, 7657 relationsh
 ## Never Do
 
 - NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
 - NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
@@ -105,11 +91,11 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 
 | Task | Read this skill file |
 |------|---------------------|
-| Understand architecture / "How does X work?" | `.agent/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.agent/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.agent/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.agent/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.agent/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.agent/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->

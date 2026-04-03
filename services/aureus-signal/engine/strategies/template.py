@@ -119,8 +119,9 @@ class TemplateStrategy(BaseStrategy):
         matched_timestamps = state.get("matched_timestamps", [])
         sequence_progress = state.get("sequence", [])
         last_matched_candle_idx = state.get("last_matched_candle_idx", -1)
-        last_processed_index = state.get("last_processed_index", -1)
+        last_processed_t = state.get("last_processed_t", 0)
         internal_candle_counter = state.get("internal_candle_counter", 0)
+        triggered_t = state.get("triggered_t", 0)  # Timestamp of last successful trigger
         
         if not sequence_progress:
             for step in self.sequence:
@@ -155,29 +156,19 @@ class TemplateStrategy(BaseStrategy):
         
         # We now STRICTLY rely on normalized signal events. No fallback to raw history.
         source_records = normalized_log if isinstance(normalized_log, list) else []
-        current_history_idx = len(source_records) - 1
 
         # 2. Process new signals/events
-        if source_records and current_history_idx > last_processed_index:
-            pending_records: List[tuple[int, Any]] = [
-                (record_index, source_records[record_index])
-                for record_index in range(last_processed_index + 1, current_history_idx + 1)
-            ]
+        pending_records = []
+        for rec in source_records:
+            if isinstance(rec, dict):
+                rec_t = rec.get("t")
+                if isinstance(rec_t, (int, float)) and rec_t > last_processed_t:
+                    pending_records.append(rec)
 
-            def _normalized_record_sort_key(item: tuple[int, Any]) -> tuple[int, Any, int]:
-                record_index, raw_record = item
-                if not isinstance(raw_record, dict):
-                    return (1, 0, record_index)
+        if pending_records:
+            pending_records.sort(key=lambda x: x.get("t", 0))
 
-                record_time = raw_record.get("t")
-                if isinstance(record_time, (int, float)):
-                    return (0, record_time, record_index)
-
-                return (1, 0, record_index)
-
-            pending_records.sort(key=_normalized_record_sort_key)
-
-            for _, record in pending_records:
+            for record in pending_records:
                 events_to_process: List[Dict[str, Any]] = []
 
                 if isinstance(record, dict):
@@ -238,6 +229,7 @@ class TemplateStrategy(BaseStrategy):
                         if latest_tag == tag:
                             if current_step_index == 0:
                                 origin_timestamp = latest_time
+                                triggered_t = 0  # Clear triggered flag — new sequence cycle begins
 
                             matched_timestamps.append(latest_time)
                             last_matched_candle_idx = internal_candle_counter
@@ -253,7 +245,8 @@ class TemplateStrategy(BaseStrategy):
                             else:
                                 break # Step is required, wait for next event
 
-            last_processed_index = current_history_idx
+            if pending_records:
+                last_processed_t = pending_records[-1].get("t", last_processed_t)
 
         # Compute results
         matched_steps = 0
@@ -270,6 +263,13 @@ class TemplateStrategy(BaseStrategy):
                 missing_required = True
                 details.append(f"Missing {s['tag']}")
         
+        # --- Track when sequence was fully completed ---
+        sequence_completed_t = 0
+        if (len(self.sequence) > 0 and current_step_index >= len(self.sequence)
+                and not missing_required and total_score >= self.min_score
+                and matched_timestamps):
+            sequence_completed_t = matched_timestamps[-1]  # Timestamp of last matched event
+
         progress_data = {
             "strategy": self.name,
             "strategy_id": self.strategy_id,
@@ -282,8 +282,10 @@ class TemplateStrategy(BaseStrategy):
             "current_step_index": current_step_index,
             "matched_timestamps": matched_timestamps,
             "last_matched_candle_idx": last_matched_candle_idx,
-            "last_processed_index": last_processed_index,
-            "internal_candle_counter": internal_candle_counter
+            "last_processed_t": last_processed_t,
+            "internal_candle_counter": internal_candle_counter,
+            "triggered_t": triggered_t,
+            "sequence_completed_t": sequence_completed_t,
         }
         
         state_obj.strategy_progress[self.name] = progress_data
@@ -297,23 +299,70 @@ class TemplateStrategy(BaseStrategy):
             "matched_steps": matched_steps,
         }
 
+    def _reset_sequence_state(self, state_obj: Any, triggered_t: int = 0, last_processed_t: int = 0, internal_candle_counter: int = 0):
+        """Reset sequence progress to clean waiting state after trigger or timeout."""
+        fresh_sequence = []
+        for step in self.sequence:
+            fresh_sequence.append({
+                "tag": step["tag"],
+                "weight": step["weight"],
+                "required": step.get("required", False),
+                "max_wait": step.get("max_wait", 0),
+                "reset_signals": step.get("reset_signals", []),
+                "status": "waiting" if step.get("required", False) else "missed",
+                "time": None,
+            })
+        state_obj.strategy_progress[self.name] = {
+            "strategy": self.name,
+            "strategy_id": self.strategy_id,
+            "progress_pct": 0,
+            "origin_timestamp": None,
+            "sequence": fresh_sequence,
+            "t": 0,
+            "current_step_index": 0,
+            "matched_timestamps": [],
+            "last_matched_candle_idx": -1,
+            "last_processed_t": last_processed_t,
+            "internal_candle_counter": internal_candle_counter,
+            "triggered_t": triggered_t,
+        }
+
     def evaluate(self, df: pd.DataFrame, signals: Dict[str, Any], state_obj: Any) -> Optional[Dict[str, Any]]:
         core = self._evaluate_sequence(df, state_obj)
         if core["missing_required"]:
             return None
 
         if core["score"] >= self.min_score:
-            return {
+            bar_t = int(df.iloc[-1]["t"])
+            progress_data = core["progress_data"]
+
+            # Only trigger at the EXACT candle where last event matched
+            sequence_completed_t = progress_data.get("sequence_completed_t", 0)
+            if progress_data.get("triggered_t", 0) > 0 or bar_t != sequence_completed_t:
+                return None
+
+            # Mark as triggered and auto-reset for next cycle
+            result = {
                 "strategy": self.name,
                 "strategy_id": self.strategy_id,
                 "origin_timestamp": core["origin_timestamp"],
                 "score": core["score"],
                 "details": json.dumps(core["details"]),
                 "progress": json.dumps(core["progress_data"]),
-                "t": int(df.iloc[-1]["t"]),
+                "t": bar_t,
                 "msg": f"Strategy {self.name} triggered with score {core['score']}",
                 "exit_config": self.exit_config,
             }
+
+            # Auto-reset: mark triggered_t and clear sequence for next cycle
+            self._reset_sequence_state(
+                state_obj,
+                triggered_t=bar_t,
+                last_processed_t=progress_data.get("last_processed_t", 0),
+                internal_candle_counter=progress_data.get("internal_candle_counter", 0),
+            )
+
+            return result
 
         return None
 
@@ -443,7 +492,13 @@ class TemplateStrategy(BaseStrategy):
         elif missing_required or score_below_threshold:
             reason_code = "SEQUENCE_NOT_MATCHED"
         else:
-            reason_code = "OK"
+            # Only trigger at the EXACT candle where last sequence event matched
+            sequence_completed_t = core["progress_data"].get("sequence_completed_t", 0)
+            triggered_t = core["progress_data"].get("triggered_t", 0)
+            if triggered_t > 0 or bar_ts != sequence_completed_t:
+                reason_code = "ALREADY_TRIGGERED"
+            else:
+                reason_code = "OK"
 
         if reason_code == "SEQUENCE_NOT_MATCHED":
             mismatch_causes: List[str] = []
@@ -525,6 +580,15 @@ class TemplateStrategy(BaseStrategy):
         logger.debug(
             f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][strategy_progress] {strategy_obj}"
         )
+
+        # Auto-reset sequence after successful trigger to prevent re-firing
+        if strategy_obj.get("is_actionable"):
+            self._reset_sequence_state(
+                state_obj,
+                triggered_t=bar_ts,
+                last_processed_t=core["progress_data"].get("last_processed_t", 0),
+                internal_candle_counter=core["progress_data"].get("internal_candle_counter", 0),
+            )
 
         return strategy_obj
         

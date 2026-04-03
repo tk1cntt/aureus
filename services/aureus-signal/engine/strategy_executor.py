@@ -224,9 +224,11 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
     # --- Per-Symbol Strategy Registry ---
     symbol_strategies = {}
+    executor_strategy_progress = {}
     for symbol in symbols_list:
         symbol_strategies[symbol] = StrategyRegistry()
         await symbol_strategies[symbol].load_from_db(db_pool, symbol)
+        executor_strategy_progress[symbol] = {}
 
     # --- Consumer Group Setup for signal streams ---
     group_name = "aureus-strategy-executor-group"
@@ -359,6 +361,9 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         # We provide a minimal proxy
                         import pandas as pd
                         mini_df = pd.DataFrame([{"t": ts_unix, "c": payload.get("close", 0)}])
+
+                        # Bind persistent strategy progress so evaluator remembers sequence state
+                        executor_state.strategy_progress = executor_strategy_progress.get(symbol, {})
 
                         # --- Pre-evaluate debug ---
                         registry = symbol_strategies[symbol]
