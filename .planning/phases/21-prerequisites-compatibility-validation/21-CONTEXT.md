@@ -21,6 +21,9 @@ Validate TradingAgents as a **decision provider** (Option A — AI trading signa
 ### Integration Approach (LOCKED)
 - **D-23:** Use TradingAgents exclusively as a **decision provider** (Option A). The `propagate(ticker, date)` API returns Buy/Sell/Hold decisions with AI reasoning — these are published as supplementary AI signals to `aureus-signal`. Aureus keeps Redis stream as the sole source for OHLCV candle data. OHLCV extraction (Option B) and direct Alpha Vantage API (Option C) are **out of scope**.
 
+### LLM Configuration (LOCKED)
+- **D-24:** LLM calls route through local proxy at `http://localhost:20128/v1` (OpenAI-compatible endpoint). Model: `cx/gpt-5.4`. TradingAgents config must set `llm_provider: "openai"`, `OPENAI_API_BASE=http://localhost:20128/v1`, and model names to `cx/gpt-5.4`. Docker container must use `--network host` or equivalent to reach the host proxy.
+
 ### Validation Environment
 - **D-04:** All validation runs inside **Docker on WSL**. No local virtualenv.
 - **D-05:** Single Dockerfile for test container. No docker-compose needed for Phase 21 (validation-only, no integration).

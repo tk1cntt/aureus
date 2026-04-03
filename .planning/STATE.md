@@ -1,22 +1,24 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Backtesting & Measurement Engine
-status: v1.3 milestone complete
-last_updated: "2026-04-03T03:06:10.520Z"
+milestone: v1.4
+milestone_name: TradingAgents Market Data Integration
+status: defining requirements
+last_updated: "2026-04-03T19:34:39+07:00"
 progress:
-  total_phases: 20
-  completed_phases: 3
-  total_plans: 18
-  completed_plans: 4
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # STATE
 
 ## Current Position
 
-Phase: 15.10 (Pydantic Signal History Refactoring) — EXECUTING (reopened)
-Plan: 1 of 3
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-03 — Milestone v1.4 started
 
 ## Architecture Decision
 

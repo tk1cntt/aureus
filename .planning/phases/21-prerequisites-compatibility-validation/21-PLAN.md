@@ -66,10 +66,10 @@ CMD ["python", "test_compatibility.py"]
 
 3. `.env.example`:
 ```
-# Required: LLM provider (at least one)
-OPENAI_API_KEY=your_key_here
-# GOOGLE_API_KEY=your_key_here
-# ANTHROPIC_API_KEY=your_key_here
+# LLM proxy (OpenAI-compatible)
+OPENAI_API_KEY=any-key
+OPENAI_API_BASE=http://localhost:20128/v1
+TA_LLM_MODEL=cx/gpt-5.4
 
 # Required: Market data backend
 ALPHA_VANTAGE_API_KEY=your_key_here
@@ -104,6 +104,10 @@ Create `services/aureus-trading-agents/test_compatibility.py`:
 
 2. **Test 2 — XAUUSD Decision (HARD GATE):**
    - `config = DEFAULT_CONFIG.copy()`
+   - `config["llm_provider"] = "openai"`
+   - `config["deep_think_llm"] = os.getenv("TA_LLM_MODEL", "cx/gpt-5.4")`
+   - `config["quick_think_llm"] = os.getenv("TA_LLM_MODEL", "cx/gpt-5.4")`
+   - Set `OPENAI_API_BASE` env var to `http://localhost:20128/v1` before init
    - `ta = TradingAgentsGraph(debug=True, config=config)`
    - `_, decision = ta.propagate("XAUUSD", "<yesterday_date>")`
    - Record: success/fail, decision content (buy/sell/hold), reasoning text, elapsed time
@@ -183,9 +187,10 @@ docker build -t aureus-ta-validation:test .
 cp .env.example .env
 # User fills: OPENAI_API_KEY, ALPHA_VANTAGE_API_KEY
 
-# Run
+# Run (--network host to reach LLM proxy on localhost:20128)
 mkdir -p output
 docker run --rm \
+  --network host \
   --env-file .env \
   -v $(pwd)/output:/app/output \
   aureus-ta-validation:test

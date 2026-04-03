@@ -1,0 +1,85 @@
+# Requirements: Aureus Milestone v1.4 TradingAgents Market Data Integration
+
+**Defined:** 2026-04-03
+**Core Value:** Keep ingest behavior deterministic and observable while extending market data capability safely.
+
+## v1 Requirements
+
+### Prerequisites & Compatibility
+
+- [ ] **PREP-01**: Team can validate TradingAgents in an isolated Docker environment on WSL before any integration code begins, including symbol compatibility for Aureus targets (`XAUUSD`, `BTCUSD`, configured universe), average API latency, and observed free-tier rate-limit behavior.
+- [ ] **PREP-02**: Team can define and enforce dependency strategy for TradingAgents (optional dependency path with rollback-safe defaults) and apply a hard stop/pivot to another provider if FX/metal compatibility fails acceptance criteria.
+
+### Provider Abstraction
+
+- [ ] **PROV-01**: System can ingest candles through a provider interface without changing canonical candle schema.
+- [ ] **PROV-02**: Existing Redis ingest behavior remains backward-compatible under default configuration.
+- [ ] **PROV-03**: Market data client can be instantiated via compatibility path for existing Redis-based runtime/tests.
+
+### TradingAgents Adapter
+
+- [ ] **ADPT-01**: System can fetch TradingAgents market data and normalize it into `open/high/low/close/volume/timestamp`.
+- [ ] **ADPT-02**: System can map Aureus symbols to provider symbols via validated configuration.
+- [ ] **ADPT-03**: Adapter enforces cache/backoff behavior to reduce rate-limit failures.
+- [ ] **ADPT-04**: Adapter reports malformed/rate-limit/fallback failures in observable metrics/log taxonomy.
+
+### Runtime Routing & Rollout Safety
+
+- [ ] **ROUT-01**: Runtime supports provider modes `redis`, `shadow`, and `tradingagents` with `redis` as default.
+- [ ] **ROUT-02**: Shadow mode can compare TradingAgents feed against Redis baseline without impacting live primary flow.
+- [ ] **ROUT-03**: Rollout gates evaluate malformed/fallback/lag/drift thresholds and prevent unsafe promotion.
+- [ ] **ROUT-04**: Runtime can fail safe back to Redis when TradingAgents gate conditions are violated.
+
+### Verification
+
+- [ ] **TEST-01**: Provider abstraction contract is covered by automated tests.
+- [ ] **TEST-02**: TradingAgents adapter mapping/cache/error cases are covered by automated tests.
+- [ ] **TEST-03**: Rollout gate behavior for drift/lag/error thresholds is covered by automated tests.
+- [ ] **TEST-04**: Shadow-mode manual validation checklist exists and is executable before primary promotion.
+
+## v2 Requirements
+
+### Extension
+
+- **EXT-01**: Support additional non-Redis providers beyond TradingAgents via same provider interface.
+- **EXT-02**: Promote TradingAgents to primary in production after sustained shadow evidence and SLO validation.
+- **EXT-03**: Add cross-service or sidecar architecture if dependency/latency constraints demand isolation.
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Strategy logic redesign | Milestone is data-ingest integration only |
+| Immediate production cutover to TradingAgents | Requires shadow gate evidence first |
+| Full multi-service re-architecture | Not required for safe initial integration |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PREP-01 | Phase 21 | Pending |
+| PREP-02 | Phase 21 | Pending |
+| PROV-01 | Phase 22 | Pending |
+| PROV-02 | Phase 22 | Pending |
+| PROV-03 | Phase 22 | Pending |
+| ADPT-01 | Phase 23 | Pending |
+| ADPT-02 | Phase 23 | Pending |
+| ADPT-03 | Phase 23 | Pending |
+| ADPT-04 | Phase 23 | Pending |
+| ROUT-01 | Phase 24 | Pending |
+| ROUT-02 | Phase 24 | Pending |
+| ROUT-03 | Phase 25 | Pending |
+| ROUT-04 | Phase 25 | Pending |
+| TEST-01 | Phase 26 | Pending |
+| TEST-02 | Phase 26 | Pending |
+| TEST-03 | Phase 26 | Pending |
+| TEST-04 | Phase 26 | Pending |
+
+**Coverage:**
+- v1 requirements: 17 total
+- Mapped to phases: 17
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-04-03*
+*Last updated: 2026-04-03 after initial v1.4 definition*
