@@ -12,9 +12,9 @@
 
 ### Provider Abstraction
 
-- [ ] **PROV-01**: System can ingest candles through a provider interface without changing canonical candle schema.
-- [ ] **PROV-02**: Existing Redis ingest behavior remains backward-compatible under default configuration.
-- [ ] **PROV-03**: Market data client can be instantiated via compatibility path for existing Redis-based runtime/tests.
+- [x] **PROV-01**: System can ingest candles through a provider interface without changing canonical candle schema.
+- [x] **PROV-02**: Existing Redis ingest behavior remains backward-compatible under default configuration.
+- [x] **PROV-03**: Market data client can be instantiated via compatibility path for existing Redis-based runtime/tests.
 
 ### TradingAgents Adapter
 
@@ -59,9 +59,9 @@
 |-------------|-------|--------|
 | PREP-01 | Phase 21 | Complete |
 | PREP-02 | Phase 21 | Complete |
-| PROV-01 | Phase 22 | Pending |
-| PROV-02 | Phase 22 | Pending |
-| PROV-03 | Phase 22 | Pending |
+| PROV-01 | Phase 22 | Complete |
+| PROV-02 | Phase 22 | Complete |
+| PROV-03 | Phase 22 | Complete |
 | ADPT-01 | Phase 23 | Pending |
 | ADPT-02 | Phase 23 | Pending |
 | ADPT-03 | Phase 23 | Pending |
