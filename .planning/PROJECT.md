@@ -22,6 +22,7 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 
 ## Current State
 **Latest shipped:** v1.3 Backtesting & Measurement Engine (closed as Proceed anyway, 2026-04-03)
+- Phase 24 complete — Implemented runtime provider routing and TA shadow execution.
 - Phase 21 (TradingAgents Compatibility Validation) complete. Evaluation resulted in explicit PAUSE_AND_PIVOT decision due to proxy handling issues. Awaiting direction on gap closure vs pivot.
 - Milestone archived into `.planning/milestones/v1.3-ROADMAP.md` and `.planning/milestones/v1.3-REQUIREMENTS.md`.
 - Core progress in the previous cycle concentrated on stabilization/diagnosis artifacts (15.6, 15.7, 15.9, 15.10).
@@ -41,7 +42,7 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - [ ] Define provider abstraction contract for market data ingestion in `aureus-nautilus-node`.
 - [ ] Validate TradingAgents symbol/data compatibility for Aureus symbols (FX/metal/crypto).
 - [ ] Implement shadow-mode comparison and drift gates before enabling TradingAgents as primary.
-- [ ] Ensure backward-compatible runtime configuration and safe fallback to Redis.
+- [x] Ensure backward-compatible runtime configuration and safe fallback to Redis. *(Validated in Phase 24: Runtime Routing & Shadow Integration)*
 - [ ] Verify end-to-end via adapter/provider/gate test coverage and shadow validation.
 
 ### Out of Scope
