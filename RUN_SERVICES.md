@@ -18,7 +18,7 @@ Môi trường Development có thể khởi tạo nhanh bằng script có sẵn.
 Mở PowerShell và chạy lệnh sau để bật các core services:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/Aureus && ./scripts/dev-service.sh"
+wsl -d Aureus -e bash -c "cd /mnt/d/Aureus && ./scripts/dev-service.sh"
 ```
 
 Lệnh này sẽ build và khởi động:
@@ -34,7 +34,7 @@ Lệnh này sẽ build và khởi động:
 Sau khi đã thêm service vào `docker-compose.dev.yml`, dùng lệnh sau để build và chạy bộ service mới:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up --build -d nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
+wsl -d Aureus -e bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up --build -d nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
 ```
 
 Service được khởi động:
@@ -46,7 +46,7 @@ Service được khởi động:
 Mặc định bridge chạy với `NAUTILUS_ADAPTER_MODE=simulated` để tương thích flow cũ. Để bridge ingest lifecycle reports từ Redis stream, đặt biến môi trường khi chạy compose:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/Aureus && NAUTILUS_ADAPTER_MODE=stream NAUTILUS_LIFECYCLE_STREAM_PATTERN='aureus:stream:*:nautilus_execution' docker compose -f docker-compose.dev.yml up --build -d aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
+wsl -d Aureus -e bash -c "cd /mnt/d/Aureus && NAUTILUS_ADAPTER_MODE=stream NAUTILUS_LIFECYCLE_STREAM_PATTERN='aureus:stream:*:nautilus_execution' docker compose -f docker-compose.dev.yml up --build -d aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
 ```
 
 Bridge sẽ đọc thêm các stream khớp với `NAUTILUS_LIFECYCLE_STREAM_PATTERN` và publish execution events chuẩn hóa về `aureus:stream:{symbol}:execution`.
@@ -56,25 +56,25 @@ Sau khi service mới đã `Up`, chạy các test sau trong WSL:
 
 ```powershell
 # 1) Smoke unit cho Nautilus Node
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-node && python3 -m pytest tests/test_config_validation.py tests/test_execution_risk_controls.py tests/test_sync_worker_contract.py -v"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-node && ../../.venv/bin/python -m pytest tests/test_config_validation.py tests/test_execution_risk_controls.py tests/test_sync_worker_contract.py -v"
 
 # 2) Regression policy/rollout cho Nautilus Node (Live Trading V1)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-node && python3 -m pytest tests/test_rollout_gates.py tests/test_shadow_canary_flow.py tests/test_execution_client_policy.py tests/test_execution_client.py tests/test_execution_risk_controls.py -q"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-node && ../../.venv/bin/python -m pytest tests/test_rollout_gates.py tests/test_shadow_canary_flow.py tests/test_execution_client_policy.py tests/test_execution_client.py tests/test_execution_risk_controls.py -q"
 
 # 3) Smoke unit cho Nautilus Bridge
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-bridge && python3 -m pytest tests/test_mapper.py tests/test_bridge_idempotency.py -v"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-bridge && ../../.venv/bin/python -m pytest tests/test_mapper.py tests/test_bridge_idempotency.py -v"
 
 # 4) Regression lineage cho Nautilus Bridge (Live Trading V1)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-bridge && python3 -m pytest tests/test_bridge_lineage.py tests/test_bridge_idempotency.py tests/test_mapper.py -q"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus/services/aureus-nautilus-bridge && ../../.venv/bin/python -m pytest tests/test_bridge_lineage.py tests/test_bridge_idempotency.py tests/test_mapper.py -q"
 
 # 5) Coverage evidence cho Node + Bridge (xuất JSON để lưu proof)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && python3 -m pytest services/aureus-nautilus-node/tests/test_rollout_gates.py services/aureus-nautilus-node/tests/test_shadow_canary_flow.py services/aureus-nautilus-node/tests/test_execution_client_policy.py services/aureus-nautilus-node/tests/test_execution_client.py services/aureus-nautilus-bridge/tests/test_bridge_lineage.py services/aureus-nautilus-bridge/tests/test_bridge_idempotency.py services/aureus-nautilus-bridge/tests/test_mapper.py --cov=services/aureus-nautilus-node --cov=services/aureus-nautilus-bridge --cov-report=json:/mnt/d/Aureus/tmp_coverage_phase14.json -q"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python -m pytest services/aureus-nautilus-node/tests/test_rollout_gates.py services/aureus-nautilus-node/tests/test_shadow_canary_flow.py services/aureus-nautilus-node/tests/test_execution_client_policy.py services/aureus-nautilus-node/tests/test_execution_client.py services/aureus-nautilus-bridge/tests/test_bridge_lineage.py services/aureus-nautilus-bridge/tests/test_bridge_idempotency.py services/aureus-nautilus-bridge/tests/test_mapper.py --cov=services/aureus-nautilus-node --cov=services/aureus-nautilus-bridge --cov-report=json:/mnt/d/Aureus/tmp_coverage_phase14.json -q"
 
 # 6) Test E2E Redis flow (v1)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && python3 scripts/test_nautilus_redis_flow.py --redis-host 127.0.0.1 --redis-port 6380 --symbol XAUUSD --timeout 25"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python scripts/test_nautilus_redis_flow.py --redis-host 127.0.0.1 --redis-port 6380 --symbol XAUUSD --timeout 25"
 
 # 7) Test E2E Redis flow (v2)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && python3 scripts/test_nautilus_redis_flow_v2.py --redis-host 127.0.0.1 --redis-port 6380 --symbol XAUUSD --timeout 30"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python scripts/test_nautilus_redis_flow_v2.py --redis-host 127.0.0.1 --redis-port 6380 --symbol XAUUSD --timeout 30"
 ```
 
 Kết quả mong đợi:
@@ -91,7 +91,7 @@ Service `aureus-strategy-executor-dev` là worker bất đồng bộ, lắng ngh
 
 ```powershell
 # Build + chạy cả Aggregator và Executor
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev aureus-strategy-executor-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev aureus-strategy-executor-dev"
 ```
 
 Service được khởi động:
@@ -101,13 +101,13 @@ Service được khởi động:
 #### Kiểm tra nhanh
 ```powershell
 # Trạng thái containers
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev aureus-strategy-executor-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev aureus-strategy-executor-dev"
 
 # Xem log executor (có verbose logging)
-wsl -d Ubuntu-24.04 -u root bash -c "docker logs --tail 100 -f aureus-strategy-executor-dev"
+wsl -d Aureus -u root bash -c "docker logs --tail 100 -f aureus-strategy-executor-dev"
 
 # Xem log aggregator
-wsl -d Ubuntu-24.04 -u root bash -c "docker logs --tail 100 -f aureus-signal-dev"
+wsl -d Aureus -u root bash -c "docker logs --tail 100 -f aureus-signal-dev"
 ```
 
 Dấu hiệu pass:
@@ -125,7 +125,7 @@ Dấu hiệu pass:
 Dùng lệnh sau để build và chạy các service monitoring trong `docker-compose.dev.yml`:
 
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml up --build -d redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
+wsl -d Aureus -u root bash -c "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml up --build -d redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
 ```
 
 Service được khởi động:
@@ -138,13 +138,13 @@ Service được khởi động:
 
 ```powershell
 # Kiểm tra trạng thái containers monitoring
-wsl -d Ubuntu-24.04 -u root bash -c "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml ps redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
+wsl -d Aureus -u root bash -c "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml ps redis-exporter-dev aureus-bridge-metrics-dev prometheus-dev grafana-dev"
 
 # Kiểm tra target scrape trong Prometheus
-wsl -d Ubuntu-24.04 -u root bash -c "docker exec prometheus-dev wget -qO- http://localhost:9090/api/v1/targets"
+wsl -d Aureus -u root bash -c "docker exec prometheus-dev wget -qO- http://localhost:9090/api/v1/targets"
 
 # Kiểm tra endpoint metrics của exporter
-wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus-bridge-metrics-dev wget -qO- http://localhost:9108/metrics | head -n 40"
+wsl -d Aureus -u root bash -c "docker exec aureus-bridge-metrics-dev wget -qO- http://localhost:9108/metrics | head -n 40"
 ```
 
 ### 2.4 Troubleshooting cho Monitoring
@@ -160,7 +160,7 @@ Giao diện frontend (Next.js) được chạy bằng script tiện ích giúp U
 Để khởi động Web UI trong môi trường Dev, mở PowerShell và chạy lệnh:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -c "cd /mnt/d/Aureus && ./scripts/dev-web.sh"
+wsl -d Aureus -e bash -c "cd /mnt/d/Aureus && ./scripts/dev-web.sh"
 ```
 
 Script này sẽ tự động cài NPM packages và chạy Development Server một cách đồng bộ.
@@ -181,35 +181,35 @@ Mở PowerShell và chạy lệnh (thay `[SERVICE_NAME]` bằng service cần re
 
 ```powershell
 # Ví dụ: Rebuild + restart Dashboard API (dev)
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-dashboard-api-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-dashboard-api-dev"
 
 # Ví dụ: Rebuild + restart Signal Engine (dev)
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev"
 
 # Ví dụ: Rebuild + restart Nautilus Bridge (dev)
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-nautilus-bridge-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-nautilus-bridge-dev"
 ```
 
 ### Lệnh Rebuild/Restart riêng Nautilus + Node + Bridge:
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
 ```
 
 ### Lệnh Restart toàn bộ hệ thống dev:
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build"
 ```
 
 ### Lệnh kiểm tra sau khi chạy/build lại:
 ```powershell
 # Xem trạng thái 3 service mới
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps nautilus_trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
 
 # Kiểm tra health cơ bản bằng restart count = 0
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker inspect -f '{{.Name}}|{{.State.Status}}|restarts={{.RestartCount}}' nautilus-trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker inspect -f '{{.Name}}|{{.State.Status}}|restarts={{.RestartCount}}' nautilus-trader-dev aureus-nautilus-node-dev aureus-nautilus-bridge-dev"
 
 # Xem log bridge để xác nhận có publish execution event
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker logs --tail 100 aureus-nautilus-bridge-dev"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker logs --tail 100 aureus-nautilus-bridge-dev"
 ```
 
 
@@ -227,12 +227,12 @@ Nếu server bị treo không giải phóng cổng, hãy diệt các process b�
 
 - **Diệt API Backend (nếu chạy native) bị kẹt ở WSL (Port 8001)**:
   ```powershell
-  wsl -d Ubuntu-24.04 -e bash -c "killall python3"
+  wsl -d Aureus -e bash -c "killall python3"
   ```
 
 ### Kiểm tra Logs của Docker Service:
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml logs -f [SERVICE_NAME]"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && docker compose -f aureus-foundation.yml logs -f [SERVICE_NAME]"
 ```
 
 ### Playbook: Lỗi `npm i` bị `ERESOLVE` ở `services/aureus-dashboard/web`
@@ -285,19 +285,19 @@ npm i --legacy-peer-deps
 
 ```powershell
 # (A) Kiểm tra service gateway có đang chạy không
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-gateway-dev"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-gateway-dev"
 
 # (B) Kiểm tra host port mapping của container gateway (phải có 5556)
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
 
 # (C) Kiểm tra listener trong WSL (phải LISTEN trên :5556)
-wsl -d Ubuntu-24.04 -e bash -lc "ss -ltnp | grep 5556 || true"
+wsl -d Aureus -e bash -lc "ss -ltnp | grep 5556 || true"
 
 # (D) Kiểm tra kết nối từ host Windows tới 127.0.0.1:5556
 Test-NetConnection -ComputerName 127.0.0.1 -Port 5556 | Select-Object ComputerName,RemotePort,TcpTestSucceeded
 
 # (E) Kiểm tra log gateway để xác nhận có nhận/parse message
-wsl -d Ubuntu-24.04 -e bash -lc "docker logs --tail 120 aureus-gateway-dev 2>&1"
+wsl -d Aureus -e bash -lc "docker logs --tail 120 aureus-gateway-dev 2>&1"
 ```
 
 #### 3) Root cause đã gặp và xác nhận
@@ -308,15 +308,15 @@ wsl -d Ubuntu-24.04 -e bash -lc "docker logs --tail 120 aureus-gateway-dev 2>&1"
 
 ```powershell
 # (1) Rebuild + restart gateway service
-wsl -d Ubuntu-24.04 -u root bash -lc "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml up -d --build aureus-gateway-dev"
+wsl -d Aureus -u root bash -lc "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml up -d --build aureus-gateway-dev"
 
 # (2) Verify container state
-wsl -d Ubuntu-24.04 -e bash -lc "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml ps aureus-gateway-dev"
+wsl -d Aureus -e bash -lc "docker compose --project-directory /mnt/d/Aureus -f /mnt/d/Aureus/docker-compose.dev.yml ps aureus-gateway-dev"
 
 # (3) Verify listener + connectivity + ingestion logs
-wsl -d Ubuntu-24.04 -e bash -lc "ss -ltnp | grep 5556 || true"
+wsl -d Aureus -e bash -lc "ss -ltnp | grep 5556 || true"
 Test-NetConnection -ComputerName 127.0.0.1 -Port 5556 | Select-Object ComputerName,RemotePort,TcpTestSucceeded
-wsl -d Ubuntu-24.04 -e bash -lc "docker logs --since 3m aureus-gateway-dev 2>&1 | tail -n 120"
+wsl -d Aureus -e bash -lc "docker logs --since 3m aureus-gateway-dev 2>&1 | tail -n 120"
 ```
 
 **Durable fix đã áp dụng trong compose** (`docker-compose.dev.yml`):
@@ -359,10 +359,10 @@ Sau khi chạy lệnh trên, bắt buộc verify lại:
 #### 4) Quy trình verify nhanh (bắt buộc chạy trong WSL)
 ```powershell
 # (A) Xem log signal engine để xác nhận detect + recover NOGROUP
-wsl -d Ubuntu-24.04 -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail -n 200"
+wsl -d Aureus -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail -n 200"
 
 # (B) Kiểm tra service vẫn Up sau khi recover
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps aureus-signal-dev"
 ```
 
 Dấu hiệu pass:
@@ -381,10 +381,10 @@ Khi logic structure (CHOCH/BOS) trong Signal Engine bị thay đổi, dữ liệ
 ### Chạy reset:
 ```powershell
 # 1. Copy script vào container + chạy
-wsl -d Ubuntu-24.04 -u root bash -c "docker cp /mnt/d/Aureus/services/aureus-signal/reset_structure_cache.py aureus-signal:/app/reset_structure_cache.py && docker exec aureus-signal python /app/reset_structure_cache.py"
+wsl -d Aureus -u root bash -c "docker cp /mnt/d/Aureus/services/aureus-signal/reset_structure_cache.py aureus-signal:/app/reset_structure_cache.py && docker exec aureus-signal python /app/reset_structure_cache.py"
 
 # 2. Restart signal engine để re-detect
-wsl -d Ubuntu-24.04 -u root bash -c "docker restart aureus-signal"
+wsl -d Aureus -u root bash -c "docker restart aureus-signal"
 ```
 
 ### Script xóa những gì:
@@ -395,7 +395,7 @@ wsl -d Ubuntu-24.04 -u root bash -c "docker restart aureus-signal"
 
 ### Debug swing points (kiểm tra kết quả):
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -c "docker cp /mnt/d/Aureus/services/aureus-signal/debug_choch.py aureus-signal:/app/debug_choch.py && docker exec aureus-signal python /app/debug_choch.py"
+wsl -d Aureus -u root bash -c "docker cp /mnt/d/Aureus/services/aureus-signal/debug_choch.py aureus-signal:/app/debug_choch.py && docker exec aureus-signal python /app/debug_choch.py"
 ```
 
 ---
@@ -420,37 +420,37 @@ Khi AI Assistant (Antigravity) hoặc Developer được yêu cầu sửa đổi
 *Ngoài lệnh chạy web ở phía trên, các lệnh khác phải chạy trong WSL và chạy lênh trên Ubuntu. Cấm dùng các lệnh cho Windows.*
 
 ```
-wsl -d Ubuntu-24.04 <command>
+wsl -d Aureus <command>
 ```
 
 1. Cấm chạy source code python kiểu inline như bên dưới. Viết script chạy riêng.
 
 ```
-wsl -d Ubuntu-24.04 -u root bash -c "python3 -c \"import urllib.request, json; req = urllib.request.Request('http://localhost:8001/api/v1/backtest/XAUUSD/sync', method='POST', headers={'Content-Type': 'application/json'}, data=json.dumps({'start': '2026-02-25', 'end': '2026-03-01'}).encode()); resp = urllib.request.urlopen(req); print('API Responses: ' + resp.read().decode())\""
+wsl -d Aureus -u root bash -c "python3 -c \"import urllib.request, json; req = urllib.request.Request('http://localhost:8001/api/v1/backtest/XAUUSD/sync', method='POST', headers={'Content-Type': 'application/json'}, data=json.dumps({'start': '2026-02-25', 'end': '2026-03-01'}).encode()); resp = urllib.request.urlopen(req); print('API Responses: ' + resp.read().decode())\""
 ```
 
 2. Cấm chạy psql trên Windows. Phải chạy trong WSL.
 
 ```
-wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_timescaledb psql -U aureus -d aureus -c 'SELECT symbol, count(1) FROM aureus_candles GROUP BY symbol;'"
+wsl -d Aureus -u root bash -c "docker exec aureus_timescaledb psql -U aureus -d aureus -c 'SELECT symbol, count(1) FROM aureus_candles GROUP BY symbol;'"
 ```
 
 3. Cấm chạy python trên Windows. Phải chạy trong WSL.
 
 ```
-wsl -d Ubuntu-24.04 -u root bash -c "python services/aureus-signal/signal_computer.py --symbol XAUUSD --start 2026-02-24 --end 2026-03-04"
+wsl -d Aureus -u root bash -c "cd /mnt/d/Aureus && ./.venv/bin/python services/aureus-signal/signal_computer.py --symbol XAUUSD --start 2026-02-24 --end 2026-03-04"
 ```
 
 4. Cấm chạy docker trên Windows. Phải chạy trong WSL.
 
 ```
-wsl -d Ubuntu-24.04 -u root bash -c "docker compose -f aureus-foundation.yml up -d --build"
+wsl -d Aureus -u root bash -c "docker compose -f aureus-foundation.yml up -d --build"
 ```
 
 5. Cấm chạy redis-cli trên Windows. Phải chạy trong WSL.
 
 ```
-wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_redis redis-cli"
+wsl -d Aureus -u root bash -c "docker exec aureus_redis redis-cli"
 ```
 
 6. Cấm sử dụng curl ở console. Phải viết script bằng python để gọi API.
@@ -469,20 +469,20 @@ wsl -d Ubuntu-24.04 -u root bash -c "docker exec aureus_redis redis-cli"
 10. Với test Python trong WSL: nếu `python3 -m pytest` báo `No module named pytest`, phải chạy bằng virtualenv của repo để đảm bảo đúng dependencies:
 
 ```
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && .venv/bin/python -m pytest <test_paths> -q"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && .venv/bin/python -m pytest <test_paths> -q"
 ```
 
 10.1. Với test của `services/aureus-signal`, ưu tiên chạy từ đúng working directory của service để tránh lỗi import/collection (`engine.*`):
 
 ```
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus/services/aureus-signal && ../../.venv/bin/python -m pytest tests/test_template_strategy.py tests/test_strategy_determinism.py tests/test_strategy_scenario.py -q"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus/services/aureus-signal && ../../.venv/bin/python -m pytest tests/test_template_strategy.py tests/test_strategy_determinism.py tests/test_strategy_scenario.py -q"
 ```
 
 11. Khi kiểm tra LLM endpoint trong môi trường Docker dev:
 - Không chạy `docker ...` trực tiếp ở PowerShell nếu máy không expose Docker CLI. Luôn chạy qua WSL:
 
 ```
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
 ```
 
 - `host.docker.internal` là hostname dành cho container truy cập host, không dùng để probe trực tiếp từ WSL host.
@@ -506,13 +506,13 @@ Không cài package tạm vào system Python để tránh lệch môi trường 
 - Dùng cách ổn định sau để tránh lỗi escaping quote:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -lc "cd /mnt/d/Aureus && cat /mnt/d/Aureus/services/aureus-db-writer/scripts/clear_all_except_aureus_candles.sql | docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus"
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && cat /mnt/d/Aureus/services/aureus-db-writer/scripts/clear_all_except_aureus_candles.sql | docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus"
 ```
 
 - Verify nhanh:
 
 ```powershell
-wsl -d Ubuntu-24.04 -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/services/aureus-db-writer/scripts/verify_cleanup_counts.sql"
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/services/aureus-db-writer/scripts/verify_cleanup_counts.sql"
 ```
 
 14. Khi chạy command phức tạp qua `run_command` (PowerShell host + `wsl ... bash -lc`), bắt buộc quote-safe để tránh lỗi parser như `unexpected EOF` hoặc `'||' is not a valid statement separator`:
@@ -522,7 +522,57 @@ wsl -d Ubuntu-24.04 -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U a
 - Ưu tiên command kiểm tra đơn giản, ví dụ:
 
 ```powershell
-wsl -d Ubuntu-24.04 -u root bash -lc "docker ps --format '{{.Names}}\t{{.Ports}}'"
-wsl -d Ubuntu-24.04 -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .HostConfig.PortBindings}}'"
-wsl -d Ubuntu-24.04 -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .NetworkSettings.Ports}}'"
+wsl -d Aureus -u root bash -lc "docker ps --format '{{.Names}}\t{{.Ports}}'"
+wsl -d Aureus -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .HostConfig.PortBindings}}'"
+wsl -d Aureus -u root bash -lc "docker inspect aureus-gateway-dev --format '{{json .NetworkSettings.Ports}}'"
+```
+
+15. Seed strategy phải chạy trong runtime có đủ dependencies (`asyncpg`), tránh chạy bằng host Python thiếu package:
+- Triệu chứng lỗi: `ModuleNotFoundError: No module named 'asyncpg'` khi chạy `python -m engine.strategies.seed_strategies` từ host.
+- Cách chạy chuẩn (khuyến nghị): chạy module ngay trong container `aureus-signal-dev`:
+
+```powershell
+wsl -d Aureus -e bash -lc "docker exec aureus-signal-dev python -m engine.strategies.seed_strategies"
+```
+
+- Verify nhanh sau khi seed:
+
+```powershell
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT COUNT(*) AS templates FROM aureus_strategy_templates; SELECT COUNT(*) AS symbol_links FROM aureus_symbol_strategies;\""
+```
+
+16. Khi truyền lệnh có ký tự `$` hoặc regex (`|`) qua PowerShell vào `wsl ... bash -lc`, cần escape để tránh PowerShell nuốt biến hoặc tách lệnh sai:
+- Triệu chứng thường gặp:
+  - Biến shell thành rỗng ngoài ý muốn (ví dụ `DEV_API_PORT=` dù đã source `.env`).
+  - Lỗi parser kiểu `unexpected EOF` hoặc PowerShell hiểu nhầm token như `API` là command.
+- Cách an toàn:
+  - Tránh `echo $VAR` trực tiếp trong chuỗi ngoài PowerShell; dùng `env | grep '^DEV_.*PORT='` để verify.
+  - Nếu bắt buộc in biến trong chuỗi truyền qua PowerShell, escape `$` thành `\$`.
+  - Giữ toàn bộ command Linux trong **một** chuỗi `bash -lc "..."`, hạn chế lồng quote sâu.
+
+```powershell
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && set -a && . ./.env && set +a && env | grep '^DEV_.*PORT='"
+```
+
+17. Nếu script Python cần chạy bằng `.venv` nhưng báo thiếu package (`ModuleNotFoundError`) hoặc `.venv` thiếu `pip/ensurepip`:
+- Triệu chứng:
+  - `./.venv/bin/python: No module named pip`
+  - `./.venv/bin/python: No module named ensurepip`
+- Nguyên nhân thường gặp trên WSL Ubuntu tối giản: không có `python3-venv`, `.venv` cũ bị thiếu seed package.
+- Cách khôi phục an toàn (không cài package vào system Python runtime của project):
+
+```powershell
+wsl -d Aureus -u root -e bash -lc "python3 -m pip install virtualenv && cd /mnt/d/Aureus && python3 -m virtualenv .venv"
+wsl -d Aureus -u root -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python -m pip install redis==7.2.0 asyncpg==0.30.0"
+```
+
+- Sau đó chạy lại script bằng đúng interpreter `.venv/bin/python`.
+
+18. Tránh command substitution `$(...)` phức tạp trong chuỗi truyền từ PowerShell vào WSL (dễ vỡ quote, nhất là với SQL chứa `COUNT(*)`):
+- Không ghép nhiều `echo VAR=$(psql ...)` trong một lệnh.
+- Thay vào đó tách thành nhiều lệnh độc lập hoặc dùng file `.sql` + redirect vào `psql`.
+
+```powershell
+wsl -d Aureus -u root -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/tmp/check_snapshots_count.sql"
+wsl -d Aureus -u root -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus < /mnt/d/Aureus/tmp/check_swing_points_count.sql"
 ```

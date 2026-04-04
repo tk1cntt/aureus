@@ -44,7 +44,7 @@ const AVAILABLE_MODELS = [
     { id: "Qwen/Qwen2.5-3B-Instruct", label: "Qwen 2.5 (3B)", icon: "🦅" },
     { id: "Qwen/Qwen2.5-VL-3B-Instruct", label: "Qwen 2.5-VL (3B)", icon: "👁️" },
     { id: "Nanbeige/Nanbeige4.1-3B", label: "Nanbeige (3B)", icon: "🐼" },
-    { id: "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf", label: "Qwen3.5-9B", icon: "🐼" }
+    { id: "Qwen3.5-9B.Q4_K_M.gguf", label: "Qwen3.5-9B", icon: "🐼" }
 ];
 
 export function ModelSelector() {

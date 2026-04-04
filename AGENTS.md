@@ -1,4 +1,15 @@
 <!-- gitnexus:start -->
+Mọi trao đổi phải dùng tiếng Việt.
+
+Giới hạn token gửi lên LLM là 65536 token. Nếu vượt quá thì hãy tóm tắt lại nội dung.
+
+Never guess. Verify first.
+
+Before making any assumption, check the actual state. Read the file. Run the command. Query the database. Test the output.
+If you cannot verify, ask the user. Do NOT fabricate, hallucinate, or assume any information.
+
+Mỗi lần chạy command lỗi thì hãy đọc file RUN_SERVICES.md để biết cách chạy command. Nếu vẫn lỗi xảy ra thì sau khi sửa đc hãy update vào file RUN_SERVICES.md.
+
 # GitNexus — Code Intelligence
 
 This project is indexed by GitNexus as **Aureus** (3147 symbols, 6538 relationships, 130 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.

@@ -1,6 +1,31 @@
 -- Enable TimescaleDB extension (usually done in DB init, but good to have)
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
+-- Strategy Templates Table
+CREATE TABLE IF NOT EXISTS aureus_strategy_templates (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT              NOT NULL UNIQUE,
+    description TEXT,
+    config      JSONB             NOT NULL,
+    min_score   DOUBLE PRECISION  NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+);
+
+-- Symbol ↔ Strategy Assignment Table
+CREATE TABLE IF NOT EXISTS aureus_symbol_strategies (
+    id          SERIAL PRIMARY KEY,
+    symbol      TEXT              NOT NULL,
+    strategy_id INTEGER           NOT NULL REFERENCES aureus_strategy_templates(id) ON DELETE CASCADE,
+    is_active   BOOLEAN           NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+    UNIQUE (symbol, strategy_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_symbol_strategies_symbol_active
+    ON aureus_symbol_strategies (symbol, is_active);
+CREATE INDEX IF NOT EXISTS idx_symbol_strategies_strategy_id
+    ON aureus_symbol_strategies (strategy_id);
+
 -- Candles Table
 CREATE TABLE IF NOT EXISTS aureus_candles (
     time        TIMESTAMPTZ       NOT NULL,

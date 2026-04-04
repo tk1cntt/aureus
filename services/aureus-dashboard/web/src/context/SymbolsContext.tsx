@@ -19,7 +19,7 @@ interface SymbolsContextType {
 
 const SymbolsContext = createContext<SymbolsContextType | undefined>(undefined);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002/api/v1";
 
 export const SymbolsProvider = ({ children }: { children: ReactNode }) => {
     const [symbols, setSymbols] = useState<SymbolData[]>([]);
