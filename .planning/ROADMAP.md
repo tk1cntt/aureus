@@ -21,7 +21,7 @@
 | 21 | 1/1 | Complete    | 2026-04-03 |
 | 22 | 3/3 | Complete   | 2026-04-04 |
 | 23 | TradingAgents Adapter Implementation | Complete    | 2026-04-04 |
-| 24 | Runtime Routing & Shadow Integration | ROUT-01→02 | PLANNED |
+| 24 | Runtime Routing & Shadow Integration | Complete    | 2026-04-04 |
 | 25 | Rollout Gates & Safe Fallback | ROUT-03→04 | PLANNED |
 | 26 | Verification & Readiness Evidence | TEST-01→04 | PLANNED |
 
