@@ -173,6 +173,7 @@ class TestSessionEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
                 },
                 clear=False,
             ),
+            patch("engine.live_engine.load_symbols_config", return_value={"XAUUSD": {"gmt_user": 7}}),
             patch("engine.live_engine.seed_system_strategies", new=lambda *_a, **_k: asyncio.sleep(0)),
             patch("engine.live_engine.StrategyRegistry", _FakeStrategyRegistry),
             patch("engine.live_engine.SimulatedTradeManager", _FakeTradeManager),
@@ -190,7 +191,9 @@ class TestSessionEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(state_payload, str)
 
         state = json.loads(state_payload)
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
+        tags = set()
+        for item in state.get("signal_history_normalized", []):
+            tags.update(item.get("signals", {}).keys())
         self.assertIn("market_session", tags)
 
         session_hlo = (state.get("tracking_vars") or {}).get("session_hlo") or {}

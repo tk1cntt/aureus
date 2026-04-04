@@ -52,7 +52,8 @@ class TestStory13(unittest.TestCase):
         detector = GapDetector(mock_pool)
         
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(detector.find_gaps("ETHUSDT", "M1", 48))
         
         args = mock_conn.fetch.call_args[0]

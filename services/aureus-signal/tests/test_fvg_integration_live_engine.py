@@ -189,7 +189,11 @@ class TestFVGEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
 
         state_payload_str = cast(str, state_payload)
         state = json.loads(state_payload_str)
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
+        tags = set()
+        for item in state.get("signal_history_normalized", []):
+            for ev in item.get("signals", {}).get("events", []):
+                tags.add(ev.get("tag"))
+                tags.add(ev.get("value"))
         self.assertIn("fvg_up", tags)
 
 

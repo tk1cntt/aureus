@@ -7,8 +7,8 @@
 
 ### Prerequisites & Compatibility
 
-- [ ] **PREP-01**: Team can validate TradingAgents in an isolated Docker environment on WSL before any integration code begins, including symbol compatibility for Aureus targets (`XAUUSD`, `BTCUSD`, configured universe), average API latency, and observed free-tier rate-limit behavior.
-- [ ] **PREP-02**: Team can define and enforce dependency strategy for TradingAgents (optional dependency path with rollback-safe defaults) and apply a hard stop/pivot to another provider if FX/metal compatibility fails acceptance criteria.
+- [x] **PREP-01**: Team can validate TradingAgents in an isolated Docker environment on WSL before any integration code begins, including symbol compatibility for Aureus targets (`XAUUSD`, `BTCUSD`, configured universe), average API latency, and observed free-tier rate-limit behavior.
+- [x] **PREP-02**: Team can define and enforce dependency strategy for TradingAgents (optional dependency path with rollback-safe defaults) and apply a hard stop/pivot to another provider if FX/metal compatibility fails acceptance criteria.
 
 ### Provider Abstraction
 
@@ -57,8 +57,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREP-01 | Phase 21 | Pending |
-| PREP-02 | Phase 21 | Pending |
+| PREP-01 | Phase 21 | Complete |
+| PREP-02 | Phase 21 | Complete |
 | PROV-01 | Phase 22 | Pending |
 | PROV-02 | Phase 22 | Pending |
 | PROV-03 | Phase 22 | Pending |

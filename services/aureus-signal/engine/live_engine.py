@@ -737,7 +737,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     await ensure_stream_group(stream_key, group_name, start_id="0")
                 await asyncio.sleep(1)
                 continue
-            logger.error(f"[GLOBAL] [run_signal_engine] Error: Engine loop error: {e}")
+            logger.error(f"[GLOBAL] [run_signal_engine] Error: Engine loop error: {e}", exc_info=True)
             await asyncio.sleep(1)
 
 # --- AI Queue Logic ---
@@ -1036,3 +1036,4 @@ async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals,
         except Exception as e:
             logger.error(f"[{symbol}] [integrity_and_recalc_task] Error: {e}")
             await asyncio.sleep(60)
+

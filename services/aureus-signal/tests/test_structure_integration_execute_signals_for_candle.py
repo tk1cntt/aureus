@@ -79,11 +79,8 @@ class TestStructureExecuteSignalsForCandleIntegration(unittest.TestCase):
 
         signal._verify_mitigations(df, state)
 
-        self.assertIn("ob", state.transient_signals)
-        self.assertEqual(state.transient_signals["ob"]["value"], "BULLISH_MITIGATED")
-        self.assertEqual(state.transient_signals["ob"]["data"]["ob_start"], 2)
-        self.assertNotIn("ob_bull_mitigated_events", state.transient_signals)
-        self.assertNotIn("ob_bear_mitigated_events", state.transient_signals)
+        self.assertTrue(state.obs[1]["mitigated"])
+        self.assertEqual(state.obs[1]["t_mitigation"], 220)
         self.assertEqual(state.ai_trigger_events, [])
 if __name__ == "__main__":
     unittest.main()

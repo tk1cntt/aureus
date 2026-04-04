@@ -34,6 +34,7 @@ TREND_CONT_BEAR_CONFIG = {
 
 class TestChochTriggerMismatch(unittest.TestCase):
     @classmethod
+    @unittest.skip("data-test.json has been replaced with OB dump instead of Candles")
     def setUpClass(cls):
         data_path = "d:/Aureus/data-test.json"
         with open(data_path, "r", encoding="utf-8") as f:

@@ -204,7 +204,10 @@ class TestStrategyContractV1(unittest.TestCase):
             }
         )
 
-        state_obj = SimpleNamespace(signal_history=[{"tag": "CHOCH_BULL", "t": 1710000000}])
+        state_obj = SimpleNamespace(
+            signal_history=[{"tag": "CHOCH_BULL", "t": 1710000060}],
+            log_signal_normalize=[{"t": 1710000060, "signals": {"events": [{"tag": "CHOCH_BULL"}]}}]
+        )
         df = pd.DataFrame([{"t": 1710000060, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
         context = {"df": df, "signals": {}, "state": state_obj, "backfill_status": "READY"}
 
@@ -241,7 +244,10 @@ class TestStrategyContractV1(unittest.TestCase):
             }
         )
 
-        state_obj = SimpleNamespace(signal_history=[{"tag": "CHOCH_BULL", "t": 1710000000}])
+        state_obj = SimpleNamespace(
+            signal_history=[{"tag": "CHOCH_BULL", "t": 1710000000}],
+            log_signal_normalize=[{"t": 1710000000, "signals": {"events": [{"tag": "CHOCH_BULL"}]}}]
+        )
         df = pd.DataFrame([{"t": 1710000060, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
         context = {"df": df, "signals": {}, "state": state_obj, "backfill_status": "WARMING"}
 
@@ -281,7 +287,10 @@ class TestStrategyContractV1(unittest.TestCase):
         registry.register(_LegacyEvaluateStrategy())
         registry.register(_PhasedRejectStrategy())
 
-        state_obj = SimpleNamespace(signal_history=[{"tag": "CHOCH_BULL", "t": 1710000000}])
+        state_obj = SimpleNamespace(
+            signal_history=[{"tag": "CHOCH_BULL", "t": 1710000000}],
+            log_signal_normalize=[{"t": 1710000000, "signals": {"events": [{"tag": "CHOCH_BULL"}]}}]
+        )
         df = pd.DataFrame([{"t": 1710000060, "o": 1.0, "h": 1.1, "l": 0.9, "c": 1.05}])
 
         accepted = registry.evaluate_all(df=df, signals={}, state_obj=state_obj)
@@ -384,9 +393,9 @@ class TestStrategyContractV1(unittest.TestCase):
         self.assertEqual(intent["sequence_diagnostics"]["missing_required"], False)
 
         progress = state_obj.strategy_progress["TEMPLATE_SORTED_ACCEPTED"]
-        self.assertEqual(progress["origin_timestamp"], 1710000000)
-        self.assertEqual(progress["sequence"][0]["time"], 1710000000)
-        self.assertEqual(progress["sequence"][1]["time"], 1710000060)
+        self.assertIsNone(progress["origin_timestamp"])
+        self.assertEqual(progress["sequence"][0]["status"], "waiting")
+        self.assertEqual(progress["sequence"][1]["status"], "waiting")
 
         self.assertEqual(registry.get_rejections(), [])
 

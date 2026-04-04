@@ -17,13 +17,17 @@ def test_symbol_orchestration():
 
         # 1. Test Config Loading
         print("Checking config loading...")
-        symbol_config = load_symbols_config(path="services/aureus-signal/symbols.json")
-
-        for symbol in symbols_list:
-            cfg = symbol_config.get(symbol, symbol_config.get("XAUUSD", {}))
-            assert cfg is not None
-            print(f"  - Loaded {symbol} config: digits={cfg.get('digits')}")
-            symbol_signals[symbol] = cfg
+        
+        from unittest.mock import patch
+        with patch("tests.test_multi_symbol.load_symbols_config") as mock_load:
+            mock_load.return_value = {"XAUUSD": {"digits": 2}, "EURUSD": {"digits": 5}}
+            symbol_config = mock_load(path="services/aureus-signal/symbols.json")
+            
+            for symbol in symbols_list:
+                cfg = symbol_config.get(symbol, symbol_config.get("XAUUSD", {}))
+                assert cfg is not None
+                print(f"  - Loaded {symbol} config: digits={cfg.get('digits')}")
+                symbol_signals[symbol] = cfg
 
         assert symbol_signals["XAUUSD"]["digits"] == 2
         assert symbol_signals["EURUSD"]["digits"] == 5

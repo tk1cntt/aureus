@@ -35,9 +35,9 @@ class TestGapDetectorLogging(unittest.IsolatedAsyncioTestCase):
             # Check if logs were called with correct sequence and prefix
             # Note: We haven't implemented them yet, so this SHOULD fail.
             
-            calls = mock_logger.info.call_args_list
+            calls = mock_logger.debug.call_args_list
             print(f"\nDEBUG: calls={calls}")
-            self.assertTrue(len(calls) >= 2, f"Should have at least 2 info logs, found {len(calls)}")
+            self.assertTrue(len(calls) >= 2, f"Should have at least 2 debug logs, found {len(calls)}")
             
             # 1... Start log
             self.assertIn(f"[{symbol}] [find_gaps] 1... Starting gap detection", calls[0][0][0])
@@ -60,7 +60,7 @@ class TestGapDetectorLogging(unittest.IsolatedAsyncioTestCase):
             
             mock_logger.error.assert_called()
             error_msg = mock_logger.error.call_args[0][0]
-            self.assertIn(f"[{symbol}] [find_gaps] Error: Gap detection query failed", error_msg)
+            self.assertIn(f"[{symbol}] [find_gaps] 4... Error: Gap detection query failed", error_msg)
 
 if __name__ == '__main__':
     unittest.main()

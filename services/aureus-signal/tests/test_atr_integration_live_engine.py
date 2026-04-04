@@ -170,10 +170,13 @@ class TestATREnginePathIntegration(unittest.IsolatedAsyncioTestCase):
                 await run_signal_engine(db_pool=fake_db, redis_client=fake_redis)
 
         state_payload = fake_redis.state_payload
+        print("STATE_PAYLOAD=", state_payload)
         self.assertIsNotNone(state_payload, "Expected engine to persist state to Redis")
         self.assertIsInstance(state_payload, str)
         state = json.loads(state_payload)
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
+        tags = set()
+        for item in state.get("signal_history_normalized", []):
+            tags.update(item.get("signals", {}).keys())
         self.assertIn("atr_14", tags)
 
 

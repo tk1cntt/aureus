@@ -175,7 +175,11 @@ class TestPivotsEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
 
         state = json.loads(state_payload)
         pivot_tags = {"hh", "hl", "lh", "ll"}
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
+        tags = set()
+        for item in state.get("signal_history_normalized", []):
+            zigzag = item.get("signals", {}).get("zigzag", {})
+            if "value" in zigzag:
+                tags.add(str(zigzag.get("value")).lower())
         self.assertTrue(any(tag in pivot_tags for tag in tags))
 
 

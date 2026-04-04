@@ -11,6 +11,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.live_engine import (
     ENGINE_VERSION,
     SPEC_VERSION,
+)
+from engine.strategy_executor import (
     emit_registry_rejections,
     enrich_registry_rejections_with_contract_metadata,
     enrich_strategy_decisions_with_contract_metadata,

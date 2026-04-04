@@ -177,8 +177,10 @@ class TestVolumeSMAEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(state_payload, str)
         state = json.loads(state_payload)
         
-        # Verify vol_sma_20 triggered a spike in signal history
-        tags = [item.get("tag") for item in state.get("signal_history", [])]
+        tags = []
+        for item in state.get("signal_history_normalized", []):
+            for ev in item.get("signals", {}).get("events", []):
+                tags.append(ev.get("tag"))
         self.assertIn("vol_sma_20", tags)
 
 
