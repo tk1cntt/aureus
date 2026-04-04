@@ -18,10 +18,10 @@
 
 ### TradingAgents Adapter
 
-- [ ] **ADPT-01**: System can fetch TradingAgents market data and normalize it into `open/high/low/close/volume/timestamp`.
-- [ ] **ADPT-02**: System can map Aureus symbols to provider symbols via validated configuration.
-- [ ] **ADPT-03**: Adapter enforces cache/backoff behavior to reduce rate-limit failures.
-- [ ] **ADPT-04**: Adapter reports malformed/rate-limit/fallback failures in observable metrics/log taxonomy.
+- [x] **ADPT-01**: System can fetch TradingAgents market data and normalize it into `open/high/low/close/volume/timestamp`.
+- [x] **ADPT-02**: System can map Aureus symbols to provider symbols via validated configuration.
+- [x] **ADPT-03**: Adapter enforces cache/backoff behavior to reduce rate-limit failures.
+- [x] **ADPT-04**: Adapter reports malformed/rate-limit/fallback failures in observable metrics/log taxonomy.
 
 ### Runtime Routing & Rollout Safety
 
@@ -62,10 +62,10 @@
 | PROV-01 | Phase 22 | Complete |
 | PROV-02 | Phase 22 | Complete |
 | PROV-03 | Phase 22 | Complete |
-| ADPT-01 | Phase 23 | Pending |
-| ADPT-02 | Phase 23 | Pending |
-| ADPT-03 | Phase 23 | Pending |
-| ADPT-04 | Phase 23 | Pending |
+| ADPT-01 | Phase 23 | Complete |
+| ADPT-02 | Phase 23 | Complete |
+| ADPT-03 | Phase 23 | Complete |
+| ADPT-04 | Phase 23 | Complete |
 | ROUT-01 | Phase 24 | Pending |
 | ROUT-02 | Phase 24 | Pending |
 | ROUT-03 | Phase 25 | Pending |
