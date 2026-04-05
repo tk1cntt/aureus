@@ -296,6 +296,24 @@ services:
       - ./services/aureus-signal/symbols.json:/app/symbols.json
       - ./logs:/app/logs
 
+  aureus-notifier-dev:
+    build:
+      context: ./services/aureus-notifier
+    container_name: aureus-notifier-dev
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_DEFAULT_CHAT_ID=${TELEGRAM_DEFAULT_CHAT_ID}
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    networks:
+      - aureus_dev_net
+    depends_on:
+      - redis-dev
+    restart: unless-stopped
+
 networks:
   aureus_dev_net:
     driver: bridge
