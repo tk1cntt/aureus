@@ -20,7 +20,7 @@
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
 | 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | ✅ DONE |
-| 27 | Telegram Notification Service | NOTIF-02→06 | PLANNED |
+| 27 | Telegram Notification Service | NOTIF-02→06 | ✅ DONE |
 | 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
 | 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
 | 30 | Trade State Management | TRADE-01→02, TRADE-05 | PLANNED |
@@ -50,12 +50,19 @@
 **Goal:** Xây dựng aureus-notifier service nhận events từ Redis và gửi thông báo lên Telegram.
 
 **Success Criteria:**
-1. Service aureus-notifier chạy trong Docker, subscribe Redis channels
-2. Signal alerts gửi lên Telegram với format đầy đủ (symbol, signal type, value)
-3. Strategy match alerts gửi với entry details (direction, entry, SL/TP)
-4. Filter config cho phép bật/tắt từng loại signal
-5. Rate limiting hoạt động (không vượt 25 msg/s)
-6. Multi-channel support hoạt động
+1. ✅ Service aureus-notifier chạy trong Docker, subscribe Redis channels
+2. ✅ Signal alerts gửi lên Telegram với format đầy đủ (symbol, signal type, value)
+3. ✅ Strategy match alerts gửi với entry details (direction, entry, SL/TP)
+4. ✅ Filter config cho phép bật/tắt từng loại signal
+5. ✅ Rate limiting hoạt động (1 msg/2s per chat, queue max 100)
+6. ✅ Multi-channel support hoạt động
+
+**Implementation:**
+- 6 source files + 3 test files (34 tests, all passing)
+- `aureus-notifier-dev` service in docker-compose.dev.yml
+- HTML-formatted messages with emoji (📊 SIGNAL ALERT, 🎯 STRATEGY MATCH)
+- Per-chat rate limiting via asyncio.Queue, exponential backoff retry
+- Runtime config reload via Redis pub/sub
 
 ---
 
@@ -143,8 +150,8 @@
 
 ## Next Up
 
-**Phase 27: Telegram Notification Service** — xây dựng aureus-notifier service nhận events từ Redis pub/sub.
+**Phase 28: AureusProvider.mq5 Bidirectional Extension** — mở rộng MT5 EA để nhận order commands.
 
-`/gsd-discuss-phase 27`
+`/gsd-discuss-phase 28`
 
 <sub>`/clear` first → fresh context window</sub>

@@ -10,11 +10,11 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 ### Telegram Notification (NOTIF)
 
 - [ ] **NOTIF-01**: Signal engine publishes signal events qua Redis pub/sub khi có signal mới
-- [ ] **NOTIF-02**: aureus-notifier service nhận signal events và gửi lên Telegram
-- [ ] **NOTIF-03**: Cấu hình filter signal (chọn signal nào được phép gửi Telegram)
-- [ ] **NOTIF-04**: Gửi strategy match alert lên Telegram khi strategy khớp (symbol, direction, entry, SL/TP)
-- [ ] **NOTIF-05**: Rate limiting và error recovery cho Telegram API (retry + queue)
-- [ ] **NOTIF-06**: Hỗ trợ gửi nhiều chat/channel
+- [x] **NOTIF-02**: aureus-notifier service nhận signal events và gửi lên Telegram
+- [x] **NOTIF-03**: Cấu hình filter signal (chọn signal nào được phép gửi Telegram)
+- [x] **NOTIF-04**: Gửi strategy match alert lên Telegram khi strategy khớp (symbol, direction, entry, SL/TP)
+- [x] **NOTIF-05**: Rate limiting và error recovery cho Telegram API (retry + queue)
+- [x] **NOTIF-06**: Hỗ trợ gửi nhiều chat/channel
 
 ### Strategy Enhancement (STRAT)
 
@@ -80,11 +80,11 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | NOTIF-01 | Phase 26 | Pending |
-| NOTIF-02 | Phase 27 | Pending |
-| NOTIF-03 | Phase 27 | Pending |
-| NOTIF-04 | Phase 27 | Pending |
-| NOTIF-05 | Phase 27 | Pending |
-| NOTIF-06 | Phase 27 | Pending |
+| NOTIF-02 | Phase 27 | ✅ Done |
+| NOTIF-03 | Phase 27 | ✅ Done |
+| NOTIF-04 | Phase 27 | ✅ Done |
+| NOTIF-05 | Phase 27 | ✅ Done |
+| NOTIF-06 | Phase 27 | ✅ Done |
 | STRAT-01 | Phase 26 | Pending |
 | STRAT-02 | Phase 26 | Pending |
 | STRAT-03 | Phase 26 | Pending |
@@ -117,4 +117,4 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after initial definition*
+*Last updated: 2026-04-06 after Phase 27 completion*

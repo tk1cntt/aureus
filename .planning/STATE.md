@@ -3,23 +3,23 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
 status: executing
-last_updated: "2026-04-05T23:10:00.000Z"
-last_activity: 2026-04-05 -- Phase 26 executed successfully (21/21 tests passed)
+last_updated: "2026-04-06T00:00:00.000Z"
+last_activity: 2026-04-06 -- Phase 27 executed successfully (34/34 tests passed)
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # STATE
 
 ## Current Position
 
-Phase: 26 (signal-event-pipeline-strategy-contract) — DONE ✅
+Phase: 27 (telegram-notification-service) — DONE ✅
 Plan: 1 of 1 — COMPLETED
-Status: Phase 26 executed, all tests passed
-Last activity: 2026-04-05 -- Phase 26 executed successfully
+Status: Phase 27 executed, all 34 tests passed
+Last activity: 2026-04-06 -- Phase 27 executed successfully
 
 ## Architecture Decision
 
@@ -43,7 +43,7 @@ Last activity: 2026-04-05 -- Phase 26 executed successfully
 - Phase 15.15 inserted after Phase 15.14.1: Align strategy with new tags (URGENT)
 - Phase 15.16 inserted after Phase 15.15: Investigate CHOCH-strategy backtest mismatch (URGENT)
 - Phase 15.17 inserted after Phase 15.16: Decouple Strategy Engine into 2 microservices (URGENT)
-- 2026-03-27: Phase 15.10 được mở lại để đồng bộ contract `signal_history/log_signal` sau khi rollback một phần.
+- 2026-03-28: Phase 15.10 được mở lại để đồng bộ contract `signal_history/log_signal` sau khi rollback một phần.
 - `SymbolState.log_signal` hiện ở legacy signature (`tag`, `timestamp`, `value`, `data`) nhưng nhiều call-site vẫn truyền metadata kwargs (`category`, `explain`, `inputs`) trong:
   - `services/aureus-signal/engine/live_engine.py`
   - `services/aureus-signal/engine/backtest_engine.py`
