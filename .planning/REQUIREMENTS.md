@@ -27,8 +27,8 @@
 
 - [x] **ROUT-01**: Runtime supports provider modes `redis`, `shadow`, and `tradingagents` with `redis` as default.
 - [x] **ROUT-02**: Shadow mode can compare TradingAgents feed against Redis baseline without impacting live primary flow.
-- [ ] **ROUT-03**: Rollout gates evaluate malformed/fallback/lag/drift thresholds and prevent unsafe promotion.
-- [ ] **ROUT-04**: Runtime can fail safe back to Redis when TradingAgents gate conditions are violated.
+- [x] **ROUT-03**: Rollout gates evaluate malformed/fallback/lag/drift thresholds and prevent unsafe promotion.
+- [x] **ROUT-04**: Runtime can fail safe back to Redis when TradingAgents gate conditions are violated.
 
 ### Verification
 
@@ -68,8 +68,8 @@
 | ADPT-04 | Phase 23 | Complete |
 | ROUT-01 | Phase 24 | Complete |
 | ROUT-02 | Phase 24 | Complete |
-| ROUT-03 | Phase 25 | Pending |
-| ROUT-04 | Phase 25 | Pending |
+| ROUT-03 | Phase 25 | Complete |
+| ROUT-04 | Phase 25 | Complete |
 | TEST-01 | Phase 26 | Pending |
 | TEST-02 | Phase 26 | Pending |
 | TEST-03 | Phase 26 | Pending |
