@@ -19,7 +19,7 @@
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | PLANNED |
+| 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | ✅ DONE |
 | 27 | Telegram Notification Service | NOTIF-02→06 | PLANNED |
 | 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
 | 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
@@ -143,8 +143,8 @@
 
 ## Next Up
 
-**Phase 26: Signal Event Pipeline & Strategy Contract** — thiết lập foundation cho toàn bộ milestone.
+**Phase 27: Telegram Notification Service** — xây dựng aureus-notifier service nhận events từ Redis pub/sub.
 
-`/gsd-discuss-phase 26`
+`/gsd-discuss-phase 27`
 
 <sub>`/clear` first → fresh context window</sub>
