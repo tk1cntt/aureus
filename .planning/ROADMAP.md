@@ -7,123 +7,144 @@
 | v1.1 | Signal Optimization | 07-13 | ✅ Shipped 2026-03-22 |
 | v1.2 | Strategy Sequence Engine | 14-15 | ✅ Shipped 2026-03-22 |
 | v1.3 | Backtesting & Measurement Engine | 15.5-20 | ✅ Closed 2026-04-03 (known gaps logged) |
+| v1.4 | TradingAgents Market Data Integration | 21-25 | ✅ Closed 2026-04-05 (known gaps logged) |
 
 ---
 
-## Current Milestone: v1.4 TradingAgents Market Data Integration
+## Current Milestone: v1.5 Signal Delivery & Trade Management
 
-**Goal:** Integrate TradingAgents market data through a provider abstraction and shadow-gated rollout without breaking the Redis-first ingest pipeline.
+**Goal:** Xây dựng pipeline hoàn chỉnh từ signal → notification → order execution → result tracking, với dashboard thống kê performance.
 
-**Phases:** 6
+**Phases:** 8
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 21 | 1/1 | Complete    | 2026-04-03 |
-| 22 | 3/3 | Complete   | 2026-04-04 |
-| 23 | TradingAgents Adapter Implementation | Complete    | 2026-04-04 |
-| 24 | Runtime Routing & Shadow Integration | Complete    | 2026-04-04 |
-| 25 | 1/1 | Complete    | 2026-04-05 |
-| 26 | Verification & Readiness Evidence | TEST-01→04 | PLANNED |
+| 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | PLANNED |
+| 27 | Telegram Notification Service | NOTIF-02→06 | PLANNED |
+| 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
+| 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
+| 30 | Trade State Management | TRADE-01→02, TRADE-05 | PLANNED |
+| 31 | MT5 History Sync | TRADE-03→04 | PLANNED |
+| 32 | Trade Performance API | PERF-01→07 | PLANNED |
+| 33 | Performance Dashboard UI | PERF-08 | PLANNED |
 
 ---
 
-## Phase 21: Prerequisites & Compatibility Validation
+## Phase 26: Signal Event Pipeline & Strategy Contract
 
-**Requirements:** PREP-01, PREP-02
-**Goal:** Confirm TradingAgents compatibility, symbol mapping feasibility, and dependency strategy before implementation.
+**Requirements:** NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04
+**Goal:** Thiết lập foundation: signal engine publish events qua Redis pub/sub và mở rộng strategy contract với trade parameters.
 
 **Success Criteria:**
-1. Compatibility report from isolated Docker-on-WSL test documents symbol support (`XAUUSD`, `BTCUSD`, configured universe), average API latency, and observed free-tier rate limits.
-2. Dependency strategy is chosen and documented with rollback path.
-3. If FX/metal compatibility fails acceptance criteria, milestone is explicitly paused and provider pivot recommendation is documented before any implementation phase starts.
+1. Signal engine phát signal events lên Redis pub/sub channel khi có signal mới
+2. Strategy output chứa entry_type (market/limit/stop), SL, TP, lot_size
+3. Existing strategies tiếp tục hoạt động bình thường (backward compatible)
+4. Magic number được assign per strategy trong config
+5. Unit tests xác nhận contract mới và backward compatibility
 
 ---
 
-### Phase 21.1: TradingAgents LLM Proxy Configuration Fix Gap (INSERTED)
+## Phase 27: Telegram Notification Service
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 21
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 21.1 to break down) (completed 2026-04-03)
-
-### Phase 21.1.1: Patch TradingAgents Source Code for LLM Proxy Support (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 21.1
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 21.1.1 to break down) (completed 2026-04-03)
-
-## Phase 22: Provider Abstraction Extraction
-
-**Requirements:** PROV-01, PROV-02, PROV-03
-**Goal:** Introduce provider abstraction while preserving Redis behavior as default baseline.
+**Requirements:** NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06
+**Goal:** Xây dựng aureus-notifier service nhận events từ Redis và gửi thông báo lên Telegram.
 
 **Success Criteria:**
-1. Market data provider interface exists with canonical candle contract.
-2. Redis implementation is extracted without behavior regression.
-3. Backward-compatible client construction path remains available.
+1. Service aureus-notifier chạy trong Docker, subscribe Redis channels
+2. Signal alerts gửi lên Telegram với format đầy đủ (symbol, signal type, value)
+3. Strategy match alerts gửi với entry details (direction, entry, SL/TP)
+4. Filter config cho phép bật/tắt từng loại signal
+5. Rate limiting hoạt động (không vượt 25 msg/s)
+6. Multi-channel support hoạt động
 
 ---
 
-## Phase 23: TradingAgents Adapter Implementation
+## Phase 28: AureusProvider.mq5 Bidirectional Extension
 
-**Requirements:** ADPT-01, ADPT-02, ADPT-03, ADPT-04
-**Goal:** Add TradingAgents adapter with symbol mapping, normalization, caching, and error observability.
+**Requirements:** ORDER-04, ORDER-05, ORDER-06
+**Goal:** Mở rộng MT5 EA để nhận order commands từ Aureus và push order events ngược lại.
 
 **Success Criteria:**
-1. Adapter emits canonical candle payloads for mapped symbols.
-2. Cache/backoff controls reduce rate-limit risk under configured cadence.
-3. Error taxonomy is emitted for malformed/rate-limit/fallback scenarios.
-4. Adapter behavior is isolated behind provider abstraction.
+1. EA nhận và parse order commands (OPEN_ORDER, CLOSE_ORDER) qua TCP
+2. EA execute OrderSend() cho market và pending orders
+3. EA push order events (ORDER_OPENED, ORDER_CLOSED, ORDER_FAILED) về server
+4. ACK/NACK protocol hoạt động cho mỗi command
+5. Heartbeat và reconnect logic vẫn hoạt động bình thường
 
 ---
 
-## Phase 24: Runtime Routing & Shadow Integration
+## Phase 29: MT5 Order Execution Service
 
-**Requirements:** ROUT-01, ROUT-02
-**Goal:** Add runtime provider mode routing and shadow integration with Redis as default.
+**Requirements:** ORDER-01, ORDER-02, ORDER-03, ORDER-07
+**Goal:** Xây dựng aureus-trader service nhận strategy matches và gửi orders xuống MT5.
 
 **Success Criteria:**
-1. Runtime mode selection (`redis|shadow|tradingagents`) is config-driven and validated.
-2. Shadow mode performs comparison without disrupting Redis primary flow.
-3. Runtime logs/metrics expose source attribution for troubleshooting.
+1. Service aureus-trader chạy trong Docker, subscribe Redis strategy:matches channel
+2. Tạo và gửi market order xuống MT5 qua TCP
+3. Tạo và gửi pending order (limit/stop) xuống MT5 qua TCP
+4. Idempotency key chống duplicate execution
+5. Order queue persist pending orders khi MT5 disconnect
 
 ---
 
-## Phase 25: Rollout Gates & Safe Fallback
+## Phase 30: Trade State Management
 
-**Requirements:** ROUT-03, ROUT-04
-**Goal:** Enforce drift/lag/error gates and automatic safety fallback.
+**Requirements:** TRADE-01, TRADE-02, TRADE-05
+**Goal:** Quản lý vòng đời order với state machine và persistent storage.
 
 **Success Criteria:**
-1. Gate thresholds are codified for malformed payloads, fallback bursts, lag, and drift.
-2. Gate failure path prevents unsafe TradingAgents promotion.
-3. Redis fallback behavior is deterministic and observable.
+1. Order state machine tracking (pending → sent → filled → closed) hoạt động
+2. Trade records lưu vào PostgreSQL/TimescaleDB
+3. Magic number filter phân biệt bot vs manual trades
+4. DB schema bao gồm: ticket, symbol, direction, entry_price, sl, tp, lot, status, profit, timestamps
 
 ---
 
-## Phase 26: Verification & Readiness Evidence
+## Phase 31: MT5 History Sync
 
-**Requirements:** TEST-01, TEST-02, TEST-03, TEST-04
-**Goal:** Deliver automated and manual verification evidence for milestone acceptance.
+**Requirements:** TRADE-03, TRADE-04
+**Goal:** Hybrid sync: push events real-time + poll reconciliation fallback.
 
 **Success Criteria:**
-1. Provider, adapter, and gate tests are implemented and passing.
-2. Shadow validation checklist can be executed end-to-end.
-3. Milestone readiness summary includes evidence for/against primary promotion.
+1. Push events từ MT5 EA cập nhật trade records real-time
+2. Poll reconciliation chạy mỗi 30-60s, phát hiện và fill gaps
+3. Không mất trade data dù có disconnect hay EA restart
+4. Reconciliation log ghi nhận mọi discrepancy được sửa
+
+---
+
+## Phase 32: Trade Performance API
+
+**Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07
+**Goal:** API endpoints tính toán và trả về performance metrics.
+
+**Success Criteria:**
+1. API `/api/trades` trả danh sách trades với entry/exit details
+2. Win rate, Profit factor, Max drawdown, Average R:R tính toán chính xác
+3. Equity curve data trả về time series
+4. Filter hoạt động: theo symbol, strategy, timeframe
+5. API response time < 500ms cho dataset up to 10k trades
+
+---
+
+## Phase 33: Performance Dashboard UI
+
+**Requirements:** PERF-08
+**Goal:** Trang web thống kê performance tích hợp vào aureus-dashboard.
+
+**Success Criteria:**
+1. Trang trade history hiển thị danh sách trades với pagination
+2. Performance metrics cards (win rate, PF, drawdown, R:R) hiển thị chính xác
+3. Equity curve chart với recharts
+4. Filters UI hoạt động (symbol, strategy, date range)
+5. Responsive design consistent với existing dashboard
 
 ---
 
 ## Next Up
 
-**Phase 21: Prerequisites & Compatibility Validation** — establish feasibility constraints before code-level integration.
+**Phase 26: Signal Event Pipeline & Strategy Contract** — thiết lập foundation cho toàn bộ milestone.
 
-`/gsd-discuss-phase 21`
+`/gsd-discuss-phase 26`
 
 <sub>`/clear` first → fresh context window</sub>
