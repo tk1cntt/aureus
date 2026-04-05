@@ -666,6 +666,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
                             )
 
+                            # Publish signal event to pub/sub for downstream consumers
+                            from engine.signal_event_publisher import publish_signal_event
+                            await publish_signal_event(
+                                r, symbol, "SIGNAL_EVENT", ts_unix,
+                                {"signals_snapshot_keys": list(signals_snapshot.keys()) if isinstance(signals_snapshot, dict) else []}
+                            )
+
                             await r.xack(stream_key, group_name, entry_id)
 
                             # --- EVENT EVALUATION ---

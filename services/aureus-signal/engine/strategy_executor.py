@@ -405,6 +405,12 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             )
                             await emit_registry_rejections(r, symbol, enriched_rejections)
 
+                        # Publish strategy match events to pub/sub for downstream consumers
+                        if strategy_results:
+                            from engine.signal_event_publisher import publish_strategy_match
+                            for res in strategy_results:
+                                await publish_strategy_match(r, symbol, res)
+
                         if execution_mode == "simulated":
                             candle_data = {
                                 "t": str(ts_unix),
