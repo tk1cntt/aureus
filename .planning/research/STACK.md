@@ -1,37 +1,42 @@
-# STACK
+# Stack Research: Signal Delivery & Trade Management
 
-## Scope
-Research stack additions/changes needed for **v1.4 TradingAgents Market Data Integration** in Aureus.
+## New Dependencies Required
 
-## Existing Baseline
-- `aureus-nautilus-node` currently ingests via Redis stream (`xread`) and publishes Nautilus-compatible bars.
-- Runtime/config is Python-based with environment-driven settings.
-- Rollout safety exists via `rollout_gates.py`.
+### Python Services
 
-## Recommended Stack Additions
+| Library | Version | Purpose | Rationale |
+|---------|---------|---------|-----------|
+| `python-telegram-bot` | v21.x | Telegram Bot API | Fully async (asyncio-native), built-in job queue, rate limiting support |
+| `aiohttp` | v3.x | Async HTTP client | For webhook mode or auxiliary HTTP calls |
+| `asyncpg` | v0.29+ | Already in stack | TimescaleDB/PostgreSQL async driver — reuse for trade DB |
+| `redis` | v5.x | Already in stack | Event pub/sub for signal→notifier pipeline |
+| `pydantic` | v2.x | Data validation | Order request/response schema validation |
 
-### 1) Provider abstraction in-node (required)
-- Add internal provider protocol/module in `services/aureus-nautilus-node`.
-- Keep Redis provider as default implementation.
-- Add TradingAgents provider as optional implementation.
+### MQL5 (MT5 EA)
 
-### 2) TradingAgents dependency strategy
-- Prefer **optional dependency** in node service (feature-flagged by provider mode).
-- If package volatility/rate-limit constraints are high, allow migration path to sidecar service later.
+| Component | Purpose | Notes |
+|-----------|---------|-------|
+| Native Socket API | Bidirectional TCP | `SocketCreate`, `SocketConnect`, `SocketSend`, `SocketRead`, `SocketIsReadable` — built-in, no DLL needed |
+| `OrderSend()` / `OrderSendAsync()` | Trade execution | Native MQL5 function for market/pending orders |
+| `HistorySelect()` / `HistoryOrdersTotal()` | Trade history | For push-based history reporting |
 
-### 3) Cache + throttle primitives
-- Add in-adapter TTL cache (`AUREUS_TA_CACHE_TTL_SECONDS`) to avoid REST over-polling.
-- Add lightweight backoff/fallback controls at adapter boundary.
+### Dashboard (React/TypeScript)
 
-### 4) Symbol mapping configuration
-- Add `AUREUS_TRADINGAGENTS_SYMBOL_MAP` as JSON map (Aureus symbol → provider symbol).
-- Validate required mappings on startup for configured symbol universe.
+| Library | Purpose | Notes |
+|---------|---------|-------|
+| `recharts` | Already in stack | Reuse for performance charts (equity curve, drawdown) |
+| Existing FastAPI backend | API layer | Extend with trade performance endpoints |
 
-## Integration Constraints
-- Maintain backward-compatible default mode: `redis`.
-- Ensure shadow mode can run without changing existing live execution contracts.
-- Keep output payload schema fixed: `open/high/low/close/volume/timestamp`.
+## What NOT to Add
 
-## What Not To Add (now)
-- No immediate cross-service architecture rewrite.
-- No direct production cutover to TradingAgents before shadow drift gates pass.
+- **MetaTrader5 Python library**: Requires MT5 terminal on same machine as Python service — doesn't fit Docker architecture
+- **ZeroMQ for MT5**: Already analyzed (see `mql5/ANALYSIS_ZMQ_VS_TCP.md`) — native TCP chosen for simplicity
+- **Separate database**: Reuse existing TimescaleDB/PostgreSQL — no need for new DB engine
+- **External trade analytics libraries** (VectorBT, Backtesting.py): Overkill for dashboard metrics — custom calculation with numpy/pandas is simpler and more maintainable
+
+## Integration Points
+
+- Redis pub/sub: signal engine → notifier (existing pattern from `aureus-signal`)
+- TCP socket: aureus-trader → AureusProvider.mq5 (extend existing gateway TCP)
+- PostgreSQL/TimescaleDB: trade state persistence (extend existing DB)
+- FastAPI: dashboard API (extend existing `aureus-dashboard/api`)
