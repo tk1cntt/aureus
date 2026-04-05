@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from engine.logging_common import get_logger
+from engine.snapshot_utils import VALID_ENTRY_TYPES, VALID_SIZE_MODES
 
 from .base import BaseStrategy
 
@@ -32,6 +33,7 @@ class TemplateStrategy(BaseStrategy):
         self.exit_config = config.get("exit_config", {})
         self.context_filters = config.get("context_filters", [])  # Pillar 1: WHAT
         self.trade_execution = config.get("trade_execution", {})  # Pillar 3: HOW
+        self.magic_number = config.get("magic_number", self.strategy_id * 1000)
 
     # ------------------------------------------------------------------ #
     # Pillar 1: WHAT — Context Pre-condition Evaluator
@@ -654,7 +656,15 @@ class TemplateStrategy(BaseStrategy):
         size_from_env = float(os.getenv("SIGNAL_ORDER_SIZE", "1.0"))
 
         # Size: trade_execution > exit_config > env
-        size = float(te.get("size", exit_config.get("size", size_from_env)))
+        size_value = float(te.get("size_value", te.get("size", exit_config.get("size_value", exit_config.get("size", size_from_env)))))
+        size_mode = str(te.get("size_mode", exit_config.get("size_mode", "FIXED_UNITS"))).upper()
+        if size_mode not in VALID_SIZE_MODES:
+            size_mode = "FIXED_UNITS"
+
+        # Entry type
+        entry_type = te.get("entry_type", exit_config.get("entry_type", "MARKET"))
+        if entry_type not in VALID_ENTRY_TYPES:
+            entry_type = "MARKET"
 
         # SL: trade_execution > exit_config
         sl = te.get("sl") or exit_config.get("sl")
@@ -673,10 +683,13 @@ class TemplateStrategy(BaseStrategy):
 
         return {
             "intent_id": intent.get("intent_id"),
-            "entry_type": te.get("entry_type", exit_config.get("entry_type", "MARKET")),
+            "entry_type": entry_type,
             "entry_policy": te.get("entry_policy", exit_config.get("entry_policy", "IMMEDIATE")),
             "direction": intent.get("direction", "BUY"),
-            "size": size,
+            "size": size_value,
+            "size_value": size_value,
+            "size_mode": size_mode,
+            "magic_number": self.magic_number,
             "sl": sl,
             "tp": tp,
             "trailing": trailing,

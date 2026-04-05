@@ -27,6 +27,7 @@ class BaseStrategy(ABC):
         self.weight = weight
         self.strategy_version = strategy_version or "v1"
         self.spec_compatibility = tuple(spec_compatibility or ("v1",))
+        self.magic_number = 0
 
     @abstractmethod
     def evaluate(
@@ -98,6 +99,9 @@ class BaseStrategy(ABC):
             "entry_policy": "IMMEDIATE",
             "direction": direction,
             "size": 1.0,
+            "size_value": 1.0,
+            "size_mode": "FIXED_UNITS",
+            "magic_number": self.magic_number,
             "sl": None,
             "tp": None,
             "trailing": None,

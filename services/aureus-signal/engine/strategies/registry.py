@@ -194,7 +194,7 @@ class StrategyRegistry:
 
         # Query templates and join with symbol-specific overrides (if they exist)
         query = """
-            SELECT t.id, t.name, t.config, t.min_score
+            SELECT t.id, t.name, t.config, t.min_score, t.magic_number
             FROM aureus_strategy_templates t
             LEFT JOIN aureus_symbol_strategies ss ON t.id = ss.strategy_id AND ss.symbol = $1
             WHERE t.id = ANY($2)
@@ -208,6 +208,7 @@ class StrategyRegistry:
             config["id"] = r["id"]
             config["name"] = name
             config["min_score_threshold"] = r["min_score"]
+            config["magic_number"] = r["magic_number"] or (r["id"] * 1000)
 
             strat = TemplateStrategy(config)
             self.register(strat)
@@ -473,6 +474,9 @@ class StrategyRegistry:
                         "entry_type": order_plan.get("entry_type", "MARKET"),
                         "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),
                         "size": order_plan.get("size"),
+                        "size_value": order_plan.get("size_value", order_plan.get("size")),
+                        "size_mode": order_plan.get("size_mode", "FIXED_UNITS"),
+                        "magic_number": order_plan.get("magic_number", 0),
                         "sl": order_plan.get("sl"),
                         "tp": order_plan.get("tp"),
                         "trailing": order_plan.get("trailing"),
