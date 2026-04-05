@@ -67,6 +67,9 @@ REQUIRED_ORDER_PLAN_KEYS = (
     "expiry_policy",
 )
 
+VALID_ENTRY_TYPES = ("MARKET", "LIMIT", "STOP")
+VALID_SIZE_MODES = ("FIXED_UNITS", "FIXED_LOT", "RISK_PERCENT")
+
 
 class DecisionTraceValidationError(ValueError):
     """Raised when a decision trace payload does not match required schema."""
