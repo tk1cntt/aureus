@@ -101,6 +101,27 @@ blocked: 0
 
 <!-- No gaps found - all tests passed -->
 
+## End-to-End Integration Test (2026-04-06)
+
+### Test Setup:
+1. Service started with Telegram credentials configured
+2. Redis route configured with default chat ID
+3. Test SIGNAL_EVENT published to `aureus:signals:XAUUSD`
+
+### Results:
+- ✅ Event received by subscriber (Redis PUBLISH returned 1)
+- ✅ Filter passed (enabled=True, signal_types includes SIGNAL_EVENT)
+- ✅ Route matched (wildcard route with null criteria)
+- ✅ Queue created for chat ID
+- ⏳ Telegram delivery: Pending user confirmation (check Telegram for message)
+
+### Logs Confirm:
+```
+2026-04-05 17:35:04,501 [INFO] rate_limiter: Created queue for chat PLACEHOLDER_CHAT_ID
+```
+
+**Note:** Replace PLACEHOLDER_CHAT_ID with actual chat ID from @userinfobot to complete delivery test.
+
 ## Manual Setup Required
 
 Before production use, user must:
