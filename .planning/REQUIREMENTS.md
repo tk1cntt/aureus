@@ -1,85 +1,120 @@
-# Requirements: Aureus Milestone v1.4 TradingAgents Market Data Integration
+# Requirements: Aureus
 
-**Defined:** 2026-04-03
-**Core Value:** Keep ingest behavior deterministic and observable while extending market data capability safely.
+**Defined:** 2026-04-05
+**Core Value:** Validate strategy behavior through deterministic, reproducible evidence — then deliver actionable signals to production trading.
 
-## v1 Requirements
+## v1.5 Requirements
 
-### Prerequisites & Compatibility
+Requirements for Signal Delivery & Trade Management milestone. Each maps to roadmap phases.
 
-- [x] **PREP-01**: Team can validate TradingAgents in an isolated Docker environment on WSL before any integration code begins, including symbol compatibility for Aureus targets (`XAUUSD`, `BTCUSD`, configured universe), average API latency, and observed free-tier rate-limit behavior.
-- [x] **PREP-02**: Team can define and enforce dependency strategy for TradingAgents (optional dependency path with rollback-safe defaults) and apply a hard stop/pivot to another provider if FX/metal compatibility fails acceptance criteria.
+### Telegram Notification (NOTIF)
 
-### Provider Abstraction
+- [ ] **NOTIF-01**: Signal engine publishes signal events qua Redis pub/sub khi có signal mới
+- [ ] **NOTIF-02**: aureus-notifier service nhận signal events và gửi lên Telegram
+- [ ] **NOTIF-03**: Cấu hình filter signal (chọn signal nào được phép gửi Telegram)
+- [ ] **NOTIF-04**: Gửi strategy match alert lên Telegram khi strategy khớp (symbol, direction, entry, SL/TP)
+- [ ] **NOTIF-05**: Rate limiting và error recovery cho Telegram API (retry + queue)
+- [ ] **NOTIF-06**: Hỗ trợ gửi nhiều chat/channel
 
-- [x] **PROV-01**: System can ingest candles through a provider interface without changing canonical candle schema.
-- [x] **PROV-02**: Existing Redis ingest behavior remains backward-compatible under default configuration.
-- [x] **PROV-03**: Market data client can be instantiated via compatibility path for existing Redis-based runtime/tests.
+### Strategy Enhancement (STRAT)
 
-### TradingAgents Adapter
+- [ ] **STRAT-01**: Strategy contract bổ sung entry_type (market/limit/stop)
+- [ ] **STRAT-02**: Strategy output chứa SL/TP values
+- [ ] **STRAT-03**: Strategy output chứa lot size / risk percentage
+- [ ] **STRAT-04**: Magic number per strategy cho MT5 order tracking
 
-- [x] **ADPT-01**: System can fetch TradingAgents market data and normalize it into `open/high/low/close/volume/timestamp`.
-- [x] **ADPT-02**: System can map Aureus symbols to provider symbols via validated configuration.
-- [x] **ADPT-03**: Adapter enforces cache/backoff behavior to reduce rate-limit failures.
-- [x] **ADPT-04**: Adapter reports malformed/rate-limit/fallback failures in observable metrics/log taxonomy.
+### MT5 Order Execution (ORDER)
 
-### Runtime Routing & Rollout Safety
+- [ ] **ORDER-01**: aureus-trader service nhận strategy match từ Redis pub/sub
+- [ ] **ORDER-02**: Tạo và gửi market order xuống MT5 qua TCP
+- [ ] **ORDER-03**: Tạo và gửi pending order (limit/stop) xuống MT5 qua TCP
+- [ ] **ORDER-04**: Mở rộng AureusProvider.mq5 nhận order commands và execute OrderSend()
+- [ ] **ORDER-05**: AureusProvider.mq5 push order events (opened/closed/failed) về aureus-trader
+- [ ] **ORDER-06**: Order acknowledgement protocol (ACK/NACK với ticket number)
+- [ ] **ORDER-07**: Idempotency key để chống duplicate order execution
 
-- [x] **ROUT-01**: Runtime supports provider modes `redis`, `shadow`, and `tradingagents` with `redis` as default.
-- [x] **ROUT-02**: Shadow mode can compare TradingAgents feed against Redis baseline without impacting live primary flow.
-- [x] **ROUT-03**: Rollout gates evaluate malformed/fallback/lag/drift thresholds and prevent unsafe promotion.
-- [x] **ROUT-04**: Runtime can fail safe back to Redis when TradingAgents gate conditions are violated.
+### Trade Management (TRADE)
 
-### Verification
+- [ ] **TRADE-01**: Order state machine tracking (pending → sent → filled → closed)
+- [ ] **TRADE-02**: Lưu trade records vào PostgreSQL/TimescaleDB
+- [ ] **TRADE-03**: MT5 history push events (real-time order close notification)
+- [ ] **TRADE-04**: MT5 history poll reconciliation (fallback mỗi 30-60s)
+- [ ] **TRADE-05**: Magic number filter phân biệt bot orders vs manual trades
 
-- [ ] **TEST-01**: Provider abstraction contract is covered by automated tests.
-- [ ] **TEST-02**: TradingAgents adapter mapping/cache/error cases are covered by automated tests.
-- [ ] **TEST-03**: Rollout gate behavior for drift/lag/error thresholds is covered by automated tests.
-- [ ] **TEST-04**: Shadow-mode manual validation checklist exists and is executable before primary promotion.
+### Performance Dashboard (PERF)
 
-## v2 Requirements
+- [ ] **PERF-01**: API endpoint trả danh sách trades với entry/exit details
+- [ ] **PERF-02**: Tính toán Win rate
+- [ ] **PERF-03**: Tính toán Profit factor
+- [ ] **PERF-04**: Tính toán Max drawdown
+- [ ] **PERF-05**: Tính toán Average R:R (Risk-Reward ratio)
+- [ ] **PERF-06**: Equity curve chart
+- [ ] **PERF-07**: Filter theo symbol, strategy, timeframe
+- [ ] **PERF-08**: Trang trade history trên aureus-dashboard
 
-### Extension
+## Future Requirements
 
-- **EXT-01**: Support additional non-Redis providers beyond TradingAgents via same provider interface.
-- **EXT-02**: Promote TradingAgents to primary in production after sustained shadow evidence and SLO validation.
-- **EXT-03**: Add cross-service or sidecar architecture if dependency/latency constraints demand isolation.
+### Performance Analytics Extended
+
+- **PERF-F01**: Sharpe ratio calculation
+- **PERF-F02**: Daily/weekly/monthly P&L breakdown
+- **PERF-F03**: Export trades to CSV
+
+### Order Management Extended
+
+- **ORDER-F01**: Order modification (update SL/TP after entry)
+- **ORDER-F02**: Partial close support
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Strategy logic redesign | Milestone is data-ingest integration only |
-| Immediate production cutover to TradingAgents | Requires shadow gate evidence first |
-| Full multi-service re-architecture | Not required for safe initial integration |
+| Mobile app push notifications | Telegram đủ cho v1, mobile app là scope riêng |
+| MetaTrader5 Python lib integration | Không phù hợp kiến trúc Docker — dùng TCP socket |
+| Automated lot sizing based on Kelly criterion | Phức tạp, defer to future |
+| Multi-broker support | Chỉ hỗ trợ 1 MT5 terminal cho v1 |
+| Web-based order placement | Chỉ auto-execute từ strategy, không manual order qua web |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREP-01 | Phase 21 | Complete |
-| PREP-02 | Phase 21 | Complete |
-| PROV-01 | Phase 22 | Complete |
-| PROV-02 | Phase 22 | Complete |
-| PROV-03 | Phase 22 | Complete |
-| ADPT-01 | Phase 23 | Complete |
-| ADPT-02 | Phase 23 | Complete |
-| ADPT-03 | Phase 23 | Complete |
-| ADPT-04 | Phase 23 | Complete |
-| ROUT-01 | Phase 24 | Complete |
-| ROUT-02 | Phase 24 | Complete |
-| ROUT-03 | Phase 25 | Complete |
-| ROUT-04 | Phase 25 | Complete |
-| TEST-01 | Phase 26 | Pending |
-| TEST-02 | Phase 26 | Pending |
-| TEST-03 | Phase 26 | Pending |
-| TEST-04 | Phase 26 | Pending |
+| NOTIF-01 | — | Pending |
+| NOTIF-02 | — | Pending |
+| NOTIF-03 | — | Pending |
+| NOTIF-04 | — | Pending |
+| NOTIF-05 | — | Pending |
+| NOTIF-06 | — | Pending |
+| STRAT-01 | — | Pending |
+| STRAT-02 | — | Pending |
+| STRAT-03 | — | Pending |
+| STRAT-04 | — | Pending |
+| ORDER-01 | — | Pending |
+| ORDER-02 | — | Pending |
+| ORDER-03 | — | Pending |
+| ORDER-04 | — | Pending |
+| ORDER-05 | — | Pending |
+| ORDER-06 | — | Pending |
+| ORDER-07 | — | Pending |
+| TRADE-01 | — | Pending |
+| TRADE-02 | — | Pending |
+| TRADE-03 | — | Pending |
+| TRADE-04 | — | Pending |
+| TRADE-05 | — | Pending |
+| PERF-01 | — | Pending |
+| PERF-02 | — | Pending |
+| PERF-03 | — | Pending |
+| PERF-04 | — | Pending |
+| PERF-05 | — | Pending |
+| PERF-06 | — | Pending |
+| PERF-07 | — | Pending |
+| PERF-08 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 17 total
-- Mapped to phases: 17
-- Unmapped: 0 ✓
+- v1.5 requirements: 30 total
+- Mapped to phases: 0
+- Unmapped: 30 ⚠️
 
 ---
-*Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after initial v1.4 definition*
+*Requirements defined: 2026-04-05*
+*Last updated: 2026-04-05 after initial definition*
