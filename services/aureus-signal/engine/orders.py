@@ -3,7 +3,7 @@ from engine.logging_common import get_logger
 import json
 from typing import Dict, List, Any
 
-from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS
+from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, VALID_SIZE_MODES
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -290,13 +290,24 @@ class SimulatedTradeManager:
         size_value = order_plan.get("size")
         size_mode = str(order_plan.get("size_mode", "FIXED_UNITS")).upper()
 
+        # Validate entry_type
+        entry_type = order_plan.get("entry_type", "MARKET")
+        if entry_type not in VALID_ENTRY_TYPES:
+            logger.warning(f"[orders] Invalid entry_type '{entry_type}', defaulting to MARKET")
+            entry_type = "MARKET"
+
+        # Validate size_mode
+        if size_mode not in VALID_SIZE_MODES:
+            logger.warning(f"[orders] Invalid size_mode '{size_mode}', defaulting to FIXED_UNITS")
+            size_mode = "FIXED_UNITS"
+
         expiry_policy = order_plan.get("expiry_policy")
         if not expiry_policy:
             expiry = order_plan.get("expiry", exit_config.get("expiry"))
             expiry_policy = str(expiry if expiry is not None else "BAR_CLOSE")
 
         snapshot = {
-            "entry_type": order_plan.get("entry_type", "MARKET"),
+            "entry_type": entry_type,
             "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),
             "sl_mode": sl_cfg.get("mode", "PRICE"),
             "sl_value": sl_cfg.get("value"),
@@ -331,12 +342,19 @@ class SimulatedTradeManager:
         sl_cfg = config.get('sl', {})
         tp_cfg = config.get('tp', {})
         
+        strategy_name = trigger.get('strategy', 'UNKNOWN')
+
         # 1. Stop Loss
         mode = sl_cfg.get('mode', 'FIXED_PIPS')
         if mode == 'FIXED_PIPS':
-            pips = sl_cfg.get('value', 300) / 10000.0 # Default 30 pips for FX
+            raw_value = sl_cfg.get('value')
+            if raw_value is None:
+                logger.warning(f"[{strategy_name}] SL mode=FIXED_PIPS but no 'value' configured — SL cannot be calculated")
+                return None, None
             if 'JPY' in trigger['strategy'] or state_obj.symbol.endswith('JPY'):
-                 pips = sl_cfg.get('value', 300) / 100.0
+                 pips = raw_value / 100.0
+            else:
+                 pips = raw_value / 10000.0
                  
             sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
             
@@ -367,18 +385,25 @@ class SimulatedTradeManager:
                             sl = sp['price'] + (buffer if mode == 'SIGNAL_HIGH' else -buffer)
                             break
             
-            if sl is None: # Fallback to fixed distance
-                pips = 300 / 10000.0
-                sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+            if sl is None:
+                logger.warning(f"[{strategy_name}] SL from SIGNAL_LOW/HIGH yielded None — no fallback, SL/TP rejected")
+                return None, None
 
         # 2. Take Profit
         mode = tp_cfg.get('mode', 'RR')
         if mode == 'RR':
-            ratio = tp_cfg.get('value', 1.5)
+            ratio = tp_cfg.get('value')
+            if ratio is None:
+                logger.warning(f"[{strategy_name}] TP mode=RR but no 'value' configured — TP cannot be calculated")
+                return sl, None
             risk = abs(entry - sl) if sl else (entry * 0.001)
             tp = entry + (risk * ratio) if 'BUY' in trigger.get('side', 'BUY') else entry - (risk * ratio)
         elif mode == 'FIXED_PIPS':
-             pips = tp_cfg.get('value', 500) / 10000.0
+             raw_tp_value = tp_cfg.get('value')
+             if raw_tp_value is None:
+                 logger.warning(f"[{strategy_name}] TP mode=FIXED_PIPS but no 'value' configured — TP cannot be calculated")
+                 return sl, None
+             pips = raw_tp_value / 10000.0
              tp = (entry + pips) if 'BUY' in trigger.get('side', 'BUY') else (entry - pips)
 
         return sl, tp
