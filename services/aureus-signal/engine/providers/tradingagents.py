@@ -2,10 +2,13 @@ import json
 import logging
 import os
 import time
+import asyncio
 from typing import Dict, Any, Optional
 import httpx
 
 from .base import DecisionProvider, DecisionSignal
+from common.circuit_breaker import CircuitBreaker
+from engine.drift_telemetry import log_ta_drift
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,7 @@ class TradingAgentsProvider(DecisionProvider):
         self._symbols_map: Dict[str, Any] = {}
         # Simple cache: dict of {symbol: (timestamp, signal_result)}
         self._cache: Dict[str, tuple[float, Optional[DecisionSignal]]] = {}
+        self.circuit_breaker = CircuitBreaker()
 
     async def setup(self) -> None:
         """Load symbols configuration."""
@@ -35,7 +39,12 @@ class TradingAgentsProvider(DecisionProvider):
 
     async def _fetch_from_api(self, symbol: str, context: Optional[Dict[str, Any]]) -> Optional[DecisionSignal]:
         """Make actual HTTP request to trading agents API."""
+        if not self.circuit_breaker.can_execute():
+            logger.warning(f"TradingAgents Circuit Breaker is OPEN. Skipping request for {symbol}")
+            return None
+
         try:
+            start_time = time.monotonic()
             async with httpx.AsyncClient(timeout=5.0) as client:
                 external_symbol = self._format_external_symbol(symbol)
                 payload = {
@@ -45,6 +54,17 @@ class TradingAgentsProvider(DecisionProvider):
                 response = await client.post(f"{self.endpoint.rstrip('/')}/decisions", json=payload)
                 response.raise_for_status()
                 data = response.json()
+                
+                self.circuit_breaker.record_success()
+
+                lag_ms = int((time.monotonic() - start_time) * 1000)
+                
+                # Identify drift values from context and TA response if available
+                redis_val = float(context.get("current_price", 0.0)) if context else 0.0
+                ta_val = float(data.get("metadata", {}).get("price", 0.0))
+                
+                # Non-blocking async observer
+                asyncio.create_task(log_ta_drift(symbol, redis_val, ta_val, lag_ms))
                 
                 return DecisionSignal(
                     action=data.get("action", "HOLD"),
@@ -57,6 +77,7 @@ class TradingAgentsProvider(DecisionProvider):
                 )
         except Exception as e:
             logger.warning(f"Failed to fetch decision for {symbol}: {e}")
+            self.circuit_breaker.record_failure()
             return None
 
     async def get_decision(self, symbol: str, context: Optional[Dict[str, Any]] = None) -> Optional[DecisionSignal]:
