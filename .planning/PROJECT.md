@@ -9,13 +9,16 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - Leverage Nautilus execution infrastructure while minimizing custom execution complexity.
 - Preserve clear milestone auditability (plans, summaries, and known gaps).
 
-## Current Milestone: v1.5 Next Actions
+## Current Milestone: v1.5 Signal Delivery & Trade Management
 
-**Goal:** Close the testing and primary cutover gap for TradingAgents and start execution measurements.
+**Goal:** Xây dựng pipeline hoàn chỉnh từ signal → notification → order execution → result tracking, với dashboard thống kê performance.
 
 **Target features:**
-- Completion of provider integration automated testing.
-- Activation of Prometheus metrics observability pipelines.
+- Service `aureus-notifier`: Telegram notification cho signals và strategy matches, cấu hình filter signal.
+- Service `aureus-trader`: MT5 order management (market/pending), order state tracking, hybrid history sync (push + poll).
+- Mở rộng `AureusProvider.mq5` để nhận order commands và push order events.
+- Cải tiến strategy contract để quy định loại order (entry type, SL, TP).
+- Performance dashboard tích hợp `aureus-dashboard`: win rate, profit factor, drawdown, Sharpe ratio.
 
 ## Current State
 **Latest shipped:** v1.4 TradingAgents Market Data Integration (Closed with known testing gaps, 2026-04-05)
@@ -26,11 +29,14 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - CircuitBreaker pattern embedded for safe evaluation paths.
 - Pending tests and shadow-mode evidence checklist remain open for next iterations.
 
-**Existing Nautilus infra (live):**
+**Existing infra (live):**
+- `aureus-signal` — signal engine with provider abstraction, strategy evaluation, CircuitBreaker
+- `aureus-gateway` — TCP listener nhận market data từ MT5
+- `AureusProvider.mq5` — MT5 EA streaming market data (ticks + candles) qua TCP
+- `aureus-dashboard` — React + FastAPI web dashboard
 - `aureus-nautilus-node` — AureusMarketDataClient (Redis→Bar), AureusExecutionClient (orders→Nautilus)
 - `aureus-nautilus-bridge` — order routing + execution reconciliation
 - `aureus-bridge-metrics-exporter` — Prometheus metrics
-- Grafana dashboard: `aureus_nautilus_flow.json` (orders, latency, PnL, SLO signals)
 
 ## Requirements
 ### Validated
@@ -41,11 +47,17 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - ✓ CircuitBreaker and telemetry offloading implementation *(v1.4)*
 
 ### Active
-- [ ] Verify end-to-end via adapter/provider/gate test coverage and shadow validation.
+- [ ] Telegram notification service cho signal events và strategy matches.
+- [ ] MT5 order execution pipeline (strategy → order → MT5).
+- [ ] Order state management và MT5 history sync.
+- [ ] Performance dashboard thống kê (win rate, profit factor, drawdown, ...).
+- [ ] Strategy contract enhancement (entry type, SL, TP specification).
+- [ ] Mở rộng AureusProvider.mq5 cho bidirectional communication.
 
 ### Out of Scope
 - Direct cutover to TradingAgents as production primary before shadow validation gates pass.
-- Expanding strategy logic or execution semantics unrelated to market-data provider integration.
+- Expanding strategy logic or execution semantics unrelated to signal delivery and trade management.
+- Mobile app hoặc native notification ngoài Telegram.
 
 ## Archived Milestones
 - **v1.4 TradingAgents Market Data Integration** (Shipped 2026-04-05, Known testing gaps)
@@ -70,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-_Last updated: 2026-04-05 after v1.4 milestone completion_
+_Last updated: 2026-04-05 after v1.5 milestone start_
