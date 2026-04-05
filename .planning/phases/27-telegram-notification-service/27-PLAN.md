@@ -12,6 +12,8 @@ files_modified:
   - services/aureus-notifier/telegram_bot.py
   - services/aureus-notifier/formatters.py
   - services/aureus-notifier/rate_limiter.py
+  - services/aureus-notifier/__init__.py
+  - services/aureus-notifier/tests/__init__.py
   - services/aureus-notifier/tests/test_formatters.py
   - services/aureus-notifier/tests/test_rate_limiter.py
   - services/aureus-notifier/tests/test_config.py
@@ -467,9 +469,9 @@ telegram_bot.py imports without error. TelegramSender class has send_message met
 </done>
 </task>
 
-<task type="auto">
+<task type="auto" tdd="true">
 <id>T4</id>
-<title>Create queue-based rate limiter dispatcher</title>
+<title>Create queue-based rate limiter dispatcher with tests</title>
 <requirements>NOTIF-05, NOTIF-06</requirements>
 <wave>1</wave>
 <depends_on>T2, T3</depends_on>
@@ -498,7 +500,12 @@ from formatters import format_signal_event, format_strategy_match
 logger = logging.getLogger(__name__)
 
 class RateLimitedDispatcher:
-    """Queue-based dispatcher: 1 msg/2s per chat, max 100 queued per chat."""
+    """Queue-based dispatcher: 1 msg/2s per chat (30 msg/min per-chat safe margin), max 100 queued per chat.
+    
+    Note: Telegram limits are 30 msg/s globally and 30 msg/min per chat.
+    This dispatcher handles per-chat limiting. Global limiting is implicitly
+    bounded by the number of active chats × dispatch_loop iteration time.
+    """
 
     def __init__(self, sender: TelegramSender, delay: float = 2.0, max_queue_size: int = 100):
         self.sender = sender
@@ -594,10 +601,10 @@ Key behaviors:
 - stop() sets _running=False to gracefully exit loop
 </action>
 <verify>
-<automated>cd /mnt/d/Aureus/services/aureus-notifier && ../../.venv/bin/python -c "from rate_limiter import RateLimitedDispatcher; print('import OK')"</automated>
+<automated>cd /mnt/d/Aureus/services/aureus-notifier && ../../.venv/bin/python -m pytest tests/test_rate_limiter.py -v</automated>
 </verify>
 <done>
-rate_limiter.py imports without error. RateLimitedDispatcher has enqueue(), dispatch_loop(), stop() methods with queue-based rate limiting at 1 msg/2s per chat.
+All rate_limiter tests pass. RateLimitedDispatcher has enqueue(), dispatch_loop(), stop() methods with queue-based rate limiting at 1 msg/2s per chat.
 </done>
 </task>
 
@@ -626,8 +633,8 @@ import json
 import os
 import signal
 import logging
-import redis
-from config import load_filters, load_routes, subscribe_config_updates, FilterConfig, Route
+import redis.asyncio as redis
+from config import load_filters, load_routes, subscribe_config_updates, passes_filter, FilterConfig, Route
 from telegram_bot import TelegramSender
 from rate_limiter import RateLimitedDispatcher
 
@@ -639,7 +646,7 @@ logger = logging.getLogger(__name__)
 
 async def run_notifier():
     # 1. Initialize Redis connection
-    redis_host = os.environ.get("REDIS_HOST", "aureus_redis_dev")
+    redis_host = os.environ.get("REDIS_HOST", "redis-dev")
     redis_port = int(os.environ.get("REDIS_PORT", 6379))
     logger.info(f"Connecting to Redis at {redis_host}:{redis_port}")
     r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
@@ -851,7 +858,8 @@ Dockerfile exists with FROM python:3.11-slim. requirements.txt contains python-t
 - [ ] `services/aureus-notifier/telegram_bot.py` has `TelegramSender` with exponential backoff retry
 - [ ] `docker-compose.dev.yml` contains `aureus-notifier-dev` service
 - [ ] `.env.example` documents `TELEGRAM_BOT_TOKEN` and `TELEGRAM_DEFAULT_CHAT_ID`
-- [ ] All 19 unit tests pass (8 formatters + 11 config)
+- [ ] All unit tests pass (8 formatters + 11 config + rate limiter tests)
+- [ ] `services/aureus-notifier/__init__.py` and `tests/__init__.py` exist
 
 ### Tests
 ```bash

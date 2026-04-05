@@ -183,7 +183,7 @@ services/aureus-notifier/
 ```bash
 TELEGRAM_BOT_TOKEN=<bot token từ BotFather>
 TELEGRAM_DEFAULT_CHAT_ID=<chat_id mặc định>
-REDIS_HOST=aureus_redis_dev
+REDIS_HOST=redis-dev
 REDIS_PORT=6379
 LOG_LEVEL=INFO
 ```
