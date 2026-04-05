@@ -1,5 +1,24 @@
 # Milestones
 
+## v1.4 TradingAgents Market Data Integration (Shipped: 2026-04-05)
+
+**Phases completed:** 7 phases, 9 plans, 0 tasks
+
+**Key accomplishments:**
+
+- Validated compatibility of TradingAgents data feeds in isolated WSL environment to establish integration feasibility.
+- Extracted legacy signal behavior into a robust Provider Abstraction Interface with canonical payload consistency.
+- Implemented a resilience-first TradingAgents Adapter with cache TTL and robust exception backoff.
+- Integrated a shadow-mode Live Engine pulse flow that allows background AI processing without interrupting primary Redis routines.
+- Introduced a CircuitBreaker Gate utility with TimescaleDB asynchronous drift telemetry offloading to ensure safe rollout fallbacks.
+
+### Known Gaps (User approved Proceed anyway)
+
+Milestone was closed with incomplete requirements:
+- `TEST-01`, `TEST-02`, `TEST-03`, `TEST-04` (Verification and automated tests pending)
+
+---
+
 ## v1.3 Backtesting & Measurement Engine (Shipped: 2026-04-03)
 
 **Phases completed:** 14 phases, 18 plans, 3 tasks
