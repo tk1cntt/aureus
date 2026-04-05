@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import logging
+from datetime import datetime, timezone
 
 import redis.asyncio as redis
 
@@ -43,11 +44,55 @@ async def run_notifier():
     # 3. Load initial config
     filters: FilterConfig = await load_filters(r)
     routes: list[Route] = await load_routes(r)
+    
+    # If no routes configured, create default route from env var
+    if not routes:
+        default_chat_id = os.environ.get("TELEGRAM_DEFAULT_CHAT_ID")
+        if default_chat_id:
+            routes = [Route(chat_id=default_chat_id)]
+            logger.info(f"Created default route for chat: {default_chat_id}")
+        else:
+            logger.warning("TELEGRAM_DEFAULT_CHAT_ID not set and no routes configured")
+    
     logger.info(f"Loaded filters: enabled={filters.enabled}, signal_types={filters.signal_types}")
     logger.info(f"Loaded routes: {len(routes)} routes")
 
     # 4. Initialize dispatcher
     dispatcher = RateLimitedDispatcher(sender)
+
+    # 6. Start dispatcher loop
+    dispatch_task = asyncio.create_task(dispatcher.dispatch_loop())
+
+    # 7. Subscribe to signal channels for all configured symbols
+    symbols_str = os.environ.get("SYMBOLS", "XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD")
+    symbols = [s.strip() for s in symbols_str.split(",") if s.strip()]
+    channels = [f"aureus:signals:{sym}" for sym in symbols]
+
+    pubsub = r.pubsub()
+    await pubsub.subscribe(*channels)
+    logger.info(f"Subscribed to channels: {channels}")
+
+    # 8. Send greeting message on startup
+    default_chat_id = os.environ.get("TELEGRAM_DEFAULT_CHAT_ID")
+    if default_chat_id:
+        greeting = (
+            f"🤖 <b>Aureus Notifier Online</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"Service started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC\n"
+            f"Symbols: {len(symbols)}\n"
+            f"Filters: enabled={filters.enabled}\n"
+            f"Routes: {len(routes)} configured\n"
+            f"\n"
+            f"Ready to send notifications! 🚀"
+        )
+        try:
+            success = await sender.send_message(default_chat_id, greeting)
+            if success:
+                logger.info("Greeting message sent successfully")
+            else:
+                logger.warning("Failed to send greeting message")
+        except Exception as e:
+            logger.warning(f"Failed to send greeting: {e}")
 
     async def reload_config():
         nonlocal filters, routes
