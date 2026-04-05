@@ -152,6 +152,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         
     flags = FeatureFlags(r)
 
+    # --- TradingAgents Integration ---
+    from engine.providers.tradingagents import TradingAgentsProvider
+    ta_endpoint = os.getenv("TA_ENDPOINT", "http://aureus-tradingagents:8000")
+    tradingagents_provider = TradingAgentsProvider(endpoint=ta_endpoint)
+    await tradingagents_provider.setup()
+
     # --- Connect TimescaleDB ---
     if db_pool:
         logger.info("[GLOBAL] [run_signal_engine] 3... Using provided TimescaleDB pool")
@@ -714,9 +720,38 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     event_list = ", ".join(state.ai_trigger_events)
                                     logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 Event-Driven AI Analysis triggered by: {event_list}")
 
-                                    await queue_periodic_ai_analysis(
-                                        ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
-                                    )
+                                    provider_mode = await flags.get("provider_mode", "redis_primary")
+
+                                    if provider_mode == "redis_primary":
+                                        await queue_periodic_ai_analysis(
+                                            ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
+                                        )
+                                    elif provider_mode == "ta_primary":
+                                        ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
+                                        decision = await tradingagents_provider.get_decision(symbol, ctx)
+                                        logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 TA Primary Decision logic evaluated")
+                                        if decision:
+                                            if state.current_signal:
+                                                state.current_signal["ta_decision"] = decision.action
+                                            # Write to AI latest namespace
+                                            await r.set(f"aureus:ai:latest:{symbol}", json.dumps({
+                                                "action": decision.action,
+                                                "confidence": decision.confidence,
+                                                "narrative": decision.reasoning,
+                                                "timestamp": decision.timestamp,
+                                                "symbol": symbol,
+                                                "sentiment": "BULLISH" if decision.action == "BUY" else ("BEARISH" if decision.action == "SELL" else "NEUTRAL"),
+                                                "aci": int(decision.confidence * 100)
+                                            }))
+                                    elif provider_mode == "ta_shadow":
+                                        # Queue usual redis_primary job first
+                                        await queue_periodic_ai_analysis(
+                                            ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
+                                        )
+                                        # Spawn shadow TradingAgents without blocking 
+                                        ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
+                                        asyncio.create_task(shadow_execute_pulse(symbol, ctx, now_pulse, r, tradingagents_provider))
+
                                     state.tracking_vars['last_pulse_t'] = now_pulse
 
                                 # Reset trigger and aggregation list for next candle regardless of pulse firing
@@ -741,6 +776,27 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
             await asyncio.sleep(1)
 
 # --- AI Queue Logic ---
+
+async def shadow_execute_pulse(symbol, context, start_time, r, tradingagents_provider):
+    """Executes the TradingAgents call in background without blocking."""
+    try:
+        start_call = time.perf_counter()
+        decision = await tradingagents_provider.get_decision(symbol, context)
+        total_latency = int((time.perf_counter() - start_call) * 1000)
+        if decision:
+            shadow_payload = {
+                "symbol": symbol,
+                "action": decision.action,
+                "confidence": decision.confidence,
+                "reasoning": decision.reasoning,
+                "timestamp": decision.timestamp,
+                "llm_latency_ms": total_latency,
+                "request_payload": context
+            }
+            await r.set(f"aureus:ai:shadow:{symbol}", json.dumps(shadow_payload))
+            logger.info(f"[{symbol}] [SHADOW] TradingAgents decision computed in background... ACTION: {decision.action} ({total_latency}ms)")
+    except Exception as e:
+        logger.error(f"[{symbol}] [shadow_execute_pulse] Error: {e}")
 
 async def brain_worker(queue, r, db_pool, validator, manager):
     """Processes AI tasks from the priority queue."""
