@@ -34,6 +34,11 @@ class TemplateStrategy(BaseStrategy):
         self.context_filters = config.get("context_filters", [])  # Pillar 1: WHAT
         self.trade_execution = config.get("trade_execution", {})  # Pillar 3: HOW
         self.magic_number = config.get("magic_number", self.strategy_id * 1000)
+        
+        # Deduce direction
+        self.direction = self.trade_execution.get("direction")
+        if not self.direction:
+            self.direction = "SELL" if "BEAR" in self.name.upper() else "BUY"
 
     # ------------------------------------------------------------------ #
     # Pillar 1: WHAT — Context Pre-condition Evaluator
@@ -462,7 +467,7 @@ class TemplateStrategy(BaseStrategy):
                 "strategy": self.name,
                 "strategy_id": self.strategy_id,
                 "strategy_version": self.strategy_version,
-                "direction": "BUY",
+                "direction": self.direction,
                 "reason_code": "BACKFILL_NOT_READY",
                 "is_actionable": False,
                 "evaluated_rules": ["BACKFILL_READY"],
@@ -538,7 +543,7 @@ class TemplateStrategy(BaseStrategy):
             "strategy": self.name,
             "strategy_id": self.strategy_id,
             "strategy_version": self.strategy_version,
-            "direction": "BUY",
+            "direction": self.direction,
             "symbol": symbol,
             "reason_code": reason_code,
             "is_actionable": reason_code == "OK",
@@ -685,7 +690,7 @@ class TemplateStrategy(BaseStrategy):
             "intent_id": intent.get("intent_id"),
             "entry_type": entry_type,
             "entry_policy": te.get("entry_policy", exit_config.get("entry_policy", "IMMEDIATE")),
-            "direction": intent.get("direction", "BUY"),
+            "direction": intent.get("direction", self.direction),
             "size": size_value,
             "size_value": size_value,
             "size_mode": size_mode,
