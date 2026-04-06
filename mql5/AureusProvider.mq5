@@ -506,15 +506,23 @@ void OnTick()
 }
 
 //+------------------------------------------------------------------+
-//| Parse a simple JSON string field: "key":"value"                   |
+//| Parse a simple JSON string field: "key":"value" or "key": "value" |
 //+------------------------------------------------------------------+
 string ParseJSONString(const string &raw, const string key)
 {
-   string searchKey = "\"" + key + "\":\"";
+   string searchKey = "\"" + key + "\":";
    int pos = StringFind(raw, searchKey);
    if(pos < 0) return "";
 
    int startPos = pos + StringLen(searchKey);
+   // Skip whitespace between colon and opening quote
+   while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
+      startPos++;
+   // Expect opening quote
+   if(startPos >= StringLen(raw) || StringGetCharacter(raw, startPos) != '"')
+      return "";
+   startPos++; // Skip opening quote
+
    int endPos = StringFind(raw, "\"", startPos);
    if(endPos < 0) return "";
 
