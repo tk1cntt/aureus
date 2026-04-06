@@ -15,9 +15,10 @@ def generate_cmd_id(event: dict) -> str:
     """
     data = event.get("data", {})
     symbol = event.get("symbol", "")
-    signal_ts = event.get("t", data.get("signal_ts", ""))
-    direction = data.get("direction") or data.get("side", "")
-    key_str = f"{data.get('strategy_id', '')}:{symbol}:{signal_ts}:{direction}"
+    # Check top-level first, then fall back to data sub-dict
+    signal_ts = event.get("t") or event.get("signal_ts") or data.get("signal_ts") or data.get("t") or ""
+    direction = data.get("direction") or data.get("side") or event.get("side", "")
+    key_str = f"{data.get('strategy_id', event.get('strategy_id', ''))}:{symbol}:{signal_ts}:{direction}"
     hash_val = hashlib.md5(key_str.encode()).hexdigest()[:12]
     return f"ord-{hash_val}"
 
