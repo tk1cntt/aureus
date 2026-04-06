@@ -448,14 +448,28 @@ class DBWriter:
             if self.order_buffer:
                 orders_to_process = self.order_buffer[:]
                 self.order_buffer.clear()
-                data_rows, msg_ids, stream_keys, ack_skip_msg_ids = [], [], [], []
+                data_rows, msg_ids, stream_keys = [], [], []
+                rejected_msg_ids = []  # Track ORDER_REJECTED events to ACK separately
+
                 for stream, msg_id, payload in orders_to_process:
                     try:
+                        event_type = payload.get('type', '')
+
+                        # Skip ORDER_REJECTED events — they're not real orders, just signal rejections
+                        if event_type == 'ORDER_REJECTED':
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping ORDER_REJECTED (not a trade): {payload.get('strategy', 'unknown')} on {payload.get('symbol', '?')}")
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
+
                         trace_id = payload.get('trace_id')
                         if not trace_id:
-                            logger.error(f"[GLOBAL] [process_batch] Error: Skipping order with missing trace_id: {payload}")
-                            ack_skip_msg_ids.append((stream, msg_id))
-                            continue
+                            # Generate trace_id from event data for backward compatibility
+                            symbol = payload.get('symbol', 'UNKNOWN')
+                            strategy = payload.get('strategy', payload.get('strategy_name', 'unknown'))
+                            strategy_id = payload.get('strategy_id', 0)
+                            t = payload.get('t', payload.get('timestamp', 0))
+                            trace_id = f"gen-{strategy_id}-{t}-{symbol}"
+                            logger.warning(f"[GLOBAL] [process_batch] Generated trace_id: {trace_id}")
 
                         symbol = payload.get('symbol', 'UNKNOWN')
                         direction = payload.get('direction', 'UNKNOWN')
@@ -569,29 +583,25 @@ class DBWriter:
                     """
                     await conn.executemany(query, data_rows)
 
-                    # ACK successful inserts
-                    acks = {}
-                    for s, m in zip(stream_keys, msg_ids):
-                        if s not in acks:
-                            acks[s] = []
-                        acks[s].append(m)
+                # ACK all processed messages (successful inserts + rejected events)
+                acks = {}
+                for s, m in zip(stream_keys, msg_ids):
+                    if s not in acks:
+                        acks[s] = []
+                    acks[s].append(m)
+
+                # Also ACK rejected messages
+                for s, m in rejected_msg_ids:
+                    if s not in acks:
+                        acks[s] = []
+                    acks[s].append(m)
+
+                if acks:
                     pipe = self.redis.pipeline()
                     for s, ids in acks.items():
                         pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
-                    logger.info(f"[GLOBAL] [process_batch] 7... Inserted/Updated {len(data_rows)} orders")
-
-                # ACK messages that were skipped due to validation errors
-                if ack_skip_msg_ids:
-                    pipe = self.redis.pipeline()
-                    skip_acks = {}
-                    for s, m in ack_skip_msg_ids:
-                        if s not in skip_acks:
-                            skip_acks[s] = []
-                        skip_acks[s].append(m)
-                    for s, ids in skip_acks.items():
-                        pipe.xack(s, CONSUMER_GROUP, *ids)
-                    await pipe.execute()
+                    logger.info(f"[GLOBAL] [process_batch] 7... Inserted/Updated {len(data_rows)} orders, {len(rejected_msg_ids)} rejected skipped")
 
     async def run(self):
         await self.connect_redis()
