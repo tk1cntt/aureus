@@ -481,7 +481,7 @@ class StrategyRegistry:
                         "tp": order_plan.get("tp"),
                         "trailing": order_plan.get("trailing"),
                         "expiry": order_plan.get("expiry"),
-                        "exit_config": intent.get("exit_config", {}),
+                        "exit_config": getattr(strategy, "exit_config", intent.get("exit_config", {})),
                         "intent": intent,
                         "validation": validation,
                         "order_plan": order_plan,
