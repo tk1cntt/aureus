@@ -4,22 +4,22 @@ milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
 status: executing
 last_updated: "2026-04-06T00:00:00.000Z"
-last_activity: 2026-04-06 -- Phase 27 executed successfully (34/34 tests passed)
+last_activity: 2026-04-06 -- Phase 28 executed and verified (3 passed, 5 blocked/MT5)
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # STATE
 
 ## Current Position
 
-Phase: 27 (telegram-notification-service) — DONE ✅
+Phase: 28 (aureusprovider-mq5-bidirectional-extension) — DONE ✅
 Plan: 1 of 1 — COMPLETED
-Status: Phase 27 executed, all 34 tests passed
-Last activity: 2026-04-06 -- Phase 27 executed successfully
+Status: Phase 28 executed and verified — MQL5 EA bidirectional, gateway order events
+Last activity: 2026-04-06 -- Phase 28 verified (0 issues, 5 blocked need MT5 terminal)
 
 ## Architecture Decision
 
