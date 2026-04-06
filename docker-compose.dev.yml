@@ -314,6 +314,22 @@ services:
       - redis-dev
     restart: unless-stopped
 
+  aureus-trader-dev:
+    build:
+      context: ./services/aureus-trader
+    container_name: aureus-trader-dev
+    environment:
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    networks:
+      - aureus_dev_net
+    depends_on:
+      - redis-dev
+    restart: unless-stopped
+
 networks:
   aureus_dev_net:
     driver: bridge
