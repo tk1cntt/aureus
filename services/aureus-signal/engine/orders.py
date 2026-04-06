@@ -56,8 +56,8 @@ class SimulatedTradeManager:
             order_plan_snapshot = self._build_order_plan_snapshot(t)
 
             # 1. Calculate SL/TP first so completeness validation can use computed levels.
-            exit_config = t.get('exit_config', {})
-            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
+            # config is pulled directly from t because registry.py flattens sl/tp configs onto the root of the map
+            sl, tp = self._calculate_sl_tp(t, state_obj, t)
 
             if sl is None or tp is None:
                 logger.debug(
