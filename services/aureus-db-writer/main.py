@@ -5,6 +5,7 @@ import time
 import json
 import redis.asyncio as redis
 import asyncpg
+import uuid
 from datetime import datetime
 from state_machine import validate_transition
 
@@ -616,9 +617,306 @@ class DBWriter:
                     await pipe.execute()
                     logger.info(f"[GLOBAL] [process_batch] 7... Inserted/Updated {len(data_rows)} orders, {len(rejected_msg_ids)} rejected skipped")
 
+
+    async def check_xpending(self):
+        """Check for unacknowledged messages from previous runs and reprocess them."""
+        logger.info("[RECONCILIATION] Checking XPENDING for unacked messages...")
+        order_stream_pattern = "aureus:stream:*:orders"
+
+        # Find all order streams
+        cursor = 0
+        order_streams = []
+        while True:
+            cursor, keys = await self.redis.scan(cursor, match=order_stream_pattern, count=100)
+            order_streams.extend(keys)
+            if cursor == 0:
+                break
+
+        if not order_streams:
+            logger.info("[RECONCILIATION] No order streams found for XPENDING check")
+            return
+
+        total_recovered = 0
+        for stream in order_streams:
+            try:
+                # Check if consumer group exists
+                try:
+                    await self.redis.xgroup_create(stream, CONSUMER_GROUP, id="0", mkstream=True)
+                except redis.ResponseError as e:
+                    if "BUSYGROUP" not in str(e):
+                        raise
+
+                # Get pending messages (from beginning to now, max 100)
+                pending = await self.redis.xpending_range(
+                    stream, CONSUMER_GROUP, '-', '+', 100
+                )
+
+                for msg_info in pending:
+                    msg_id = msg_info['message_id']
+                    try:
+                        # Fetch message content
+                        messages = await self.redis.xrange(stream, msg_id, msg_id, 1)
+                        if messages:
+                            _, payload = messages[0]
+                            # Reprocess the message
+                            self.order_buffer.append((stream, msg_id, payload))
+                            total_recovered += 1
+                            logger.info(f"[RECONCILIATION] Recovered unacked message: {msg_id} from {stream}")
+
+                        # ACK after adding to buffer (will be processed in next process_batch)
+                        await self.redis.xack(stream, CONSUMER_GROUP, msg_id)
+                    except Exception as e:
+                        logger.error(f"[RECONCILIATION] Error recovering message {msg_id}: {e}")
+
+            except Exception as e:
+                logger.error(f"[RECONCILIATION] Error checking XPENDING for {stream}: {e}")
+
+        if total_recovered > 0:
+            logger.info(f"[RECONCILIATION] Recovered {total_recovered} unacked messages")
+            # Process recovered immediately
+            await self.process_batch()
+        else:
+            logger.info("[RECONCILIATION] No unacked messages found")
+
+    async def reconciliation_loop(self):
+        """Periodic reconciliation loop — polls MT5 history and fills gaps."""
+        # Configurable interval with validation (10-300s range)
+        try:
+            interval = int(os.environ.get('HISTORY_SYNC_INTERVAL_SEC', '30'))
+            interval = max(10, min(300, interval))
+        except (ValueError, TypeError):
+            interval = 30
+            logger.warning("[RECONCILIATION] Invalid HISTORY_SYNC_INTERVAL_SEC, using default 30s")
+
+        logger.info(f"[RECONCILIATION] Reconciliation loop started (interval={interval}s)")
+
+        while self.running:
+            try:
+                await self.run_reconciliation()
+            except Exception as e:
+                logger.error(f"[RECONCILIATION] Error in reconciliation: {e}")
+            await asyncio.sleep(interval)
+
+    async def run_reconciliation(self):
+        """
+        Run one reconciliation cycle:
+        1. Query DB for recent closed trades (last 5 minutes)
+        2. Request trade history from EA via Redis command
+        3. Wait for EA response on command channel
+        4. Compare DB tickets vs MT5 tickets
+        5. Insert missing trades with RECONCILED status
+        6. Log discrepancies
+        """
+        logger.debug("[RECONCILIATION] Starting reconciliation cycle...")
+
+        # 1. Get recent trades from DB (last 5 minutes)
+        lookback_minutes = 5
+        db_trades = await self.get_recent_trades_from_db(lookback_minutes)
+        db_tickets = {t['ticket'] for t in db_trades if t.get('ticket')}
+        logger.debug(f"[RECONCILIATION] Found {len(db_tickets)} trades in DB (last {lookback_minutes} min)")
+
+        if not db_tickets:
+            logger.debug("[RECONCILIATION] No recent trades in DB, skipping MT5 poll")
+            return
+
+        # 2. Request trade history from EA
+        now_ms = int(time.time() * 1000)
+        from_ms = int((time.time() - lookback_minutes * 60) * 1000)
+
+        history_request = {
+            "type": "REQUEST_TRADE_HISTORY",
+            "from_time": from_ms,
+            "to_time": now_ms,
+            "magic_number": None,
+            "symbol": None
+        }
+
+        # Publish command to Redis — EA picks it up via ProcessIncomingCommands
+        cmd_channel = "aureus:mt5:commands"
+        await self.redis.publish(cmd_channel, json.dumps(history_request))
+        logger.debug(f"[RECONCILIATION] Sent REQUEST_TRADE_HISTORY to {cmd_channel}")
+
+        # 3. Wait for EA response (subscribe to response channel briefly)
+        mt5_trades = await self.wait_for_trade_history_response(timeout_sec=10)
+
+        if mt5_trades is None:
+            logger.warning("[RECONCILIATION] No response from EA within timeout")
+            return
+
+        logger.debug(f"[RECONCILIATION] Received {len(mt5_trades)} trades from MT5")
+
+        # 4. Compare and find missing
+        mt5_tickets = {t.get('ticket') for t in mt5_trades if t.get('ticket')}
+        missing_tickets = mt5_tickets - db_tickets
+
+        if not missing_tickets:
+            logger.debug("[RECONCILIATION] No discrepancies detected")
+            return
+
+        logger.info(f"[RECONCILIATION] Found {len(missing_tickets)} missing trades")
+
+        # 5. Insert missing trades
+        async with self.pg_pool.acquire() as conn:
+            for trade in mt5_trades:
+                ticket = trade.get('ticket')
+                if ticket not in missing_tickets:
+                    continue
+
+                await self.insert_reconciled_trade(conn, trade)
+
+    async def get_recent_trades_from_db(self, minutes=5):
+        """Query DB for trades closed in the last N minutes."""
+        query = """
+            SELECT ticket, symbol, magic_number, status, direction, entry_type,
+                   entry_price, exit_price, sl, tp, volume, commission, swap, profit,
+                   filled_at, closed_at, trace_id
+            FROM aureus_trades
+            WHERE closed_at >= NOW() - INTERVAL '{minutes} minutes'
+            ORDER BY closed_at DESC
+        """.format(minutes=minutes)
+
+        async with self.pg_pool.acquire() as conn:
+            rows = await conn.fetch(query)
+
+        trades = []
+        for row in rows:
+            trades.append({
+                'ticket': row['ticket'],
+                'symbol': row['symbol'],
+                'magic_number': row['magic_number'],
+                'status': row['status'],
+                'direction': row['direction'],
+                'entry_type': row['entry_type'],
+                'entry_price': row['entry_price'],
+                'exit_price': row['exit_price'],
+                'sl': row['sl'],
+                'tp': row['tp'],
+                'volume': row['volume'],
+                'commission': row['commission'],
+                'swap': row['swap'],
+                'profit': row['profit'],
+                'filled_at': row['filled_at'],
+                'closed_at': row['closed_at'],
+                'trace_id': row['trace_id'],
+            })
+        return trades
+
+    async def wait_for_trade_history_response(self, timeout_sec=10):
+        """
+        Subscribe to command response channel and wait for TRADE_HISTORY response.
+        Returns list of trade dicts, or None on timeout.
+        """
+        response_channel = "aureus:mt5:responses:db-writer"
+
+        try:
+            pubsub = self.redis.pubsub()
+            await pubsub.subscribe(response_channel)
+
+            start_time = time.time()
+            while time.time() - start_time < timeout_sec:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message['type'] == 'message':
+                    try:
+                        data = json.loads(message['data'])
+                        if data.get('type') == 'TRADE_HISTORY':
+                            await pubsub.unsubscribe(response_channel)
+                            await pubsub.close()
+                            return data.get('trades', [])
+                    except json.JSONDecodeError:
+                        continue
+
+            await pubsub.unsubscribe(response_channel)
+            await pubsub.close()
+            return None
+
+        except Exception as e:
+            logger.error(f"[RECONCILIATION] Error waiting for trade history response: {e}")
+            return None
+
+    async def insert_reconciled_trade(self, conn, trade):
+        """Insert a missing trade record with RECONCILED status and log discrepancy."""
+        ticket = trade.get('ticket')
+        symbol = trade.get('symbol', 'UNKNOWN')
+        magic_number = trade.get('magic_number')
+        direction = trade.get('direction', 'UNKNOWN')
+        entry_price = trade.get('entry_price')
+        exit_price = trade.get('exit_price')
+        sl = trade.get('sl')
+        tp = trade.get('tp')
+        volume = trade.get('volume')
+        commission = trade.get('commission', 0)
+        swap = trade.get('swap', 0)
+        profit = trade.get('profit', 0)
+
+        # Generate trace_id for reconciled trade
+        trace_id = f"reconciled-{ticket}-{uuid.uuid4().hex[:8]}"
+
+        # Convert millisecond timestamps to datetime
+        def ms_to_datetime(ms_val):
+            if ms_val is None:
+                return None
+            if isinstance(ms_val, (int, float)):
+                return datetime.fromtimestamp(ms_val / 1000.0)
+            return ms_val
+
+        filled_at = ms_to_datetime(trade.get('open_time'))
+        closed_at = ms_to_datetime(trade.get('close_time'))
+
+        # Insert trade with RECONCILED status
+        insert_query = """
+            INSERT INTO aureus_trades (
+                trace_id, ticket, symbol, magic_number, direction, entry_type,
+                status, entry_price, exit_price, sl, tp, volume,
+                commission, swap, profit, filled_at, closed_at, payload
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'RECONCILED', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            ON CONFLICT (trace_id) DO NOTHING
+        """
+
+        payload = json.dumps({
+            'source': 'mt5_history',
+            'reconciled_at': datetime.utcnow().isoformat(),
+            'original_ticket': ticket,
+        })
+
+        await conn.execute(
+            insert_query,
+            trace_id, ticket, symbol, magic_number, direction, 'MARKET',
+            entry_price, exit_price, sl, tp, volume,
+            commission, swap, profit, filled_at, closed_at, payload
+        )
+
+        logger.info(f"[RECONCILIATION] Inserted missing trade: ticket={ticket}, symbol={symbol}, profit={profit}")
+
+        # Log discrepancy for audit trail
+        log_query = """
+            INSERT INTO aureus_reconciliation_log (run_at, action, ticket, symbol, source, status, details)
+            VALUES (NOW(), 'INSERT_MISSING_TRADE', $1, $2, 'mt5_history', 'RECONCILED', $3)
+        """
+
+        details = {
+            'ticket': ticket,
+            'symbol': symbol,
+            'magic_number': magic_number,
+            'direction': direction,
+            'profit': profit,
+            'entry_price': entry_price,
+            'exit_price': exit_price,
+            'filled_at': filled_at.isoformat() if filled_at else None,
+            'closed_at': closed_at.isoformat() if closed_at else None,
+        }
+
+        await conn.execute(log_query, ticket, symbol, json.dumps(details))
+
     async def run(self):
         await self.connect_redis()
         await self.connect_postgres()
+
+        # Phase 31: Check XPENDING on startup (recover unacked messages)
+        await self.check_xpending()
+
+        # Phase 31: Start reconciliation loop as background task
+        asyncio.create_task(self.reconciliation_loop())
+
         logger.info("[GLOBAL] [run] 1... Worker started...")
         while self.running:
             await self.discover_streams()
