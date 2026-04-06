@@ -23,7 +23,7 @@
 | 27 | Telegram Notification Service | NOTIF-02→06 | ✅ DONE |
 | 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
 | 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
-| 30 | Trade State Management | TRADE-01→02, TRADE-05 | PLANNED |
+| 30 | 1/1 | Complete   | 2026-04-06 |
 | 31 | MT5 History Sync | TRADE-03→04 | PLANNED |
 | 32 | Trade Performance API | PERF-01→07 | PLANNED |
 | 33 | Performance Dashboard UI | PERF-08 | PLANNED |
@@ -99,10 +99,10 @@
 **Requirements:** TRADE-01, TRADE-02, TRADE-05
 **Goal:** Quản lý vòng đời order với state machine và persistent storage.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Plans:**
-- [ ] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 5-state machine, order_buffer, magic number filters
+- [x] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 5-state machine, order_buffer, magic number filters
 
 **Success Criteria:**
 1. Order state machine tracking (pending → sent → filled → closed) hoạt động

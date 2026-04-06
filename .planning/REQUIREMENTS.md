@@ -35,11 +35,11 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 
 ### Trade Management (TRADE)
 
-- [ ] **TRADE-01**: Order state machine tracking (pending → sent → filled → closed)
-- [ ] **TRADE-02**: Lưu trade records vào PostgreSQL/TimescaleDB
+- [x] **TRADE-01**: Order state machine tracking (pending → sent → filled → closed)
+- [x] **TRADE-02**: Lưu trade records vào PostgreSQL/TimescaleDB
 - [ ] **TRADE-03**: MT5 history push events (real-time order close notification)
 - [ ] **TRADE-04**: MT5 history poll reconciliation (fallback mỗi 30-60s)
-- [ ] **TRADE-05**: Magic number filter phân biệt bot orders vs manual trades
+- [x] **TRADE-05**: Magic number filter phân biệt bot orders vs manual trades
 
 ### Performance Dashboard (PERF)
 
@@ -96,11 +96,11 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 | ORDER-05 | Phase 28 | Pending |
 | ORDER-06 | Phase 28 | Pending |
 | ORDER-07 | Phase 29 | Pending |
-| TRADE-01 | Phase 30 | Pending |
-| TRADE-02 | Phase 30 | Pending |
+| TRADE-01 | Phase 30 | Complete |
+| TRADE-02 | Phase 30 | Complete |
 | TRADE-03 | Phase 31 | Pending |
 | TRADE-04 | Phase 31 | Pending |
-| TRADE-05 | Phase 30 | Pending |
+| TRADE-05 | Phase 30 | Complete |
 | PERF-01 | Phase 32 | Pending |
 | PERF-02 | Phase 32 | Pending |
 | PERF-03 | Phase 32 | Pending |
