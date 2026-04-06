@@ -271,3 +271,23 @@ ALTER TABLE aureus_strategy_templates
 COMMENT ON COLUMN aureus_strategy_templates.magic_number IS
   'Static MT5 magic number per strategy for order tracking';
 ALTER TABLE aureus_ai_analysis ALTER COLUMN narrative DROP NOT NULL;
+
+-- ============================================================================
+-- Phase 31: MT5 History Sync — Reconciliation Log
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS aureus_reconciliation_log (
+    id                  BIGSERIAL PRIMARY KEY,
+    run_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    action              TEXT NOT NULL,           -- 'INSERT_MISSING_TRADE', 'XPENDING_RECOVERED'
+    ticket              BIGINT,
+    symbol              TEXT,
+    source              TEXT NOT NULL,           -- 'mt5_history', 'xpending'
+    status              TEXT,                    -- 'RECONCILED'
+    details             JSONB NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconciliation_log_run_at ON aureus_reconciliation_log(run_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_log_action ON aureus_reconciliation_log(action);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_log_ticket ON aureus_reconciliation_log(ticket);
