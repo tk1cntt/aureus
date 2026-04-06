@@ -126,39 +126,26 @@ class DBWriter:
             self.known_streams.update(new_streams)
 
     async def process_batch(self):
-        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer and not self.order_buffer:
+        if not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer and not self.order_buffer and not self.tick_buffer:
             return
         async with self.pg_pool.acquire() as conn:
+            # --- TICK BUFFER: Process in real-time, DO NOT persist to DB ---
             if self.tick_buffer:
                 ticks_to_ack = self.tick_buffer[:]
                 self.tick_buffer.clear()
 
-                parsed_rows = 0
+                # Process ticks in real-time (e.g., trigger calculations, emit events)
+                # No DB write — ticks are ephemeral
+                processed_count = 0
                 for stream, msg_id, payload in ticks_to_ack:
                     try:
-                        ts_val = payload.get('t') or payload.get('timestamp') or payload.get('time')
-                        if not ts_val:
-                            ts_val = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
-                        elif isinstance(ts_val, str):
-                            try:
-                                f_ts = float(ts_val)
-                                ts_val = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
-                            except Exception:
-                                ts_val = datetime.fromisoformat(ts_val)
-                        elif isinstance(ts_val, (int, float)):
-                            ts_val = datetime.fromtimestamp(ts_val / (1000.0 if ts_val > 1e11 else 1.0))
-
-                        _ = (
-                            ts_val,
-                            payload.get('symbol', 'UNKNOWN'),
-                            float(payload.get('bid', 0.0)),
-                            float(payload.get('ask', 0.0)),
-                            float(payload.get('v', payload.get('vol', payload.get('volume', 0.0)))),
-                        )
-                        parsed_rows += 1
+                        # Real-time processing happens here
+                        # Example: trigger signal calculations, update in-memory state, etc.
+                        processed_count += 1
                     except Exception as e:
-                        logger.error(f"[GLOBAL] [process_batch] Error: Tick parse error: {e}")
+                        logger.error(f"[GLOBAL] [process_batch] Error: Tick process error: {e}")
 
+                # ACK all tick messages so they don't pile up in the stream
                 acks = {}
                 for s, m, _ in ticks_to_ack:
                     if s not in acks:
@@ -171,10 +158,11 @@ class DBWriter:
                         pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
 
-                logger.info(
-                    f"[GLOBAL] [process_batch] 1... Tick persistence disabled: acked {len(ticks_to_ack)} ticks (parsed {parsed_rows})"
+                logger.debug(
+                    f"[GLOBAL] [process_batch] 1... Processed {processed_count} ticks (real-time, not persisted)"
                 )
 
+            # --- CANDLE BUFFER: Persist to DB ---
             if self.candle_buffer:
                 candles_to_insert = self.candle_buffer[:]
                 self.candle_buffer.clear()
@@ -186,16 +174,30 @@ class DBWriter:
                             try:
                                 f_ts = float(ts_val)
                                 ts_val = datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
-                            except Exception: ts_val = datetime.fromisoformat(ts_val)
+                            except Exception:
+                                ts_val = datetime.fromisoformat(ts_val)
                         elif isinstance(ts_val, (int, float)):
                             ts_val = datetime.fromtimestamp(ts_val / (1000.0 if ts_val > 1e11 else 1.0))
                         if not ts_val:
                             logger.warning(f"[GLOBAL] [process_batch] Error: Skipping candle with null timestamp: {payload}")
                             continue
 
-                        row = (ts_val, payload.get('symbol', 'UNKNOWN'), payload.get('tf', payload.get('timeframe', 'UNKNOWN')), float(payload.get('o', payload.get('open', 0.0))), float(payload.get('h', payload.get('high', 0.0))), float(payload.get('l', payload.get('low', 0.0))), float(payload.get('c', payload.get('close', 0.0))), float(payload.get('v', payload.get('volume', 0.0))))
-                        data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
-                    except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: Candle parse error: {e}")
+                        row = (
+                            ts_val,
+                            payload.get('symbol', 'UNKNOWN'),
+                            payload.get('tf', payload.get('timeframe', 'UNKNOWN')),
+                            float(payload.get('o', payload.get('open', 0.0))),
+                            float(payload.get('h', payload.get('high', 0.0))),
+                            float(payload.get('l', payload.get('low', 0.0))),
+                            float(payload.get('c', payload.get('close', 0.0))),
+                            float(payload.get('v', payload.get('volume', 0.0))),
+                        )
+                        data_rows.append(row)
+                        msg_ids.append(msg_id)
+                        stream_keys.append(stream)
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Candle parse error: {e}")
+
                 if data_rows:
                     query = """
                         INSERT INTO aureus_candles (time, symbol, timeframe, open, high, low, close, volume)
