@@ -465,17 +465,28 @@ class DBWriter:
 
                         trace_id = payload.get('trace_id')
                         if not trace_id:
-                            # Generate trace_id from event data for backward compatibility
-                            symbol = payload.get('symbol', 'UNKNOWN')
-                            strategy = payload.get('strategy', payload.get('strategy_name', 'unknown'))
-                            strategy_id = payload.get('strategy_id', 0)
-                            t = payload.get('t', payload.get('timestamp', 0))
-                            trace_id = f"gen-{strategy_id}-{t}-{symbol}"
-                            logger.warning(f"[GLOBAL] [process_batch] Generated trace_id: {trace_id}")
+                            # Skip events that don't have trace_id and can't be trades
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping order event without trace_id: {payload.get('type', '?')} on {payload.get('symbol', '?')}")
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
+
+                        # Validate required fields before processing
+                        direction = payload.get('direction', payload.get('side', ''))
+                        entry_type = payload.get('entry_type', '')
+                        status = payload.get('status', 'PENDING')
+
+                        # Skip events that are not real order states
+                        if direction not in ('BUY', 'SELL'):
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping order with invalid direction '{direction}': trace_id={trace_id}")
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
+
+                        if entry_type not in ('MARKET', 'LIMIT', 'STOP'):
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping order with invalid entry_type '{entry_type}': trace_id={trace_id}")
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
 
                         symbol = payload.get('symbol', 'UNKNOWN')
-                        direction = payload.get('direction', 'UNKNOWN')
-                        entry_type = payload.get('entry_type', 'UNKNOWN')
                         new_status = payload.get('status', 'PENDING')
 
                         # Validate direction and entry_type

@@ -224,8 +224,8 @@ ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS aureus_trades (
-    id                  BIGSERIAL,
-    trace_id            TEXT NOT NULL,
+    id                  BIGSERIAL PRIMARY KEY,
+    trace_id            TEXT NOT NULL UNIQUE,
     ticket              BIGINT,
     symbol              TEXT NOT NULL,
     magic_number        BIGINT,
@@ -246,19 +246,16 @@ CREATE TABLE IF NOT EXISTS aureus_trades (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     filled_at           TIMESTAMPTZ,
     closed_at           TIMESTAMPTZ,
-    payload             JSONB,
-    PRIMARY KEY (trace_id, created_at)
+    payload             JSONB
 );
 
-SELECT create_hypertable('aureus_trades', 'created_at',
-    chunk_time_interval => INTERVAL '7 days',
-    if_not_exists => TRUE);
-
+-- Regular indexes (no hypertable needed for trade volume)
 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON aureus_trades(symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_status ON aureus_trades(status);
 CREATE INDEX IF NOT EXISTS idx_trades_magic ON aureus_trades(magic_number);
 CREATE INDEX IF NOT EXISTS idx_trades_ticket ON aureus_trades(ticket);
 CREATE INDEX IF NOT EXISTS idx_trades_strategy ON aureus_trades(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_trades_created_at ON aureus_trades(created_at);
 
 -- Compression & Retention (Phase 30)
 -- NOTE: add_compression_policy requires columnstore enabled (TimescaleDB >= 2.13)
