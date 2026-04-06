@@ -117,9 +117,14 @@
 **Requirements:** TRADE-03, TRADE-04
 **Goal:** Hybrid sync: push events real-time + poll reconciliation fallback.
 
+**Plans:** 1 plan
+
+**Plans:**
+- [ ] 31-01-PLAN.md — MT5 history sync: XPENDING recovery, REQUEST_TRADE_HISTORY EA command, reconciliation loop, RECONCILED status, audit logging
+
 **Success Criteria:**
 1. Push events từ MT5 EA cập nhật trade records real-time
-2. Poll reconciliation chạy mỗi 30-60s, phát hiện và fill gaps
+2. Poll reconciliation chạy mỗi 30s (configurable), phát hiện và fill gaps
 3. Không mất trade data dù có disconnect hay EA restart
 4. Reconciliation log ghi nhận mọi discrepancy được sửa
 
