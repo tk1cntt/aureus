@@ -3,15 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 logger = logging.getLogger("aureus-dashboard-api")
-import redis.asyncio as redis
+import redis as redis_sync
+import redis.asyncio as redis_async
 import os
 import json
 import asyncpg
 import httpx
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import os
+import math
+import numpy as np
+import time
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -51,7 +55,35 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://aureus:aureus_password@localhost:5432/aureus")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1") # Use http://host.docker.internal:8000/v1 if in Docker
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://aureus:aureus_password@localhost:5432/aureus")
+DATABASE_URL = os.getenv("DATABASE_URL", POSTGRES_URL)
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1") # Use http://host.docker.internal:8000/v1 if in Docker
+
+# Sync Redis (backward compat for existing endpoints)
+r = redis_sync.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+# Async Redis client for new performance endpoints (caching)
+redis_client = redis_async.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+
+@app.on_event("startup")
+async def startup():
+    # Connection pool for PostgreSQL
+    app.state.pg_pool = await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=2,
+        max_size=10,
+    )
+    logger.info("[GLOBAL] [startup] PostgreSQL connection pool created (min=2, max=10)")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    if hasattr(app.state, 'pg_pool'):
+        await app.state.pg_pool.close()
+        logger.info("[GLOBAL] [shutdown] PostgreSQL connection pool closed")
+
+
 
 # --- Pydantic Models ---
 class StrategyStep(BaseModel):
@@ -74,6 +106,33 @@ class BacktestRequest(BaseModel):
     start: str # ISO Date
     end: str   # ISO Date
     strategy_ids: Optional[List[int]] = None
+
+
+# Performance API Models
+class TradeResponse(BaseModel):
+    id: int
+    trace_id: str
+    ticket: Optional[int] = None
+    symbol: str
+    strategy_name: Optional[str] = None
+    direction: str
+    entry_price: Optional[float] = None
+    exit_price: Optional[float] = None
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    volume: Optional[float] = None
+    profit: float
+    commission: float
+    swap: float
+    filled_at: Optional[str] = None
+    closed_at: Optional[str] = None
+
+class MetaResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    filters: dict
 
 def load_symbols():
     """Loads symbol metadata from symbols.json."""
@@ -581,6 +640,412 @@ async def get_latest_ai_analysis(symbol: str):
             "timestamp": int(datetime.now().timestamp())
         }
     return json.loads(data)
+
+
+
+# ============================================================
+# Performance API — Helper Functions
+# ============================================================
+
+
+async def compute_basic_metrics(pool, symbol, strategy_id, start_dt, end_dt):
+    """Compute basic metrics via SQL aggregation (PERF-02, PERF-03, PERF-05)."""
+    query = """
+    SELECT
+        COUNT(*) as total_trades,
+        COUNT(CASE WHEN profit > 0 THEN 1 END) as wins,
+        COUNT(CASE WHEN profit <= 0 THEN 1 END) as losses,
+        SUM(profit) as net_pnl,
+        SUM(CASE WHEN profit > 0 THEN profit END) as gross_profit,
+        ABS(SUM(CASE WHEN profit < 0 THEN profit END)) as gross_loss,
+        AVG(
+            CASE
+                WHEN direction = 'BUY' THEN (exit_price - entry_price)
+                WHEN direction = 'SELL' THEN (entry_price - exit_price)
+                ELSE 0
+            END / GREATEST(ABS(entry_price - sl), 0.01)
+        ) as avg_rr,
+        AVG(profit) as avg_profit
+    FROM aureus_trades
+    WHERE status = 'CLOSED'
+      AND ($1::TEXT IS NULL OR symbol = $1)
+      AND ($2::BIGINT IS NULL OR strategy_id = $2)
+      AND ($3::TIMESTAMPTZ IS NULL OR filled_at >= $3)
+      AND ($4::TIMESTAMPTZ IS NULL OR filled_at <= $4)
+    """
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, symbol, strategy_id, start_dt, end_dt)
+
+    if row is None or row["total_trades"] == 0:
+        return None
+
+    total = row["total_trades"]
+    wins = row["wins"]
+    gross_profit = row["gross_profit"] or 0
+    gross_loss = row["gross_loss"] or 0
+
+    return {
+        "total_trades": total,
+        "wins": wins,
+        "losses": row["losses"],
+        "win_rate": round((wins / total) * 100, 2) if total > 0 else 0,
+        "net_pnl": round(row["net_pnl"] or 0, 2),
+        "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else 0,
+        "avg_rr": round(row["avg_rr"] or 0, 2),
+        "avg_profit": round(row["avg_profit"] or 0, 2),
+    }
+
+
+async def compute_complex_metrics(pool, symbol, strategy_id, start_dt, end_dt):
+    """Compute max_drawdown and sharpe_ratio via in-memory calculation (PERF-04)."""
+    # Fetch closed trades ordered by fill time
+    query = """
+    SELECT profit, filled_at
+    FROM aureus_trades
+    WHERE status = 'CLOSED'
+      AND ($1::TEXT IS NULL OR symbol = $1)
+      AND ($2::BIGINT IS NULL OR strategy_id = $2)
+      AND ($3::TIMESTAMPTZ IS NULL OR filled_at >= $3)
+      AND ($4::TIMESTAMPTZ IS NULL OR filled_at <= $4)
+    ORDER BY filled_at ASC
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, symbol, strategy_id, start_dt, end_dt)
+
+    if not rows:
+        return {"max_drawdown": 0, "sharpe_ratio": 0}
+
+    profits = [r["profit"] for r in rows]
+
+    # Max Drawdown: cumulative equity → peak-to-trough
+    equity = np.cumsum(profits)
+    peaks = np.maximum.accumulate(equity)
+    drawdowns = equity - peaks
+    max_drawdown = float(abs(np.min(drawdowns)))
+
+    # Sharpe Ratio: annualized, risk-free = 0
+    # Assumes trades spread across ~252 trading days
+    if len(profits) < 2:
+        sharpe_ratio = 0
+    else:
+        returns = np.diff(equity) / np.where(equity[:-1] != 0, equity[:-1], 1)
+        mean_return = np.mean(returns)
+        std_return = np.std(returns)
+        sharpe_ratio = float((mean_return / std_return) * np.sqrt(252)) if std_return > 0 else 0
+
+    return {
+        "max_drawdown": round(max_drawdown, 2),
+        "sharpe_ratio": round(sharpe_ratio, 2),
+    }
+
+
+# ============================================================
+# Performance API Endpoints
+# ============================================================
+
+
+VALID_STATUSES = ['CLOSED', 'FILLED', 'FAILED', 'CANCELLED', 'PENDING', 'SENT']
+VALID_PAGE_SIZES = [10, 20, 50, 100]
+
+
+def _parse_date_param(date_str: Optional[str]) -> tuple:
+    """Parse and validate ISO 8601 date string. Returns (datetime_obj, error_response)."""
+    if date_str is None:
+        return None, None
+    try:
+        dt = datetime.fromisoformat(date_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt, None
+    except (ValueError, TypeError):
+        return None, {"error": f"Invalid ISO 8601 date format: {date_str}"}
+
+
+@app.get("/api/v1/performance/trades")
+async def get_trades(
+    symbol: Optional[str] = None,
+    strategy_id: Optional[int] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    status: Optional[str] = "CLOSED",
+    page: int = 1,
+    page_size: int = 20,
+):
+    """Get paginated trade list with filtering."""
+    try:
+        # Validate pagination
+        if page < 1:
+            page = 1
+        if page_size not in VALID_PAGE_SIZES:
+            page_size = 20
+
+        # Validate status
+        if status not in VALID_STATUSES:
+            status = "CLOSED"
+
+        # Validate date params
+        start_dt, err = _parse_date_param(start)
+        if err:
+            raise HTTPException(status_code=400, detail=err["error"])
+        end_dt, err = _parse_date_param(end)
+        if err:
+            raise HTTPException(status_code=400, detail=err["error"])
+
+        # COUNT query
+        count_query = """
+        SELECT COUNT(*) FROM aureus_trades
+        WHERE status = $1
+          AND ($2::TEXT IS NULL OR symbol = $2)
+          AND ($3::BIGINT IS NULL OR strategy_id = $3)
+          AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
+          AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
+        """
+
+        # DATA query
+        data_query = """
+        SELECT id, trace_id, ticket, symbol, strategy_name, direction,
+               entry_price, exit_price, sl, tp, volume,
+               profit, commission, swap,
+               filled_at, closed_at
+        FROM aureus_trades
+        WHERE status = $1
+          AND ($2::TEXT IS NULL OR symbol = $2)
+          AND ($3::BIGINT IS NULL OR strategy_id = $3)
+          AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
+          AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
+        ORDER BY filled_at DESC
+        LIMIT $6 OFFSET ($7 - 1) * $6
+        """
+
+        async with app.state.pg_pool.acquire() as conn:
+            total = await conn.fetchval(count_query, status, symbol, strategy_id, start_dt, end_dt)
+            rows = await conn.fetch(data_query, status, symbol, strategy_id, start_dt, end_dt, page_size, page)
+
+        total_pages = math.ceil(total / page_size) if total > 0 else 0
+
+        trades = []
+        for row in rows:
+            trades.append({
+                "id": row["id"],
+                "trace_id": row["trace_id"],
+                "ticket": row["ticket"],
+                "symbol": row["symbol"],
+                "strategy_name": row["strategy_name"],
+                "direction": row["direction"],
+                "entry_price": row["entry_price"],
+                "exit_price": row["exit_price"],
+                "sl": row["sl"],
+                "tp": row["tp"],
+                "volume": row["volume"],
+                "profit": row["profit"],
+                "commission": row["commission"],
+                "swap": row["swap"],
+                "filled_at": row["filled_at"].isoformat() if row["filled_at"] else None,
+                "closed_at": row["closed_at"].isoformat() if row["closed_at"] else None,
+            })
+
+        return {
+            "data": trades,
+            "meta": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "filters": {
+                    "symbol": symbol,
+                    "strategy_id": strategy_id,
+                    "start": start,
+                    "end": end,
+                    "status": status,
+                }
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[GLOBAL] [get_trades] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/performance/metrics")
+async def get_metrics(
+    symbol: Optional[str] = None,
+    strategy_id: Optional[int] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+):
+    """Get computed performance metrics with Redis caching (60s TTL)."""
+    try:
+        # Validate date params
+        start_dt, err = _parse_date_param(start)
+        if err:
+            raise HTTPException(status_code=400, detail=err["error"])
+        end_dt, err = _parse_date_param(end)
+        if err:
+            raise HTTPException(status_code=400, detail=err["error"])
+
+        # Build cache key
+        cache_key = f"perf:metrics:s={symbol or 'all'}:st={strategy_id or 'all'}:{start}:{end}"
+
+        # Check cache
+        cached = await redis_client.get(cache_key)
+        if cached:
+            logger.info(f"[GLOBAL] [get_metrics] Cache HIT for {cache_key}")
+            return json.loads(cached)
+
+        t0 = time.time()
+
+        # Compute basic metrics
+        basic = await compute_basic_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
+        if basic is None:
+            result = {
+                "metrics": {},
+                "meta": {
+                    "symbol": symbol,
+                    "strategy_id": strategy_id,
+                    "start": start,
+                    "end": end,
+                    "source": "live_trades",
+                    "note": "No closed trades found"
+                }
+            }
+            return result
+
+        # Compute complex metrics
+        complex_m = await compute_complex_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
+        metrics = {**basic, **complex_m}
+
+        elapsed = time.time() - t0
+        logger.info(f"[GLOBAL] [get_metrics] Computed in {elapsed:.3f}s")
+
+        result = {
+            "metrics": metrics,
+            "meta": {
+                "symbol": symbol,
+                "strategy_id": strategy_id,
+                "start": start,
+                "end": end,
+                "source": "live_trades",
+            }
+        }
+
+        # Cache result (60s TTL)
+        await redis_client.setex(cache_key, 60, json.dumps(result, default=str))
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[GLOBAL] [get_metrics] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/performance/equity-curve")
+async def get_equity_curve(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    interval: Optional[str] = None,
+):
+    """Get equity curve time series with Redis caching (30s TTL)."""
+    try:
+        # Default to last 7 days if not provided
+        if start is None:
+            start_dt = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            start = start_dt.isoformat()
+        else:
+            start_dt, err = _parse_date_param(start)
+            if err:
+                raise HTTPException(status_code=400, detail=err["error"])
+
+        if end is None:
+            end_dt = datetime.now(timezone.utc)
+            end = end_dt.isoformat()
+        else:
+            end_dt, err = _parse_date_param(end)
+            if err:
+                raise HTTPException(status_code=400, detail=err["error"])
+
+        # Build cache key
+        cache_key = f"perf:equity:{start}:{end}:{interval}"
+
+        # Check cache
+        cached = await redis_client.get(cache_key)
+        if cached:
+            logger.info(f"[GLOBAL] [get_equity_curve] Cache HIT for {cache_key}")
+            return json.loads(cached)
+
+        t0 = time.time()
+
+        # Primary query — aureus_account_snapshots
+        snapshot_query = """
+        SELECT event_time AS time, equity, realized_pnl, unrealized_pnl
+        FROM aureus_account_snapshots
+        WHERE ($1::TIMESTAMPTZ IS NULL OR event_time >= $1)
+          AND ($2::TIMESTAMPTZ IS NULL OR event_time <= $2)
+        ORDER BY event_time ASC
+        """
+
+        async with app.state.pg_pool.acquire() as conn:
+            rows = await conn.fetch(snapshot_query, start_dt, end_dt)
+
+        if rows:
+            data = [
+                {
+                    "time": r["time"].isoformat(),
+                    "equity": r["equity"],
+                    "pnl": r["realized_pnl"],
+                }
+                for r in rows
+            ]
+            source = "account_snapshots"
+        else:
+            # Fallback query — cumulative profit from aureus_trades
+            fallback_query = """
+            SELECT filled_at AS time,
+                   SUM(profit) OVER (ORDER BY filled_at ASC) AS cumulative_pnl
+            FROM aureus_trades
+            WHERE status = 'CLOSED'
+              AND ($1::TIMESTAMPTZ IS NULL OR filled_at >= $1)
+              AND ($2::TIMESTAMPTZ IS NULL OR filled_at <= $2)
+            ORDER BY filled_at ASC
+            """
+            async with app.state.pg_pool.acquire() as conn:
+                rows = await conn.fetch(fallback_query, start_dt, end_dt)
+
+            data = [
+                {
+                    "time": r["time"].isoformat(),
+                    "equity": r["cumulative_pnl"],
+                    "pnl": r["cumulative_pnl"],
+                }
+                for r in rows
+            ]
+            source = "trades_cumulative"
+
+        elapsed = time.time() - t0
+        logger.info(f"[GLOBAL] [get_equity_curve] Fetched {len(data)} points from {source} in {elapsed:.3f}s")
+
+        result = {
+            "data": data,
+            "meta": {
+                "source": source,
+                "points": len(data),
+            }
+        }
+
+        # Cache result (30s TTL)
+        await redis_client.setex(cache_key, 30, json.dumps(result, default=str))
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[GLOBAL] [get_equity_curve] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
