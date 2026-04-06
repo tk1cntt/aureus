@@ -69,6 +69,7 @@ async def publish_strategy_match(
         "tp_absolute": strategy_result.get("tp_absolute"),
         "reason_code": strategy_result.get("reason_code"),
         "origin_timestamp": strategy_result.get("origin_timestamp"),
+        "entry_price": strategy_result.get("entry_price"),
     }
     return await publish_signal_event(
         redis_client, symbol, "STRATEGY_MATCH", t, data

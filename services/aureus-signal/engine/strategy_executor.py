@@ -413,6 +413,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, res)
                                 res['sl_absolute'] = abs_sl
                                 res['tp_absolute'] = abs_tp
+                                res['entry_price'] = str(payload.get("close", 0))
                                 await publish_strategy_match(r, symbol, res)
 
                         if execution_mode == "simulated":

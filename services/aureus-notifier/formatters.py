@@ -86,8 +86,16 @@ def format_strategy_match(event: dict) -> str:
         if isinstance(val, dict):
             # Fallback if uncalculated config leaks
             return "Auto (Calculated at Entry)"
+        
+        # Calculate precision statically from entry_price, fallback to 5
+        entry_price_str = str(data.get("entry_price", ""))
+        num_decimals = 5
+        if "." in entry_price_str:
+            num_decimals = len(entry_price_str.split(".")[1])
+
         try:
-            return f"{float(val):.5f}".rstrip("0").rstrip(".")
+            v = float(val)
+            return f"{v:.{num_decimals}f}"
         except (ValueError, TypeError):
             return str(val)
 
