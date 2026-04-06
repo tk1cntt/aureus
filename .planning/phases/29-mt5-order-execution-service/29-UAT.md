@@ -97,3 +97,8 @@ blocked: 8
 | 6. Idempotency | redis-dev with SET EX NX |
 | 7. Queue & Dispatch | redis-dev + aureus-gateway |
 | 8. ACK/NACK Retry | aureus-gateway + MT5 EA running |
+
+## Integration Test Scripts
+
+Để phục vụ test toàn bộ pipeline cho Phase 29 (từ STRATEGY_MATCH -> aureus-trader -> mt5:commands -> MT5):
+- **E2E Strategy Match Pipeline**: `wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python services/aureus-trader/tests/test_e2e_trader.py"`

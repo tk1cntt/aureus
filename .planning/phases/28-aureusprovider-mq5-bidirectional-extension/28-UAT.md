@@ -69,3 +69,9 @@ blocked: 5
 ## Gaps
 
 [none — no issues found]
+
+## Integration Test Scripts
+
+Để test lại các phần giao tiếp trực tiếp với MT5 Gateway trong tương lai, sử dụng các script:
+- **Test đẩy lệnh trực tiếp & Duplicate Check**: `wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python services/aureus-trader/tests/test_e2e_mt5_orders.py"`
+- **Read log Event từ MT5**: `wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python services/aureus-trader/tests/parse_mt5_events.py"`
