@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            AureusProvider.mq5     |
-//|                    Aureus Data Provider — Multi-Symbol Streaming   |
+//|                    Aureus Data Provider â€” Multi-Symbol Streaming   |
 //|                    Streams market data + receives order commands   |
 //+------------------------------------------------------------------+
 #property copyright   "Aureus Project"
@@ -44,7 +44,7 @@ struct SymbolContext
 AureusSocket  g_socket;                // TCP socket
 SymbolContext g_contexts[];             // Per-symbol state array
 int           g_symbolCount;           // Number of configured symbols
-long          g_lastTickMs;            // Last tick timestamp (ms) — for dedup (chart symbol)
+long          g_lastTickMs;            // Last tick timestamp (ms) â€” for dedup (chart symbol)
 int           g_ticksSent;             // Counter (chart symbol ticks)
 bool          g_wasDisconnected;       // Track if we were disconnected
 datetime      g_disconnectTime;        // When we lost connection
@@ -134,7 +134,7 @@ int OnInit()
    }
    else
    {
-      PrintFormat("[AureusProvider] Initial connection failed — will retry on timer");
+      PrintFormat("[AureusProvider] Initial connection failed â€” will retry on timer");
       g_wasDisconnected = true;
       g_disconnectTime  = TimeCurrent();
    }
@@ -143,7 +143,7 @@ int OnInit()
    EventSetMillisecondTimer(InpTimerMs);
 
    //--- Chart comment
-   Comment(StringFormat("Aureus Provider v3.0 [%d symbols → %s:%d]",
+   Comment(StringFormat("Aureus Provider v3.0 [%d symbols â†’ %s:%d]",
            g_symbolCount, InpGatewayHost, InpGatewayPort));
 
    return INIT_SUCCEEDED;
@@ -227,6 +227,88 @@ string BuildBackfillJSON(string symbol, MqlRates &rates[], int count)
    json += "]}";
    return json;
 }
+//+------------------------------------------------------------------+
+//| Build TRADE_HISTORY JSON (array of closed trades)                 |
+//+------------------------------------------------------------------+
+string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagic=0, string filterSymbol="")
+{
+   if(!HistorySelect(fromTime, toTime))
+   {
+      PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
+      return "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"HistorySelect failed\"}";
+   }
+
+   int totalDeals = HistoryDealsTotal();
+   string json = StringFormat("{\"type\":\"TRADE_HISTORY\",\"trades\":[");
+   bool first = true;
+   int count = 0;
+
+   for(int i = 0; i < totalDeals; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0) continue;
+
+      // Only position close deals
+      if(HistoryDealGetInteger(ticket, DEAL_ENTRY) != DEAL_ENTRY_OUT)
+         continue;
+
+      // Filter by magic number if specified
+      long magic = HistoryDealGetInteger(ticket, DEAL_MAGIC);
+      if(filterMagic > 0 && magic != filterMagic)
+         continue;
+
+      // Filter by symbol if specified
+      string sym = HistoryDealGetString(ticket, DEAL_SYMBOL);
+      if(filterSymbol != "" && sym != filterSymbol)
+         continue;
+
+      // Skip manual trades
+      if(magic == 0) continue;
+
+      long   posTicket   = HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
+      double volume      = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+      double closePrice  = HistoryDealGetDouble(ticket, DEAL_PRICE);
+      double profit      = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+      double commission  = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+      double swap        = HistoryDealGetDouble(ticket, DEAL_SWAP);
+      long   dealType    = HistoryDealGetInteger(ticket, DEAL_TYPE);
+      datetime openTime  = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+      datetime closeTime = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+      string direction   = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
+
+      // Try to get open price from history order
+      double openPrice = 0.0;
+      double sl = 0.0;
+      double tp = 0.0;
+      if(HistoryOrderSelect(posTicket))
+      {
+         openPrice = HistoryOrderGetDouble(posTicket, ORDER_PRICE_OPEN);
+         sl = HistoryOrderGetDouble(posTicket, ORDER_SL);
+         tp = HistoryOrderGetDouble(posTicket, ORDER_TP);
+      }
+
+      if(!first) json += ",";
+      first = false;
+      count++;
+
+      // Build trade JSON object — use milliseconds for timestamps
+      long openTimeMs = (long)openTime * 1000;
+      long closeTimeMs = (long)closeTime * 1000;
+
+      json += StringFormat(
+         "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic_number\":%lld,"
+         "\"direction\":\"%s\",\"entry_price\":%.5f,\"exit_price\":%.5f,"
+         "\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"commission\":%.2f,"
+         "\"swap\":%.2f,\"profit\":%.2f,\"open_time\":%lld,\"close_time\":%lld}",
+         posTicket, sym, magic, direction, openPrice, closePrice,
+         sl, tp, volume, commission, swap, profit, openTimeMs, closeTimeMs
+      );
+   }
+
+   json += StringFormat("],\"count\":%d,\"from_time\":%lld,\"to_time\":%lld}", count, (long)fromTime * 1000, (long)toTime * 1000);
+   return json;
+}
+
 
 //+------------------------------------------------------------------+
 //| Check and send new M1 candle for a specific symbol               |
@@ -249,7 +331,7 @@ bool CheckAndSendCandleForSymbol(int ctxIndex)
    if(prevBarTime <= g_contexts[ctxIndex].lastCandleTime)
       return false;
 
-   // The closed candle is the one at prevBarTime — get its OHLCV
+   // The closed candle is the one at prevBarTime â€” get its OHLCV
    MqlRates rates[];
    if(CopyRates(sym, PERIOD_M1, 1, 1, rates) < 1)
       return false;
@@ -341,7 +423,7 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
    {
       if(g_contexts[ctxIndex].lastCandleTime == 0)
       {
-         PrintFormat("[AureusProvider] [%s] No lastCandleTime — skipping backfill", sym);
+         PrintFormat("[AureusProvider] [%s] No lastCandleTime â€” skipping backfill", sym);
          return;
       }
       start = g_contexts[ctxIndex].lastCandleTime;
@@ -474,7 +556,7 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
 }
 
 //+------------------------------------------------------------------+
-//| Main tick handler — only sends ticks for chart symbol             |
+//| Main tick handler â€” only sends ticks for chart symbol             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
@@ -745,7 +827,7 @@ void ExecuteOpenOrder(const string &raw)
       return;
    }
 
-   // ACK — command accepted
+   // ACK â€” command accepted
    SendACK(cmdId);
    RecordCmdId(cmdId);
 
@@ -913,6 +995,43 @@ void ExecuteCloseOrder(const string &raw)
 }
 
 //+------------------------------------------------------------------+
+//| Execute REQUEST_TRADE_HISTORY command                             |
+//+------------------------------------------------------------------+
+void ExecuteTradeHistoryRequest(const string &raw)
+{
+   // Parse time range
+   long fromTimeMs = ParseJSONLong(raw, "from_time");
+   long toTimeMs   = ParseJSONLong(raw, "to_time");
+   long filterMagic = ParseJSONLong(raw, "magic_number");
+   string filterSymbol = ParseJSONString(raw, "symbol");
+
+   datetime fromTime = (datetime)(fromTimeMs / 1000);
+   datetime toTime   = (datetime)(toTimeMs / 1000);
+
+   if(fromTime >= toTime)
+   {
+      PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
+      string errorJson = StringFormat("{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}");
+      g_socket.SendJSON(errorJson);
+      return;
+   }
+
+   PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
+               TimeToString(fromTime), TimeToString(toTime), filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
+
+   string json = BuildTradeHistoryJSON(fromTime, toTime, filterMagic, filterSymbol);
+
+   if(g_socket.SendJSON(json))
+   {
+      PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
+   }
+   else
+   {
+      PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Listen and process commands from Gateway                           |
 //+------------------------------------------------------------------+
 void ProcessIncomingCommands()
@@ -926,7 +1045,7 @@ void ProcessIncomingCommands()
    //--- Extract symbol from command
    string cmdSymbol = ParseJSONString(raw, "symbol");
 
-   // ── Order Commands ──
+   // â”€â”€ Order Commands â”€â”€
    if(StringFind(raw, "\"OPEN_ORDER\"") >= 0)
    {
       PrintFormat("[AureusProvider] Received OPEN_ORDER command");
@@ -942,6 +1061,15 @@ void ProcessIncomingCommands()
    }
 
    if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
+
+   // â"€â"€ Trade History Request â"€â"€
+   if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)
+   {
+      PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
+      ExecuteTradeHistoryRequest(raw);
+      return;
+   }
+
    {
       int countPos = StringFind(raw, "\"count\":");
       if(countPos > 0)
@@ -963,7 +1091,7 @@ void ProcessIncomingCommands()
          }
          else
          {
-            // No symbol specified → backfill all
+            // No symbol specified â†’ backfill all
             PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillCountForSymbol(i, (int)count);
@@ -999,7 +1127,7 @@ void ProcessIncomingCommands()
          }
          else
          {
-            // No symbol specified → backfill all
+            // No symbol specified â†’ backfill all
             PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
                         TimeToString(fromTime), TimeToString(toTime));
             for(int i = 0; i < g_symbolCount; i++)
@@ -1010,7 +1138,7 @@ void ProcessIncomingCommands()
 }
 
 //+------------------------------------------------------------------+
-//| Trade Transaction handler — detects position closes               |
+//| Trade Transaction handler â€” detects position closes               |
 //+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeRequest& request,
@@ -1033,7 +1161,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(entry != DEAL_ENTRY_OUT)
       return;
 
-   // Filter by magic number — only report bot-managed positions
+   // Filter by magic number â€” only report bot-managed positions
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
    if(magic == 0)
       return;  // Manual trade, skip
@@ -1056,7 +1184,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(PositionSelectByTicket(ticket))
       openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
 
-   PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
+   PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected â€” "
               "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
               symbol, ticket, direction, profit, magic);
 
@@ -1065,7 +1193,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
 }
 
 //+------------------------------------------------------------------+
-//| Timer event — candle polling, heartbeat, and status               |
+//| Timer event â€” candle polling, heartbeat, and status               |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -1083,7 +1211,7 @@ void OnTimer()
 
       if(g_socket.EnsureConnected())
       {
-         // PrintFormat("[AureusProvider] Timer: Reconnected — waiting for Server gap detection commands");
+         // PrintFormat("[AureusProvider] Timer: Reconnected â€” waiting for Server gap detection commands");
          g_wasDisconnected = false;
          g_disconnectTime  = 0;
       }
@@ -1110,7 +1238,7 @@ void OnTimer()
                                g_ticksSent, _Symbol, InpSendTicks ? "ON" : "OFF");
    statusLines += StringFormat("Orders: %d executed, %d failed | Cmd IDs: %d\n",
                                g_ordersExecuted, g_ordersFailed, g_cmdIdCount);
-   statusLines += "─── Symbol Candles ───\n";
+   statusLines += "â”€â”€â”€ Symbol Candles â”€â”€â”€\n";
 
    for(int i = 0; i < g_symbolCount; i++)
    {
