@@ -97,6 +97,16 @@ export const Sidebar = ({ onSelectSymbol, selectedSymbol, isConnected = true }: 
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span>AI Insights</span>
                     </Link>
+                    <Link
+                        href="/performance"
+                        className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${pathname === '/performance'
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                            }`}
+                    >
+                        <BarChart3 className="h-4 w-4" />
+                        <span>Performance</span>
+                    </Link>
                 </nav>
 
                 <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 mb-2">
