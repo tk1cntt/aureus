@@ -224,8 +224,8 @@ ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS aureus_trades (
-    id                  BIGSERIAL PRIMARY KEY,
-    trace_id            TEXT NOT NULL UNIQUE,
+    id                  BIGSERIAL,
+    trace_id            TEXT NOT NULL,
     ticket              BIGINT,
     symbol              TEXT NOT NULL,
     magic_number        BIGINT,
@@ -242,11 +242,12 @@ CREATE TABLE IF NOT EXISTS aureus_trades (
     commission          DOUBLE PRECISION DEFAULT 0,
     swap                DOUBLE PRECISION DEFAULT 0,
     profit              DOUBLE PRECISION DEFAULT 0,
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     filled_at           TIMESTAMPTZ,
     closed_at           TIMESTAMPTZ,
-    payload             JSONB
+    payload             JSONB,
+    PRIMARY KEY (trace_id, created_at)
 );
 
 SELECT create_hypertable('aureus_trades', 'created_at',
@@ -259,8 +260,12 @@ CREATE INDEX IF NOT EXISTS idx_trades_magic ON aureus_trades(magic_number);
 CREATE INDEX IF NOT EXISTS idx_trades_ticket ON aureus_trades(ticket);
 CREATE INDEX IF NOT EXISTS idx_trades_strategy ON aureus_trades(strategy_id);
 
-SELECT add_compression_policy('aureus_trades', compress_after => INTERVAL '30 days');
-SELECT add_retention_policy('aureus_trades', drop_after => INTERVAL '2 years');
+-- Compression & Retention (Phase 30)
+-- NOTE: add_compression_policy requires columnstore enabled (TimescaleDB >= 2.13)
+-- For now, manual compression can be done via:
+--   SELECT compress_chunk(show_chunks('aureus_trades', older_than => INTERVAL '30 days'));
+-- SELECT add_compression_policy('aureus_trades', compress_after => INTERVAL '30 days');
+-- SELECT add_retention_policy('aureus_trades', drop_after => INTERVAL '2 years');
 
 -- Phase 26: Magic number per strategy (migration applied, documented here)
 ALTER TABLE aureus_strategy_templates
