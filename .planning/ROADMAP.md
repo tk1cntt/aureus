@@ -26,7 +26,7 @@
 | 30 | Trade State Management | TRADE-01→02, TRADE-05 | 1/1 Complete 2026-04-06 |
 | 31 | MT5 History Sync | TRADE-03→04 | PLANNED |
 | 32 | Trade Performance API | PERF-01→07 | 1 plan |
-| 33 | Performance Dashboard UI | PERF-08 | PLANNED |
+| 33 | Performance Dashboard UI | PERF-08 | 1 plan |
 
 ---
 
@@ -156,12 +156,18 @@
 **Requirements:** PERF-08
 **Goal:** Trang web thống kê performance tích hợp vào aureus-dashboard.
 
+**Plans:** 1 plan
+
+**Plans:**
+- [ ] 33-01-PLAN.md — Performance Dashboard UI: /performance page, MetricCard, FilterBar, EquityChart (lightweight-charts), PerformanceTable, URL params filtering
+
 **Success Criteria:**
-1. Trang trade history hiển thị danh sách trades với pagination
-2. Performance metrics cards (win rate, PF, drawdown, R:R) hiển thị chính xác
-3. Equity curve chart với recharts
-4. Filters UI hoạt động (symbol, strategy, date range)
-5. Responsive design consistent với existing dashboard
+1. Trang `/performance` hiển thị với đầy đủ 4 sections (FilterBar → MetricCards → EquityChart → TradeTable)
+2. 6 metric cards hiển thị data từ API (Win Rate, Net PnL, Profit Factor, Max DD, Avg R:R, Sharpe)
+3. Equity curve chart render bằng lightweight-charts v5.1.0 AreaSeries
+4. Filters hoạt động: symbol, strategy, date range (URL search params)
+5. Trade table pagination 20 rows/page
+6. Responsive design: 3-col → 2-col → 1-col
 
 ---
 
