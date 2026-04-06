@@ -757,8 +757,9 @@ void ExecuteOpenOrder(const string &raw)
 
    request.symbol   = symbol;
    request.volume   = volume;
-   request.sl       = sl;
-   request.tp       = tp;
+   int symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   request.sl       = NormalizeDouble(sl, symDigits);
+   request.tp       = NormalizeDouble(tp, symDigits);
    request.magic    = magic;
    request.comment  = comment;
    request.deviation = InpMaxSlippage;
@@ -775,7 +776,7 @@ void ExecuteOpenOrder(const string &raw)
    else if(orderType == "LIMIT")
    {
       request.action = TRADE_ACTION_PENDING;
-      request.price  = price;
+      request.price  = NormalizeDouble(price, symDigits);
       request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
       request.type_filling = ORDER_FILLING_RETURN;
       request.type_time = ORDER_TIME_GTC;
@@ -783,7 +784,7 @@ void ExecuteOpenOrder(const string &raw)
    else if(orderType == "STOP")
    {
       request.action = TRADE_ACTION_PENDING;
-      request.price  = price;
+      request.price  = NormalizeDouble(price, symDigits);
       request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
       request.type_filling = ORDER_FILLING_RETURN;
       request.type_time = ORDER_TIME_GTC;

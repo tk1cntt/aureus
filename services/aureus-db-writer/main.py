@@ -6,6 +6,7 @@ import json
 import redis.asyncio as redis
 import asyncpg
 from datetime import datetime
+from state_machine import validate_transition
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -57,6 +58,7 @@ class DBWriter:
         self.execution_buffer = []
         self.position_buffer = []
         self.account_buffer = []
+        self.order_buffer = []
         self.last_flush_time = time.time()
 
     async def connect_redis(self):
@@ -107,6 +109,7 @@ class DBWriter:
             "aureus:stream:*:execution",
             "aureus:stream:*:positions",
             "aureus:stream:*:account",
+            "aureus:stream:*:orders",
         ]
         found_streams = set()
         for pattern in patterns:
@@ -115,7 +118,7 @@ class DBWriter:
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 found_streams.update(keys)
                 if cursor == 0: break
-        
+
         new_streams = found_streams - self.known_streams
         if new_streams:
             for stream in new_streams:
@@ -123,7 +126,7 @@ class DBWriter:
             self.known_streams.update(new_streams)
 
     async def process_batch(self):
-        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer:
+        if not self.tick_buffer and not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer and not self.order_buffer:
             return
         async with self.pg_pool.acquire() as conn:
             if self.tick_buffer:
@@ -189,8 +192,7 @@ class DBWriter:
                         if not ts_val:
                             logger.warning(f"[GLOBAL] [process_batch] Error: Skipping candle with null timestamp: {payload}")
                             continue
-                        
-                        # Fix for Candle mapping: test script sends 'tf' but might send 'timeframe'
+
                         row = (ts_val, payload.get('symbol', 'UNKNOWN'), payload.get('tf', payload.get('timeframe', 'UNKNOWN')), float(payload.get('o', payload.get('open', 0.0))), float(payload.get('h', payload.get('high', 0.0))), float(payload.get('l', payload.get('low', 0.0))), float(payload.get('c', payload.get('close', 0.0))), float(payload.get('v', payload.get('volume', 0.0))))
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
                     except Exception as e: logger.error(f"[GLOBAL] [process_batch] Error: Candle parse error: {e}")
@@ -329,7 +331,7 @@ class DBWriter:
                         event_payload = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
                         if not isinstance(event_payload, dict):
                             raise ValueError("Position payload data must be JSON")
-                        
+
                         event_time = event_payload.get('event_time') or payload.get('t') or payload.get('time')
                         if isinstance(event_time, str):
                             try:
@@ -341,12 +343,12 @@ class DBWriter:
                             event_time = datetime.fromtimestamp(event_time / (1000.0 if event_time > 1e11 else 1.0))
                         elif event_time is None:
                             event_time = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
-                        
+
                         symbol = event_payload.get('symbol', 'UNKNOWN')
                         position_id = event_payload.get('position_id', 'UNKNOWN')
                         if position_id == 'UNKNOWN':
                             continue
-                        
+
                         row = (
                             event_time,
                             symbol,
@@ -362,7 +364,7 @@ class DBWriter:
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
                     except Exception as e:
                         logger.error(f"[GLOBAL] [process_batch] Error: Position parse error: {e}")
-                
+
                 if data_rows:
                     query = """
                         INSERT INTO aureus_position_snapshots (
@@ -392,7 +394,7 @@ class DBWriter:
                         event_payload = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
                         if not isinstance(event_payload, dict):
                             raise ValueError("Account payload data must be JSON")
-                        
+
                         event_time = event_payload.get('event_time') or payload.get('t') or payload.get('time')
                         if isinstance(event_time, str):
                             try:
@@ -404,11 +406,11 @@ class DBWriter:
                             event_time = datetime.fromtimestamp(event_time / (1000.0 if event_time > 1e11 else 1.0))
                         elif event_time is None:
                             event_time = datetime.fromtimestamp(int(msg_id.split('-')[0]) / 1000.0)
-                        
+
                         account_id = event_payload.get('account_id', 'UNKNOWN')
                         if account_id == 'UNKNOWN':
                             continue
-                        
+
                         row = (
                             event_time,
                             account_id,
@@ -423,7 +425,7 @@ class DBWriter:
                         data_rows.append(row); msg_ids.append(msg_id); stream_keys.append(stream)
                     except Exception as e:
                         logger.error(f"[GLOBAL] [process_batch] Error: Account parse error: {e}")
-                
+
                 if data_rows:
                     query = """
                         INSERT INTO aureus_account_snapshots (
@@ -442,6 +444,154 @@ class DBWriter:
                     for s, ids in acks.items(): pipe.xack(s, CONSUMER_GROUP, *ids)
                     await pipe.execute()
                     logger.info(f"[GLOBAL] [process_batch] 6... Inserted {len(data_rows)} account snapshots")
+
+            if self.order_buffer:
+                orders_to_process = self.order_buffer[:]
+                self.order_buffer.clear()
+                data_rows, msg_ids, stream_keys, ack_skip_msg_ids = [], [], [], []
+                for stream, msg_id, payload in orders_to_process:
+                    try:
+                        trace_id = payload.get('trace_id')
+                        if not trace_id:
+                            logger.error(f"[GLOBAL] [process_batch] Error: Skipping order with missing trace_id: {payload}")
+                            ack_skip_msg_ids.append((stream, msg_id))
+                            continue
+
+                        symbol = payload.get('symbol', 'UNKNOWN')
+                        direction = payload.get('direction', 'UNKNOWN')
+                        entry_type = payload.get('entry_type', 'UNKNOWN')
+                        new_status = payload.get('status', 'PENDING')
+
+                        # Validate direction and entry_type
+                        if direction not in ('BUY', 'SELL'):
+                            logger.warning(f"[GLOBAL] [process_batch] Warning: Invalid direction '{direction}' for trace_id={trace_id}, defaulting to UNKNOWN")
+                            direction = 'UNKNOWN'
+                        if entry_type not in ('MARKET', 'LIMIT', 'STOP'):
+                            logger.warning(f"[GLOBAL] [process_batch] Warning: Invalid entry_type '{entry_type}' for trace_id={trace_id}, defaulting to UNKNOWN")
+                            entry_type = 'UNKNOWN'
+
+                        # Validate state transition
+                        existing_status = None
+                        try:
+                            existing_row = await conn.fetchval(
+                                "SELECT status FROM aureus_trades WHERE trace_id = $1", trace_id
+                            )
+                            if existing_row:
+                                existing_status = existing_row
+                        except Exception as e:
+                            logger.warning(f"[GLOBAL] [process_batch] Warning: Could not check existing status for {trace_id}: {e}")
+
+                        if existing_status:
+                            # Existing record: validate transition from current status
+                            if not validate_transition(existing_status, new_status):
+                                logger.warning(
+                                    f"[GLOBAL] [process_batch] Warning: Invalid state transition "
+                                    f"{existing_status}\u2192{new_status} for trace_id={trace_id}. Skipping."
+                                )
+                                ack_skip_msg_ids.append((stream, msg_id))
+                                continue
+                        else:
+                            # New record: first status must be PENDING
+                            if new_status != 'PENDING':
+                                logger.warning(
+                                    f"[GLOBAL] [process_batch] Warning: New trade must start as PENDING, "
+                                    f"got '{new_status}' for trace_id={trace_id}. Skipping."
+                                )
+                                ack_skip_msg_ids.append((stream, msg_id))
+                                continue
+
+                        # Parse timestamp fields
+                        def parse_ts(val, fallback_msg_id=None):
+                            if val is None:
+                                if fallback_msg_id:
+                                    return datetime.fromtimestamp(int(fallback_msg_id.split('-')[0]) / 1000.0)
+                                return None
+                            if isinstance(val, str):
+                                try:
+                                    f_ts = float(val)
+                                    return datetime.fromtimestamp(f_ts / (1000.0 if f_ts > 1e11 else 1.0))
+                                except Exception:
+                                    return datetime.fromisoformat(val)
+                            if isinstance(val, (int, float)):
+                                return datetime.fromtimestamp(val / (1000.0 if val > 1e11 else 1.0))
+                            return None
+
+                        filled_at = parse_ts(payload.get('filled_at'))
+                        closed_at = parse_ts(payload.get('closed_at'))
+
+                        # Build payload JSONB
+                        order_payload = json.dumps(payload)
+
+                        row = (
+                            trace_id,
+                            payload.get('ticket'),
+                            symbol,
+                            payload.get('magic_number'),
+                            payload.get('strategy_id'),
+                            payload.get('strategy_name'),
+                            direction,
+                            entry_type,
+                            new_status,
+                            float(payload['entry_price']) if payload.get('entry_price') is not None else None,
+                            float(payload['exit_price']) if payload.get('exit_price') is not None else None,
+                            float(payload['sl']) if payload.get('sl') is not None else None,
+                            float(payload['tp']) if payload.get('tp') is not None else None,
+                            float(payload['volume']) if payload.get('volume') is not None else None,
+                            float(payload.get('commission', 0)),
+                            float(payload.get('swap', 0)),
+                            float(payload.get('profit', 0)),
+                            filled_at,
+                            closed_at,
+                            order_payload,
+                        )
+                        data_rows.append(row)
+                        msg_ids.append(msg_id)
+                        stream_keys.append(stream)
+                    except Exception as e:
+                        logger.error(f"[GLOBAL] [process_batch] Error: Order parse error: {e}")
+
+                if data_rows:
+                    query = """
+                        INSERT INTO aureus_trades (
+                            trace_id, ticket, symbol, magic_number, strategy_id, strategy_name,
+                            direction, entry_type, status, entry_price, exit_price,
+                            sl, tp, volume, commission, swap, profit,
+                            filled_at, closed_at, payload
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                        ON CONFLICT (trace_id) DO UPDATE SET
+                            ticket = COALESCE(EXCLUDED.ticket, aureus_trades.ticket),
+                            status = EXCLUDED.status,
+                            exit_price = COALESCE(EXCLUDED.exit_price, aureus_trades.exit_price),
+                            profit = COALESCE(EXCLUDED.profit, aureus_trades.profit),
+                            closed_at = COALESCE(EXCLUDED.closed_at, aureus_trades.closed_at),
+                            updated_at = NOW(),
+                            payload = aureus_trades.payload || EXCLUDED.payload
+                    """
+                    await conn.executemany(query, data_rows)
+
+                    # ACK successful inserts
+                    acks = {}
+                    for s, m in zip(stream_keys, msg_ids):
+                        if s not in acks:
+                            acks[s] = []
+                        acks[s].append(m)
+                    pipe = self.redis.pipeline()
+                    for s, ids in acks.items():
+                        pipe.xack(s, CONSUMER_GROUP, *ids)
+                    await pipe.execute()
+                    logger.info(f"[GLOBAL] [process_batch] 7... Inserted/Updated {len(data_rows)} orders")
+
+                # ACK messages that were skipped due to validation errors
+                if ack_skip_msg_ids:
+                    pipe = self.redis.pipeline()
+                    skip_acks = {}
+                    for s, m in ack_skip_msg_ids:
+                        if s not in skip_acks:
+                            skip_acks[s] = []
+                        skip_acks[s].append(m)
+                    for s, ids in skip_acks.items():
+                        pipe.xack(s, CONSUMER_GROUP, *ids)
+                    await pipe.execute()
 
     async def run(self):
         await self.connect_redis()
@@ -463,9 +613,10 @@ class DBWriter:
                             elif ":execution" in stream_name: self.execution_buffer.append((stream_name, msg_id, payload))
                             elif ":positions" in stream_name: self.position_buffer.append((stream_name, msg_id, payload))
                             elif ":account" in stream_name: self.account_buffer.append((stream_name, msg_id, payload))
+                            elif ":orders" in stream_name: self.order_buffer.append((stream_name, msg_id, payload))
             except Exception as e:
                 logger.error(f"[GLOBAL] [run] Error: Read error: {e}"); await asyncio.sleep(1)
-            
+
             buffer_size = (
                 len(self.tick_buffer)
                 + len(self.candle_buffer)
@@ -473,6 +624,7 @@ class DBWriter:
                 + len(self.execution_buffer)
                 + len(self.position_buffer)
                 + len(self.account_buffer)
+                + len(self.order_buffer)
             )
             if buffer_size >= BATCH_SIZE or (buffer_size > 0 and (time.time() - self.last_flush_time) * 1000 >= BATCH_TIMEOUT_MS):
                 await self.process_batch(); self.last_flush_time = time.time()
