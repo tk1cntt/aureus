@@ -76,12 +76,23 @@ def format_strategy_match(event: dict) -> str:
     entry_type = html.escape(str(data.get("entry_type", "UNKNOWN")))
     reason_code = html.escape(str(data.get("reason_code", "")))
 
-    sl = data.get("sl")
-    tp = data.get("tp")
+    sl = data.get("sl_absolute") or data.get("sl")
+    tp = data.get("tp_absolute") or data.get("tp")
     size_value = data.get("size_value", "N/A")
 
-    sl_display = str(sl) if sl is not None else "N/A"
-    tp_display = str(tp) if tp is not None else "N/A"
+    def format_price(val):
+        if val is None:
+            return "N/A"
+        if isinstance(val, dict):
+            # Fallback if uncalculated config leaks
+            return "Auto (Calculated at Entry)"
+        try:
+            return f"{float(val):.5f}".rstrip("0").rstrip(".")
+        except (ValueError, TypeError):
+            return str(val)
+
+    sl_display = format_price(sl)
+    tp_display = format_price(tp)
 
     # Direction emoji
     if side.upper() == "BUY":

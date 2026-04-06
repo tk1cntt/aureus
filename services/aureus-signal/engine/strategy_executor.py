@@ -409,6 +409,10 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         if strategy_results:
                             from engine.signal_event_publisher import publish_strategy_match
                             for res in strategy_results:
+                                exit_config = res.get('exit_config', {})
+                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, exit_config)
+                                res['sl_absolute'] = abs_sl
+                                res['tp_absolute'] = abs_tp
                                 await publish_strategy_match(r, symbol, res)
 
                         if execution_mode == "simulated":

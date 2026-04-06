@@ -63,8 +63,10 @@ async def publish_strategy_match(
         "size_value": strategy_result.get("size_value", strategy_result.get("size")),
         "size_mode": strategy_result.get("size_mode", "FIXED_UNITS"),
         "magic_number": strategy_result.get("magic_number"),
-        "sl": strategy_result.get("sl"),
-        "tp": strategy_result.get("tp"),
+        "sl": strategy_result.get("sl_absolute", strategy_result.get("sl")),
+        "tp": strategy_result.get("tp_absolute", strategy_result.get("tp")),
+        "sl_absolute": strategy_result.get("sl_absolute"),
+        "tp_absolute": strategy_result.get("tp_absolute"),
         "reason_code": strategy_result.get("reason_code"),
         "origin_timestamp": strategy_result.get("origin_timestamp"),
     }
