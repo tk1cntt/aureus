@@ -218,4 +218,54 @@ ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS decision TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS key_insight TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS trigger_id TEXT;
 ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
+
+-- ============================================================================
+-- Phase 30: Trade State Management
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS aureus_trades (
+    id                  BIGSERIAL PRIMARY KEY,
+    trace_id            TEXT NOT NULL UNIQUE,
+    ticket              BIGINT,
+    symbol              TEXT NOT NULL,
+    magic_number        BIGINT,
+    strategy_id         BIGINT,
+    strategy_name       TEXT,
+    direction           TEXT NOT NULL,
+    entry_type          TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'PENDING',
+    entry_price         DOUBLE PRECISION,
+    exit_price          DOUBLE PRECISION,
+    sl                  DOUBLE PRECISION,
+    tp                  DOUBLE PRECISION,
+    volume              DOUBLE PRECISION,
+    commission          DOUBLE PRECISION DEFAULT 0,
+    swap                DOUBLE PRECISION DEFAULT 0,
+    profit              DOUBLE PRECISION DEFAULT 0,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    filled_at           TIMESTAMPTZ,
+    closed_at           TIMESTAMPTZ,
+    payload             JSONB
+);
+
+SELECT create_hypertable('aureus_trades', 'created_at',
+    chunk_time_interval => INTERVAL '7 days',
+    if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_trades_symbol ON aureus_trades(symbol);
+CREATE INDEX IF NOT EXISTS idx_trades_status ON aureus_trades(status);
+CREATE INDEX IF NOT EXISTS idx_trades_magic ON aureus_trades(magic_number);
+CREATE INDEX IF NOT EXISTS idx_trades_ticket ON aureus_trades(ticket);
+CREATE INDEX IF NOT EXISTS idx_trades_strategy ON aureus_trades(strategy_id);
+
+SELECT add_compression_policy('aureus_trades', compress_after => INTERVAL '30 days');
+SELECT add_retention_policy('aureus_trades', drop_after => INTERVAL '2 years');
+
+-- Phase 26: Magic number per strategy (migration applied, documented here)
+ALTER TABLE aureus_strategy_templates
+  ADD COLUMN IF NOT EXISTS magic_number BIGINT;
+
+COMMENT ON COLUMN aureus_strategy_templates.magic_number IS
+  'Static MT5 magic number per strategy for order tracking';
 ALTER TABLE aureus_ai_analysis ALTER COLUMN narrative DROP NOT NULL;
