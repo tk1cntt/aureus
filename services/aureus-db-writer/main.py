@@ -658,13 +658,24 @@ class DBWriter:
                         messages = await self.redis.xrange(stream, msg_id, msg_id, 1)
                         if messages:
                             _, payload = messages[0]
-                            # Reprocess the message
-                            self.order_buffer.append((stream, msg_id, payload))
-                            total_recovered += 1
-                            logger.info(f"[RECONCILIATION] Recovered unacked message: {msg_id} from {stream}")
-
-                        # ACK after adding to buffer (will be processed in next process_batch)
-                        await self.redis.xack(stream, CONSUMER_GROUP, msg_id)
+                            
+                            # Skip ORDER_REJECTED — not real trades, just signal rejections
+                            event_type = payload.get('type', '')
+                            if event_type == 'ORDER_REJECTED':
+                                logger.debug(f"[RECONCILIATION] Skipping ORDER_REJECTED during XPENDING recovery: {msg_id}")
+                                await self.redis.xack(stream, CONSUMER_GROUP, msg_id)
+                                continue
+                            
+                            # Only recover real trade events (PENDING, OPEN, CLOSE)
+                            if event_type in ('ORDER_PENDING', 'ORDER_OPEN', 'ORDER_CLOSE'):
+                                self.order_buffer.append((stream, msg_id, payload))
+                                total_recovered += 1
+                                logger.info(f"[RECONCILIATION] Recovered unacked message: {msg_id} from {stream}")
+                            else:
+                                logger.debug(f"[RECONCILIATION] Skipping unknown event type '{event_type}' during XPENDING recovery: {msg_id}")
+                            
+                            # ACK after adding to buffer (will be processed in next process_batch)
+                            await self.redis.xack(stream, CONSUMER_GROUP, msg_id)
                     except Exception as e:
                         logger.error(f"[RECONCILIATION] Error recovering message {msg_id}: {e}")
 
