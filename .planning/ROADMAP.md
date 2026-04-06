@@ -99,6 +99,11 @@
 **Requirements:** TRADE-01, TRADE-02, TRADE-05
 **Goal:** Quản lý vòng đời order với state machine và persistent storage.
 
+**Plans:** 1 plan
+
+**Plans:**
+- [ ] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 5-state machine, order_buffer, magic number filters
+
 **Success Criteria:**
 1. Order state machine tracking (pending → sent → filled → closed) hoạt động
 2. Trade records lưu vào PostgreSQL/TimescaleDB
