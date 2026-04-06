@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                            AureusProvider.mq5     |
 //|                    Aureus Data Provider — Multi-Symbol Streaming   |
-//|                    Sends market data to Aureus Gateway via TCP     |
+//|                    Streams market data + receives order commands   |
 //+------------------------------------------------------------------+
 #property copyright   "Aureus Project"
-#property version     "2.00"
-#property description "Streams M1 candles for multiple symbols and optional ticks for chart symbol"
+#property version     "3.00"
+#property description "Bidirectional: streams M1 candles/ticks + executes order commands from gateway"
 #property strict
 
 //--- Includes
@@ -24,6 +24,8 @@ input bool     InpBackfillOnReconnect= false;                    // Auto-backfil
 input int      InpMaxBackfillBars    = 300;                      // Max backfill candles on reconnect
 input int      InpInitialBars        = 1440;                     // Initial backfill candles (24h @ M1)
 input int      InpTimerMs            = 100;                      // Timer interval (ms)
+input int      InpMaxSlippage        = 20;                       // Max slippage for market orders (points)
+input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
@@ -46,6 +48,14 @@ long          g_lastTickMs;            // Last tick timestamp (ms) — for dedup
 int           g_ticksSent;             // Counter (chart symbol ticks)
 bool          g_wasDisconnected;       // Track if we were disconnected
 datetime      g_disconnectTime;        // When we lost connection
+
+// Command dedup
+string        g_processedCmdIds[];     // Dedup: processed command IDs
+int           g_cmdIdCount;            // Count of stored cmd IDs
+
+// Order execution stats
+int           g_ordersExecuted;        // Successful order count
+int           g_ordersFailed;          // Failed order count
 
 //+------------------------------------------------------------------+
 //| Initialization                                                     |
@@ -99,6 +109,14 @@ int OnInit()
    g_wasDisconnected    = false;
    g_disconnectTime     = 0;
 
+   //--- Initialize command dedup
+   ArrayResize(g_processedCmdIds, InpMaxCmdIdHistory);
+   g_cmdIdCount = 0;
+
+   //--- Initialize order stats
+   g_ordersExecuted = 0;
+   g_ordersFailed   = 0;
+
    //--- Attempt initial connection
    if(g_socket.Connect())
    {
@@ -125,7 +143,7 @@ int OnInit()
    EventSetMillisecondTimer(InpTimerMs);
 
    //--- Chart comment
-   Comment(StringFormat("Aureus Provider v2.0 [%d symbols → %s:%d]",
+   Comment(StringFormat("Aureus Provider v3.0 [%d symbols → %s:%d]",
            g_symbolCount, InpGatewayHost, InpGatewayPort));
 
    return INIT_SUCCEEDED;
@@ -143,8 +161,8 @@ void OnDeinit(const int reason)
    for(int i = 0; i < g_symbolCount; i++)
       totalCandles += g_contexts[i].candlesSent;
 
-   PrintFormat("[AureusProvider] Stopped. Ticks sent: %d, Candles sent: %d (across %d symbols)",
-               g_ticksSent, totalCandles, g_symbolCount);
+   PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
+               g_ticksSent, totalCandles, g_ordersExecuted, g_ordersFailed);
 }
 
 //+------------------------------------------------------------------+
@@ -504,6 +522,388 @@ string ParseJSONString(const string &raw, const string key)
 }
 
 //+------------------------------------------------------------------+
+//| Parse a JSON double field: "key":123.45                           |
+//+------------------------------------------------------------------+
+double ParseJSONDouble(const string &raw, const string key)
+{
+   string searchKey = "\"" + key + "\":";
+   int pos = StringFind(raw, searchKey);
+   if(pos < 0) return 0.0;
+   int startPos = pos + StringLen(searchKey);
+   // Skip whitespace
+   while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
+      startPos++;
+   int endPos = startPos;
+   while(endPos < StringLen(raw))
+   {
+      ushort ch = StringGetCharacter(raw, endPos);
+      if(ch != '-' && ch != '.' && (ch < '0' || ch > '9'))
+         break;
+      endPos++;
+   }
+   if(endPos == startPos) return 0.0;
+   return StringToDouble(StringSubstr(raw, startPos, endPos - startPos));
+}
+
+//+------------------------------------------------------------------+
+//| Parse a JSON long (integer) field: "key":12345                    |
+//+------------------------------------------------------------------+
+long ParseJSONLong(const string &raw, const string key)
+{
+   string searchKey = "\"" + key + "\":";
+   int pos = StringFind(raw, searchKey);
+   if(pos < 0) return 0;
+   int startPos = pos + StringLen(searchKey);
+   while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
+      startPos++;
+   int endPos = startPos;
+   while(endPos < StringLen(raw))
+   {
+      ushort ch = StringGetCharacter(raw, endPos);
+      if(ch != '-' && (ch < '0' || ch > '9'))
+         break;
+      endPos++;
+   }
+   if(endPos == startPos) return 0;
+   return StringToInteger(StringSubstr(raw, startPos, endPos - startPos));
+}
+
+//+------------------------------------------------------------------+
+//| Check if command ID was already processed (idempotency)           |
+//+------------------------------------------------------------------+
+bool IsDuplicateCmd(string cmdId)
+{
+   for(int i = 0; i < g_cmdIdCount; i++)
+   {
+      if(g_processedCmdIds[i] == cmdId)
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Record command ID in dedup history (FIFO)                         |
+//+------------------------------------------------------------------+
+void RecordCmdId(string cmdId)
+{
+   if(g_cmdIdCount >= InpMaxCmdIdHistory)
+   {
+      // FIFO: shift array left, drop oldest
+      for(int i = 0; i < g_cmdIdCount - 1; i++)
+         g_processedCmdIds[i] = g_processedCmdIds[i + 1];
+      g_cmdIdCount--;
+   }
+   g_processedCmdIds[g_cmdIdCount] = cmdId;
+   g_cmdIdCount++;
+}
+
+//+------------------------------------------------------------------+
+//| Send ACK response                                                  |
+//+------------------------------------------------------------------+
+void SendACK(string cmdId)
+{
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+      "{\"type\":\"ACK\",\"cmd_id\":\"%s\",\"t\":%lld}",
+      cmdId, timeMs);
+   g_socket.SendJSON(json);
+   PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
+}
+
+//+------------------------------------------------------------------+
+//| Send NACK response                                                 |
+//+------------------------------------------------------------------+
+void SendNACK(string cmdId, string reason)
+{
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+      "{\"type\":\"NACK\",\"cmd_id\":\"%s\",\"reason\":\"%s\",\"t\":%lld}",
+      cmdId, reason, timeMs);
+   g_socket.SendJSON(json);
+   PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
+}
+
+//+------------------------------------------------------------------+
+//| Map trade retcode to reason string                                 |
+//+------------------------------------------------------------------+
+string RetcodeToReason(int retcode)
+{
+   switch(retcode)
+   {
+      case 10019: return "INSUFFICIENT_MARGIN";
+      case 10016: return "INVALID_STOPS";
+      case 10017: return "TRADE_DISABLED";
+      case 10018: return "MARKET_CLOSED";
+      case 10006: return "REJECTED";
+      case 10015: return "INVALID_PRICE";
+      case 10014: return "INVALID_VOLUME";
+      case 10013: return "REQUEST_DENIED";
+      default:    return StringFormat("ERROR_%d", retcode);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Push ORDER_OPENED event                                            |
+//+------------------------------------------------------------------+
+void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
+                     string orderType, double volume, double openPrice,
+                     double sl, double tp, long magic)
+{
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+      "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
+      "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
+      "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"t\":%lld}",
+      cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, timeMs);
+   g_socket.SendJSON(json);
+   PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s", ticket, symbol);
+}
+
+//+------------------------------------------------------------------+
+//| Push ORDER_FAILED event                                            |
+//+------------------------------------------------------------------+
+void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
+{
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+      "{\"type\":\"ORDER_FAILED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\","
+      "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
+      cmdId, symbol, reason, retcode, timeMs);
+   g_socket.SendJSON(json);
+   PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
+               cmdId, reason, retcode);
+}
+
+//+------------------------------------------------------------------+
+//| Push ORDER_CLOSED event                                            |
+//+------------------------------------------------------------------+
+void PushOrderClosed(string symbol, long ticket, string direction, double volume,
+                     double openPrice, double closePrice, double profit,
+                     double commission, double swap, long magic)
+{
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+      "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
+      "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
+      "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"t\":%lld}",
+      symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
+      magic, timeMs);
+   g_socket.SendJSON(json);
+   PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f", ticket, profit);
+}
+
+//+------------------------------------------------------------------+
+//| Execute OPEN_ORDER command                                         |
+//+------------------------------------------------------------------+
+void ExecuteOpenOrder(const string &raw)
+{
+   // Parse command fields
+   string cmdId     = ParseJSONString(raw, "cmd_id");
+   string symbol    = ParseJSONString(raw, "symbol");
+   string direction = ParseJSONString(raw, "direction");
+   string orderType = ParseJSONString(raw, "order_type");
+   double volume    = ParseJSONDouble(raw, "volume");
+   double price     = ParseJSONDouble(raw, "price");
+   double sl        = ParseJSONDouble(raw, "sl");
+   double tp        = ParseJSONDouble(raw, "tp");
+   long   magic     = ParseJSONLong(raw, "magic");
+   string comment   = ParseJSONString(raw, "comment");
+
+   // Validate required fields
+   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || volume <= 0)
+   {
+      SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
+      return;
+   }
+
+   // Check idempotency
+   if(IsDuplicateCmd(cmdId))
+   {
+      SendNACK(cmdId, "DUPLICATE");
+      return;
+   }
+
+   // Check symbol is known
+   if(FindContextIndex(symbol) < 0)
+   {
+      SendNACK(cmdId, "UNKNOWN_SYMBOL");
+      return;
+   }
+
+   // Check AutoTrading enabled
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+   {
+      SendNACK(cmdId, "TRADE_DISABLED");
+      return;
+   }
+
+   // ACK — command accepted
+   SendACK(cmdId);
+   RecordCmdId(cmdId);
+
+   // Build MqlTradeRequest
+   MqlTradeRequest request;
+   MqlTradeResult  result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+
+   request.symbol   = symbol;
+   request.volume   = volume;
+   request.sl       = sl;
+   request.tp       = tp;
+   request.magic    = magic;
+   request.comment  = comment;
+   request.deviation = InpMaxSlippage;
+
+   if(orderType == "MARKET")
+   {
+      request.action = TRADE_ACTION_DEAL;
+      request.type   = (direction == "BUY") ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+      request.price  = (direction == "BUY")
+                        ? SymbolInfoDouble(symbol, SYMBOL_ASK)
+                        : SymbolInfoDouble(symbol, SYMBOL_BID);
+      request.type_filling = ORDER_FILLING_IOC;
+   }
+   else if(orderType == "LIMIT")
+   {
+      request.action = TRADE_ACTION_PENDING;
+      request.price  = price;
+      request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
+      request.type_filling = ORDER_FILLING_RETURN;
+      request.type_time = ORDER_TIME_GTC;
+   }
+   else if(orderType == "STOP")
+   {
+      request.action = TRADE_ACTION_PENDING;
+      request.price  = price;
+      request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
+      request.type_filling = ORDER_FILLING_RETURN;
+      request.type_time = ORDER_TIME_GTC;
+   }
+   else
+   {
+      PushOrderFailed(cmdId, symbol, "UNKNOWN_ORDER_TYPE", 0);
+      g_ordersFailed++;
+      return;
+   }
+
+   // Pre-validate with OrderCheck
+   MqlTradeCheckResult checkResult;
+   ZeroMemory(checkResult);
+   if(!OrderCheck(request, checkResult))
+   {
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(checkResult.retcode), checkResult.retcode);
+      g_ordersFailed++;
+      return;
+   }
+
+   // Execute OrderSend
+   if(!OrderSend(request, result))
+   {
+      int err = GetLastError();
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode != 0 ? result.retcode : err), result.retcode);
+      g_ordersFailed++;
+      return;
+   }
+
+   if(result.retcode == TRADE_RETCODE_DONE)
+   {
+      PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
+                      volume, result.price, sl, tp, magic);
+      g_ordersExecuted++;
+   }
+   else
+   {
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+      g_ordersFailed++;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Execute CLOSE_ORDER command                                        |
+//+------------------------------------------------------------------+
+void ExecuteCloseOrder(const string &raw)
+{
+   string cmdId  = ParseJSONString(raw, "cmd_id");
+   string symbol = ParseJSONString(raw, "symbol");
+   long   ticket = ParseJSONLong(raw, "ticket");
+   long   magic  = ParseJSONLong(raw, "magic");
+
+   if(cmdId == "" || symbol == "" || ticket == 0)
+   {
+      SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
+      return;
+   }
+
+   if(IsDuplicateCmd(cmdId))
+   {
+      SendNACK(cmdId, "DUPLICATE");
+      return;
+   }
+
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+   {
+      SendNACK(cmdId, "TRADE_DISABLED");
+      return;
+   }
+
+   SendACK(cmdId);
+   RecordCmdId(cmdId);
+
+   // Select the position to close
+   if(!PositionSelectByTicket(ticket))
+   {
+      PushOrderFailed(cmdId, symbol, "POSITION_NOT_FOUND", 0);
+      g_ordersFailed++;
+      return;
+   }
+
+   // Verify magic number ownership
+   long posMagic = PositionGetInteger(POSITION_MAGIC);
+   if(posMagic != magic)
+   {
+      PushOrderFailed(cmdId, symbol, "MAGIC_MISMATCH", 0);
+      g_ordersFailed++;
+      return;
+   }
+
+   double posVolume = PositionGetDouble(POSITION_VOLUME);
+   long   posType   = PositionGetInteger(POSITION_TYPE);
+
+   MqlTradeRequest request;
+   MqlTradeResult  result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+
+   request.action   = TRADE_ACTION_DEAL;
+   request.position = ticket;
+   request.symbol   = symbol;
+   request.volume   = posVolume;
+   request.magic    = magic;
+   request.deviation = InpMaxSlippage;
+   // Opposite direction to close
+   request.type = (posType == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+   request.price = (posType == POSITION_TYPE_BUY)
+                    ? SymbolInfoDouble(symbol, SYMBOL_BID)
+                    : SymbolInfoDouble(symbol, SYMBOL_ASK);
+   request.type_filling = ORDER_FILLING_IOC;
+
+   if(!OrderSend(request, result))
+   {
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+      g_ordersFailed++;
+      return;
+   }
+
+   if(result.retcode != TRADE_RETCODE_DONE)
+   {
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+      g_ordersFailed++;
+   }
+   // ORDER_CLOSED will be pushed by OnTradeTransaction when deal completes
+}
+
+//+------------------------------------------------------------------+
 //| Listen and process commands from Gateway                           |
 //+------------------------------------------------------------------+
 void ProcessIncomingCommands()
@@ -516,6 +916,21 @@ void ProcessIncomingCommands()
 
    //--- Extract symbol from command
    string cmdSymbol = ParseJSONString(raw, "symbol");
+
+   // ── Order Commands ──
+   if(StringFind(raw, "\"OPEN_ORDER\"") >= 0)
+   {
+      PrintFormat("[AureusProvider] Received OPEN_ORDER command");
+      ExecuteOpenOrder(raw);
+      return;
+   }
+
+   if(StringFind(raw, "\"CLOSE_ORDER\"") >= 0)
+   {
+      PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
+      ExecuteCloseOrder(raw);
+      return;
+   }
 
    if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
    {
@@ -586,6 +1001,61 @@ void ProcessIncomingCommands()
 }
 
 //+------------------------------------------------------------------+
+//| Trade Transaction handler — detects position closes               |
+//+------------------------------------------------------------------+
+void OnTradeTransaction(const MqlTradeTransaction& trans,
+                        const MqlTradeRequest& request,
+                        const MqlTradeResult& result)
+{
+   // Only process deal additions
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
+      return;
+
+   // Must be connected to push events
+   if(!g_socket.IsConnected())
+      return;
+
+   // Select the deal from history
+   if(!HistoryDealSelect(trans.deal))
+      return;
+
+   // Only process position close/reduce deals
+   long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+   if(entry != DEAL_ENTRY_OUT)
+      return;
+
+   // Filter by magic number — only report bot-managed positions
+   long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
+   if(magic == 0)
+      return;  // Manual trade, skip
+
+   // Extract deal properties
+   string symbol      = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
+   long   ticket      = HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID);
+   double volume      = HistoryDealGetDouble(trans.deal, DEAL_VOLUME);
+   double closePrice  = HistoryDealGetDouble(trans.deal, DEAL_PRICE);
+   double profit      = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
+   double commission  = HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
+   double swap        = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
+   long   dealType    = HistoryDealGetInteger(trans.deal, DEAL_TYPE);
+
+   // Determine original direction (close deal is opposite direction)
+   string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
+
+   // Get open price from position info (if still available)
+   double openPrice = 0.0;
+   if(PositionSelectByTicket(ticket))
+      openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+
+   PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
+              "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
+              symbol, ticket, direction, profit, magic);
+
+   PushOrderClosed(symbol, ticket, direction, volume,
+                   openPrice, closePrice, profit, commission, swap, magic);
+}
+
+//+------------------------------------------------------------------+
 //| Timer event — candle polling, heartbeat, and status               |
 //+------------------------------------------------------------------+
 void OnTimer()
@@ -624,11 +1094,13 @@ void OnTimer()
    }
 
    //--- Status comment on chart
-   string statusLines = "Aureus Provider v2.0\n";
+   string statusLines = "Aureus Provider v3.0\n";
    statusLines += StringFormat("Gateway: %s:%d | Status: CONNECTED\n",
                                InpGatewayHost, InpGatewayPort);
    statusLines += StringFormat("Ticks Sent: %d (chart: %s, %s)\n",
                                g_ticksSent, _Symbol, InpSendTicks ? "ON" : "OFF");
+   statusLines += StringFormat("Orders: %d executed, %d failed | Cmd IDs: %d\n",
+                               g_ordersExecuted, g_ordersFailed, g_cmdIdCount);
    statusLines += "─── Symbol Candles ───\n";
 
    for(int i = 0; i < g_symbolCount; i++)

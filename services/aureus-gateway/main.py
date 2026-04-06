@@ -70,6 +70,54 @@ class BackfillMessage(BaseModel):
     symbol: str
     candles: List[BackfillCandle]
 
+# ── Order Event Models ────────────────────────────────────────────────
+class OrderOpenedEvent(BaseModel):
+    type: Literal['ORDER_OPENED']
+    cmd_id: str
+    symbol: str
+    ticket: int
+    direction: str
+    order_type: str
+    volume: float
+    open_price: float
+    sl: float
+    tp: float
+    magic: int
+    t: int
+
+class OrderClosedEvent(BaseModel):
+    type: Literal['ORDER_CLOSED']
+    symbol: str
+    ticket: int
+    direction: str
+    volume: float
+    open_price: float
+    close_price: float
+    profit: float
+    commission: float
+    swap: float
+    magic: int
+    t: int
+
+class OrderFailedEvent(BaseModel):
+    type: Literal['ORDER_FAILED']
+    cmd_id: str
+    symbol: str
+    reason: str
+    retcode: int
+    t: int
+
+class AckEvent(BaseModel):
+    type: Literal['ACK']
+    cmd_id: str
+    t: int
+
+class NackEvent(BaseModel):
+    type: Literal['NACK']
+    cmd_id: str
+    reason: str
+    t: int
+
 # ── Shared Message Processor ─────────────────────────────────────────────────
 
 # Global counter to track cumulative backfill candles since startup
@@ -81,6 +129,28 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
 
     if msg_type == 'BACKFILL':
         return await process_backfill(r, data, source)
+
+    # Order events from EA — validate and publish to Redis channel
+    ORDER_EVENT_TYPES = {
+        'ORDER_OPENED': OrderOpenedEvent,
+        'ORDER_CLOSED': OrderClosedEvent,
+        'ORDER_FAILED': OrderFailedEvent,
+        'ACK': AckEvent,
+        'NACK': NackEvent,
+    }
+
+    if msg_type in ORDER_EVENT_TYPES:
+        try:
+            model_class = ORDER_EVENT_TYPES[msg_type]
+            valid_event = model_class(**data)
+            event_json = valid_event.model_dump_json()
+            await r.publish("aureus:mt5:events", event_json)
+            symbol = data.get('symbol', 'GLOBAL')
+            logger.info(f"[{symbol}] [process_message] Order event {msg_type} published to aureus:mt5:events")
+            return True
+        except ValidationError as e:
+            logger.warning(f"[{source}] Order event validation error: {e}")
+            return False
 
     # Validate
     try:
@@ -115,7 +185,7 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
 
     await r.hset(latest_key, mapping=hash_update)
     await r.xadd(stream_key, hash_update, maxlen=5000, approximate=True)
-    
+
     if msg_type == 'CANDLE':
         logger.info(f"[{symbol}] [process_message] 2... Receive from Gateway {hash_update}")
     else:
@@ -142,7 +212,7 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
     symbol = backfill.symbol
     stream_key = f"aureus:stream:{symbol}:candle"
     latest_key = f"aureus:latest:{symbol}:candle"
-    
+
     # ── Signal downstream to RECALCULATE ──
     # [DEPRECATED] Signal Engine now monitors its own integrity and triggers its own recalc.
     # await r.xadd(stream_key, {"type": "COMMAND", "cmd": "RECALCULATE", "symbol": symbol})
@@ -223,7 +293,7 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                 if not text:
                     continue
                 data = json.loads(text)
-                
+
                 # Inject writer into data for process_message to register it
                 data["writer"] = writer
                 symbol = data.get("symbol")
@@ -250,7 +320,7 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                 active_connections[sym].remove(writer)
                 if not active_connections[sym]:
                     del active_connections[sym]
-        
+
         writer.close()
         try:
             await writer.wait_closed()
@@ -288,7 +358,7 @@ async def run_command_subscriber(r: redis.Redis):
     async for message in pubsub.listen():
         if message['type'] != 'message':
             continue
-        
+
         try:
             cmd_data = json.loads(message['data'])
             symbol = cmd_data.get("symbol")
@@ -307,7 +377,7 @@ async def run_command_subscriber(r: redis.Redis):
                     except Exception as e:
                         logger.error(f"Failed to send command to EA for {symbol}: {e}")
                         dead_writers.append(writer)
-                
+
                 for dw in dead_writers:
                     active_connections[symbol].remove(dw)
             else:
