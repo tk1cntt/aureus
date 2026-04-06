@@ -23,9 +23,9 @@
 | 27 | Telegram Notification Service | NOTIF-02→06 | ✅ DONE |
 | 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
 | 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
-| 30 | 1/1 | Complete   | 2026-04-06 |
+| 30 | Trade State Management | TRADE-01→02, TRADE-05 | 1/1 Complete 2026-04-06 |
 | 31 | MT5 History Sync | TRADE-03→04 | PLANNED |
-| 32 | Trade Performance API | PERF-01→07 | PLANNED |
+| 32 | Trade Performance API | PERF-01→07 | 1 plan |
 | 33 | Performance Dashboard UI | PERF-08 | PLANNED |
 
 ---
@@ -135,12 +135,19 @@
 **Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07
 **Goal:** API endpoints tính toán và trả về performance metrics.
 
+**Plans:** 1 plan
+
+**Plans:**
+- [ ] 32-01-PLAN.md — Performance API: connection pooling, /trades (pagination), /metrics (SQL+Python), /equity-curve, Redis cache
+
 **Success Criteria:**
-1. API `/api/trades` trả danh sách trades với entry/exit details
-2. Win rate, Profit factor, Max drawdown, Average R:R tính toán chính xác
-3. Equity curve data trả về time series
-4. Filter hoạt động: theo symbol, strategy, timeframe
-5. API response time < 500ms cho dataset up to 10k trades
+1. API `/api/v1/performance/trades` trả danh sách trades với pagination và filtering
+2. Win rate, Profit factor, Max drawdown, Average R:R, Sharpe ratio tính chính xác
+3. Equity curve data trả về time series từ `aureus_account_snapshots` với fallback `aureus_trades`
+4. Filter hoạt động: symbol, strategy_id, date range, status
+5. API response time < 500ms cho dataset up to 10k trades (pooling + caching)
+6. Connection pooling giảm connection overhead
+7. Redis cache cho metrics endpoints với 60s TTL
 
 ---
 
