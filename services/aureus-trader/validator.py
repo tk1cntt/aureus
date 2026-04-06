@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 VALID_ENTRY_TYPES = {"MARKET", "LIMIT", "STOP"}
 VALID_DIRECTIONS = {"BUY", "SELL"}
-SUPPORTED_SIZE_MODES = {"FIXED_LOT"}  # v1 only
+SUPPORTED_SIZE_MODES = {"FIXED_LOT", "FIXED_UNITS"}  # FIXED_UNITS alias for FIXED_LOT
 
 
 @dataclass
@@ -21,16 +21,8 @@ class ValidationResult:
 def validate_strategy_match(event: dict) -> ValidationResult:
     """Validate a STRATEGY_MATCH event data dict.
 
-    Checks all D-04 rules:
-    - event["type"] == "STRATEGY_MATCH"
-    - data exists
-    - entry_type in VALID_ENTRY_TYPES
-    - direction in VALID_DIRECTIONS
-    - size_mode in SUPPORTED_SIZE_MODES
-    - size_value > 0
-    - sl_absolute and tp_absolute not None
-    - magic_number > 0
-    - LIMIT/STOP orders require entry_price > 0
+    Accepts both Phase 26 field names (side, sl, tp, FIXED_UNITS)
+    and Phase 29 canonical names (direction, sl_absolute, tp_absolute, FIXED_LOT).
     """
     errors = []
 
@@ -47,8 +39,8 @@ def validate_strategy_match(event: dict) -> ValidationResult:
     if entry_type not in VALID_ENTRY_TYPES:
         errors.append(f'invalid entry_type: {entry_type!r}')
 
-    # Rule: direction must be valid
-    direction = data.get("direction")
+    # Rule: direction must be valid (accept "side" alias from Phase 26)
+    direction = data.get("direction") or data.get("side")
     if direction not in VALID_DIRECTIONS:
         errors.append(f'invalid direction: {direction!r}')
 
@@ -65,13 +57,15 @@ def validate_strategy_match(event: dict) -> ValidationResult:
     if not (isinstance(size_value, (int, float)) and size_value > 0):
         errors.append(f'size_value must be > 0, got {size_value!r}')
 
-    # Rule: sl_absolute must not be None
-    if data.get("sl_absolute") is None:
-        errors.append("sl_absolute must not be None")
+    # Rule: sl_absolute must not be None (accept "sl" alias from Phase 26)
+    sl = data.get("sl_absolute") or data.get("sl")
+    if sl is None:
+        errors.append("sl_absolute (or sl) must not be None")
 
-    # Rule: tp_absolute must not be None
-    if data.get("tp_absolute") is None:
-        errors.append("tp_absolute must not be None")
+    # Rule: tp_absolute must not be None (accept "tp" alias from Phase 26)
+    tp = data.get("tp_absolute") or data.get("tp")
+    if tp is None:
+        errors.append("tp_absolute (or tp) must not be None")
 
     # Rule: magic_number must be > 0
     magic_number = data.get("magic_number", 0)
