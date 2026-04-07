@@ -436,8 +436,32 @@ async def run_command_subscriber(r: redis.Redis):
         try:
             cmd_data = json.loads(message['data'])
             symbol = cmd_data.get("symbol")
+
+            # Global commands (no symbol) — broadcast to all active EA connections
             if not symbol:
-                logger.warning(f"Received command without symbol: {cmd_data}")
+                global_commands = {"REQUEST_POSITIONS", "REQUEST_TRADE_HISTORY", "REQUEST_ORDERS"}
+                cmd_type = cmd_data.get("type", "")
+                if cmd_type in global_commands:
+                    payload = message['data'] + "\n"
+                    dead_writers = []
+                    sent_count = 0
+                    for sym, writers in list(active_connections.items()):
+                        for writer in writers:
+                            try:
+                                writer.write(payload.encode('utf-8'))
+                                await writer.drain()
+                                sent_count += 1
+                            except Exception as e:
+                                logger.error(f"Failed to send global command to EA for {sym}: {e}")
+                                dead_writers.append((sym, writer))
+
+                    for sym, dw in dead_writers:
+                        if sym in active_connections and dw in active_connections[sym]:
+                            active_connections[sym].remove(dw)
+
+                    logger.info(f"[GLOBAL] [run_command_subscriber] Broadcast {cmd_type} to {sent_count} EA connection(s)")
+                else:
+                    logger.warning(f"Received command without symbol: {cmd_data}")
                 continue
 
             if symbol in active_connections:
