@@ -930,15 +930,16 @@ void ExecuteOpenOrder(const string &raw)
    
    // Normalize stops for Market orders
    int symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double pointVal = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   long stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+
    if (orderType == "MARKET")
    {
-       double pointVal = SymbolInfoDouble(symbol, SYMBOL_POINT);
-       long stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
-       double minDistance = (stopLevel + 1) * pointVal; 
+       double minDistance = (stopLevel + 1) * pointVal;
        double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
        double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-       
-       if (sl > 0.0) 
+
+       if (sl > 0.0)
        {
            if (direction == "BUY" && (ask - sl) < minDistance) sl = ask - minDistance;
            else if (direction == "SELL" && (sl - bid) < minDistance) sl = bid + minDistance;
@@ -1001,9 +1002,6 @@ void ExecuteOpenOrder(const string &raw)
    // --- DEBUG LOGGING FOR INVALID_STOPS DIAGNOSIS ---
    double askPrice = SymbolInfoDouble(symbol, SYMBOL_ASK);
    double bidPrice = SymbolInfoDouble(symbol, SYMBOL_BID);
-   long   stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
-   double pointVal  = SymbolInfoDouble(symbol, SYMBOL_POINT);
-   int    symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    double minVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double maxVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
 
@@ -1012,13 +1010,12 @@ void ExecuteOpenOrder(const string &raw)
    else if(fillType == ORDER_FILLING_IOC) fillingStr = "IOC";
    else if(fillType == ORDER_FILLING_RETURN) fillingStr = "RETURN";
 
-   PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts (%.5f) | digits=%d | filling=%s",
+   PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
       symbol, direction, orderType,
       request.volume, minVol, maxVol,
       askPrice, bidPrice,
       request.sl, request.tp,
-      stopLevel, (stopLevel + 1) * pointVal,
-      symDigits, fillingStr);
+      stopLevel, symDigits, fillingStr);
 
    if(orderType == "MARKET")
    {
