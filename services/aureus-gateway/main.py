@@ -118,6 +118,53 @@ class NackEvent(BaseModel):
     reason: str
     t: int
 
+# ── Position Report Models ────────────────────────────────────────────
+class PositionInfo(BaseModel):
+    ticket: int
+    symbol: str
+    magic: int
+    direction: str
+    volume: float
+    open_price: float
+    current_price: float
+    profit: float
+    swap: float
+    sl: float
+    tp: float
+    pips: float
+    open_time: int
+
+class PositionReportEvent(BaseModel):
+    type: Literal['POSITION_REPORT']
+    positions: List[PositionInfo]
+    total: int
+    total_profit: float
+    t: int
+
+# ── Trade History Models ──────────────────────────────────────────────
+class TradeInfo(BaseModel):
+    ticket: int
+    symbol: str
+    magic_number: int
+    direction: str
+    entry_price: float
+    exit_price: float
+    sl: float
+    tp: float
+    volume: float
+    commission: float
+    swap: float
+    profit: float
+    open_time: int
+    close_time: int
+
+class TradeHistoryEvent(BaseModel):
+    type: Literal['TRADE_HISTORY']
+    trades: List[TradeInfo]
+    count: int
+    from_time: int
+    to_time: int
+
 # ── Shared Message Processor ─────────────────────────────────────────────────
 
 # Global counter to track cumulative backfill candles since startup
@@ -137,6 +184,8 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
         'ORDER_FAILED': OrderFailedEvent,
         'ACK': AckEvent,
         'NACK': NackEvent,
+        'POSITION_REPORT': PositionReportEvent,
+        'TRADE_HISTORY': TradeHistoryEvent,
     }
 
     if msg_type in ORDER_EVENT_TYPES:

@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                            AureusProvider.mq5     |
 //|                    Aureus Data Provider â€” Multi-Symbol Streaming   |
 //|                    Streams market data + receives order commands   |
@@ -230,6 +230,78 @@ string BuildBackfillJSON(string symbol, MqlRates &rates[], int count)
 //+------------------------------------------------------------------+
 //| Build TRADE_HISTORY JSON (array of closed trades)                 |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Build JSON with all open positions                                 |
+//+------------------------------------------------------------------+
+string BuildPositionsJSON()
+{
+   string json = "{\"type\":\"POSITION_REPORT\",\"positions\":[";
+   int total = PositionsTotal();
+   bool first = true;
+   double totalProfit = 0.0;
+
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      long posType = PositionGetInteger(POSITION_TYPE);
+      double volume = PositionGetDouble(POSITION_VOLUME);
+      double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double currentPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+      double profit = PositionGetDouble(POSITION_PROFIT);
+      double swap = PositionGetDouble(POSITION_SWAP);
+      double sl = PositionGetDouble(POSITION_SL);
+      double tp = PositionGetDouble(POSITION_TP);
+      datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
+      string direction = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+
+      // Calculate pips based on symbol digits
+      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double pipSize = (digits == 3 || digits == 5) ? point * 10 : point;
+      double pips = 0.0;
+      if(pipSize > 0)
+         pips = (direction == "BUY")
+                ? (currentPrice - openPrice) / pipSize
+                : (openPrice - currentPrice) / pipSize;
+
+      totalProfit += profit + swap;
+
+      if(!first) json += ",";
+      first = false;
+
+      json += StringFormat(
+         "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic\":%lld,"
+         "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
+         "\"current_price\":%.5f,\"profit\":%.2f,\"swap\":%.2f,"
+         "\"sl\":%.5f,\"tp\":%.5f,\"pips\":%.1f,\"open_time\":%lld}",
+         ticket, symbol, magic, direction, volume, openPrice,
+         currentPrice, profit, swap, sl, tp, pips, (long)openTime * 1000);
+   }
+
+   json += StringFormat("],\"total\":%d,\"total_profit\":%.2f,\"t\":%lld}",
+            total, totalProfit, (long)TimeCurrent() * 1000);
+   return json;
+}
+
+//+------------------------------------------------------------------+
+//| Execute REQUEST_POSITIONS command                                   |
+//+------------------------------------------------------------------+
+void ExecutePositionsRequest()
+{
+   string json = BuildPositionsJSON();
+   if(g_socket.SendJSON(json))
+      PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
+   else
+      PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
+}
+
+//+------------------------------------------------------------------+
+//| Build JSON with trade history (closed deals)                       |
+//+------------------------------------------------------------------+
 string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagic=0, string filterSymbol="")
 {
    if(!HistorySelect(fromTime, toTime))
@@ -239,7 +311,7 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
    }
 
    int totalDeals = HistoryDealsTotal();
-   string json = StringFormat("{\"type\":\"TRADE_HISTORY\",\"trades\":[");
+   string json = "{\"type\":\"TRADE_HISTORY\",\"trades\":[";
    bool first = true;
    int count = 0;
 
@@ -838,8 +910,38 @@ void ExecuteOpenOrder(const string &raw)
    ZeroMemory(result);
 
    request.symbol   = symbol;
+   
+   // Normalize volume
+   double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double step_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   if(step_vol > 0) volume = MathRound(volume / step_vol) * step_vol;
+   if(volume < min_vol) volume = min_vol;
+   if(volume > max_vol) volume = max_vol;
    request.volume   = volume;
+   
+   // Normalize stops for Market orders
    int symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if (orderType == "MARKET")
+   {
+       double pointVal = SymbolInfoDouble(symbol, SYMBOL_POINT);
+       long stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+       double minDistance = (stopLevel + 1) * pointVal; 
+       double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+       double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+       
+       if (sl > 0.0) 
+       {
+           if (direction == "BUY" && (ask - sl) < minDistance) sl = ask - minDistance;
+           else if (direction == "SELL" && (sl - bid) < minDistance) sl = bid + minDistance;
+       }
+       if (tp > 0.0)
+       {
+           if (direction == "BUY" && (tp - ask) < minDistance) tp = ask + minDistance;
+           else if (direction == "SELL" && (bid - tp) < minDistance) tp = bid - minDistance;
+       }
+   }
+
    request.sl       = NormalizeDouble(sl, symDigits);
    request.tp       = NormalizeDouble(tp, symDigits);
    request.magic    = magic;
@@ -1011,7 +1113,7 @@ void ExecuteTradeHistoryRequest(const string &raw)
    if(fromTime >= toTime)
    {
       PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
-      string errorJson = StringFormat("{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}");
+      string errorJson = "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}";
       g_socket.SendJSON(errorJson);
       return;
    }
@@ -1057,6 +1159,14 @@ void ProcessIncomingCommands()
    {
       PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
       ExecuteCloseOrder(raw);
+      return;
+   }
+
+   // ── Position Report Request ──
+   if(StringFind(raw, "\"REQUEST_POSITIONS\"") >= 0)
+   {
+      PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
+      ExecutePositionsRequest();
       return;
    }
 

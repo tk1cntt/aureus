@@ -15,6 +15,7 @@ import redis.asyncio as redis
 from config import load_filters, load_routes, subscribe_config_updates, passes_filter, FilterConfig, Route
 from telegram_bot import TelegramSender
 from rate_limiter import RateLimitedDispatcher
+from order_reporter import OrderStatusReporter
 
 logging.basicConfig(
     level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO")),
@@ -40,6 +41,13 @@ async def run_notifier():
         import sys
         sys.exit(1)
     sender = TelegramSender(bot_token)
+    
+    strategy_bot_token = os.environ.get("TELEGRAM_STRATEGY_BOT_TOKEN")
+    if strategy_bot_token:
+        sender_strategy = TelegramSender(strategy_bot_token)
+        logger.info("Initialized secondary Telegram bot for Strategy Matches")
+    else:
+        sender_strategy = None
 
     # 3. Load initial config
     filters: FilterConfig = await load_filters(r)
@@ -58,10 +66,28 @@ async def run_notifier():
     logger.info(f"Loaded routes: {len(routes)} routes")
 
     # 4. Initialize dispatcher
-    dispatcher = RateLimitedDispatcher(sender)
+    dispatcher = RateLimitedDispatcher(sender, sender_strategy)
 
     # 6. Start dispatcher loop
     dispatch_task = asyncio.create_task(dispatcher.dispatch_loop())
+
+    # 6b. Start Order Status Reporter (if configured)
+    order_bot_token = os.environ.get("TELEGRAM_ORDER_BOT_TOKEN")
+    if order_bot_token and default_chat_id:
+        order_sender = TelegramSender(order_bot_token)
+        reporter = OrderStatusReporter(
+            redis_client=r,
+            sender=order_sender,
+            chat_id=default_chat_id,
+            interval=60,
+        )
+        reporter_task = asyncio.create_task(reporter.run())
+        logger.info("Order Status Reporter started (60s interval, separate bot)")
+    else:
+        if not order_bot_token:
+            logger.info("TELEGRAM_ORDER_BOT_TOKEN not set — Order Status Reporter disabled")
+        if not default_chat_id:
+            logger.info("TELEGRAM_DEFAULT_CHAT_ID not set — Order Status Reporter disabled")
 
     # 7. Subscribe to signal channels for all configured symbols
     symbols_str = os.environ.get("SYMBOLS", "XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD")
@@ -94,6 +120,17 @@ async def run_notifier():
         except Exception as e:
             logger.warning(f"Failed to send greeting: {e}")
 
+        if sender_strategy:
+            strategy_greeting = greeting.replace("Aureus Notifier Online", "Aureus Strategy Bot Online")
+            try:
+                success2 = await sender_strategy.send_message(default_chat_id, strategy_greeting)
+                if success2:
+                    logger.info("Strategy greeting message sent successfully")
+                else:
+                    logger.warning("Failed to send strategy greeting message")
+            except Exception as e:
+                logger.warning(f"Failed to send strategy greeting: {e}")
+
     async def reload_config():
         nonlocal filters, routes
         filters = await load_filters(r)
@@ -103,17 +140,7 @@ async def run_notifier():
     # 5. Subscribe to config updates
     config_task = asyncio.create_task(subscribe_config_updates(r, reload_config))
 
-    # 6. Start dispatcher loop
-    dispatch_task = asyncio.create_task(dispatcher.dispatch_loop())
 
-    # 7. Subscribe to signal channels for all configured symbols
-    symbols_str = os.environ.get("SYMBOLS", "XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD")
-    symbols = [s.strip() for s in symbols_str.split(",") if s.strip()]
-    channels = [f"aureus:signals:{sym}" for sym in symbols]
-
-    pubsub = r.pubsub()
-    await pubsub.subscribe(*channels)
-    logger.info(f"Subscribed to channels: {channels}")
 
     # 8. Process incoming events
     async for message in pubsub.listen():
