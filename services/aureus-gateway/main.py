@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pydantic import BaseModel, ValidationError, Field
-from typing import Literal, List
+from typing import Literal, List, Optional
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -157,13 +157,37 @@ class TradeInfo(BaseModel):
     profit: float
     open_time: int
     close_time: int
+    digits: Optional[int] = None
+    pips: Optional[float] = None
 
 class TradeHistoryEvent(BaseModel):
     type: Literal['TRADE_HISTORY']
     trades: List[TradeInfo]
+    count: Optional[int] = None
+    from_time: Optional[int] = None
+    to_time: Optional[int] = None
+    error: Optional[str] = None
+
+# ── Open Orders Response (from EA REQUEST_ORDERS) ────────────────────
+class OpenOrderInfo(BaseModel):
+    ticket: int
+    symbol: str
+    direction: str
+    volume: float
+    entry_price: float
+    sl: float
+    tp: float
+    magic: int
+    profit: float
+    swap: float
+    commission: float
+    time: int
+    comment: str
+
+class OrdersEvent(BaseModel):
+    type: Literal['ORDERS']
+    positions: List[OpenOrderInfo]
     count: int
-    from_time: int
-    to_time: int
 
 # ── Shared Message Processor ─────────────────────────────────────────────────
 
@@ -186,6 +210,7 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
         'NACK': NackEvent,
         'POSITION_REPORT': PositionReportEvent,
         'TRADE_HISTORY': TradeHistoryEvent,
+        'ORDERS': OrdersEvent,
     }
 
     if msg_type in ORDER_EVENT_TYPES:

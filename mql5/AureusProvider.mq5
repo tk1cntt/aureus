@@ -933,9 +933,33 @@ void ExecuteOpenOrder(const string &raw)
    double pointVal = SymbolInfoDouble(symbol, SYMBOL_POINT);
    long stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
 
+   // --- Safe minimum stop distance ---
+   // When stopLevel=0 (common for crypto), broker may still reject stops that are
+   // too close. Use symbol-aware defaults to prevent INVALID_STOPS (10016).
+   double minDistance = (stopLevel + 1) * pointVal;
+   if(stopLevel == 0)
+   {
+      // Symbol-specific safe defaults
+      string symUpper = StringToUpper(symbol);
+      if(StringFind(symUpper, "BTC") >= 0)
+         minDistance = 100.0 * pointVal;        // $100 for BTC
+      else if(StringFind(symUpper, "ETH") >= 0)
+         minDistance = 20.0 * pointVal;          // $20 for ETH
+      else if(StringFind(symUpper, "USTEC") >= 0 || StringFind(symUpper, "US30") >= 0 || StringFind(symUpper, "SPX") >= 0)
+         minDistance = 15.0 * pointVal;          // 15 points for indices
+      else if(StringFind(symUpper, "XAU") >= 0 || StringFind(symUpper, "GOLD") >= 0)
+         minDistance = 3.0 * pointVal;           // $3 for Gold
+      else if(StringFind(symUpper, "JPY") >= 0)
+         minDistance = 50.0 * pointVal;          // 50 pips for JPY pairs
+      else
+         minDistance = 100.0 * pointVal;         // 100 pips for forex
+
+      PrintFormat("[AureusProvider] [%s] stopLevel=0, using safe minDistance=%.5f (%.1f points)",
+                  symbol, minDistance, minDistance / pointVal);
+   }
+
    if (orderType == "MARKET")
    {
-       double minDistance = (stopLevel + 1) * pointVal;
        double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
        double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
 
@@ -1147,6 +1171,76 @@ void ExecuteCloseOrder(const string &raw)
 }
 
 //+------------------------------------------------------------------+
+//| Execute REQUEST_ORDERS command — return all open positions         |
+//+------------------------------------------------------------------+
+void ExecuteRequestOrders(const string &raw)
+{
+   string cmdId = ParseJSONString(raw, "cmd_id");
+   long   filterMagic = ParseJSONLong(raw, "magic_number");
+   string filterSymbol = ParseJSONString(raw, "symbol");
+
+   PrintFormat("[AureusProvider] REQUEST_ORDERS: cmdId=%s magic=%lld symbol=%s",
+               cmdId, filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
+
+   string json = BuildOpenOrdersJSON(filterMagic, filterSymbol);
+
+   if(g_socket.SendJSON(json))
+   {
+      PrintFormat("[AureusProvider] ORDERS response sent");
+   }
+   else
+   {
+      PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Build JSON array of open positions                                 |
+//+------------------------------------------------------------------+
+string BuildOpenOrdersJSON(long filterMagic, string filterSymbol)
+{
+   string json = "{\"type\":\"ORDERS\",\"positions\":[";
+   int count = 0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      long   magic  = PositionGetInteger(POSITION_MAGIC);
+
+      if(filterMagic > 0 && magic != filterMagic) continue;
+      if(filterSymbol != "" && symbol != filterSymbol) continue;
+
+      long   posType      = PositionGetInteger(POSITION_TYPE);
+      double volume       = PositionGetDouble(POSITION_VOLUME);
+      double entryPrice   = PositionGetDouble(POSITION_PRICE_OPEN);
+      double sl           = PositionGetDouble(POSITION_SL);
+      double tp           = PositionGetDouble(POSITION_TP);
+      double profit       = PositionGetDouble(POSITION_PROFIT);
+      double swap         = PositionGetDouble(POSITION_SWAP);
+      double commission   = PositionGetDouble(POSITION_COMMISSION);
+      long   posTime      = PositionGetInteger(POSITION_TIME);
+      string comment      = PositionGetString(POSITION_COMMENT);
+      string direction    = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+
+      if(count > 0) json += ",";
+      json += StringFormat(
+         "{\"ticket\":%llu,\"symbol\":\"%s\",\"direction\":\"%s\",\"volume\":%.2f,\"entry_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"profit\":%.2f,\"swap\":%.2f,\"commission\":%.2f,\"time\":%lld,\"comment\":\"%s\"}",
+         ticket, symbol, direction, volume, entryPrice, sl, tp, magic,
+         profit, swap, commission, posTime, comment
+      );
+      count++;
+   }
+
+   json += StringFormat("],\"count\":%d}", count);
+   PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
+   return json;
+}
+
+//+------------------------------------------------------------------+
 //| Execute REQUEST_TRADE_HISTORY command                             |
 //+------------------------------------------------------------------+
 void ExecuteTradeHistoryRequest(const string &raw)
@@ -1221,6 +1315,14 @@ void ProcessIncomingCommands()
    }
 
    if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
+
+   // â"€â"€ Open Orders Request â"€â"€
+   if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
+   {
+      PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
+      ExecuteRequestOrders(raw);
+      return;
+   }
 
    // â"€â"€ Trade History Request â"€â"€
    if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)

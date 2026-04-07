@@ -5,6 +5,38 @@ from typing import Dict, List, Any
 
 from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, VALID_SIZE_MODES
 
+def get_point_size(symbol: str) -> float:
+    """Return point size for SL/TP calculation.
+
+    These values are calibrated so that strategy configs with
+    SL=500, TP_RR=3.0 produce reasonable stop distances for each asset class.
+
+    Target: 500 "pips" should equal approximately:
+    - Forex: 50 pips (0.0050 for EURUSD)
+    - Gold: $5.00 SL
+    - BTC: $500 SL
+    - ETH: $50 SL
+    - Indices: 50 points SL
+    """
+    symbol = symbol.upper()
+    if 'JPY' in symbol:
+        return 0.01          # 500 * 0.01 = 5.00 (500 pips for JPY)
+    elif 'BTC' in symbol:
+        return 1.0           # 500 * 1.0 = $500 SL for BTC
+    elif 'ETH' in symbol:
+        return 0.1           # 500 * 0.1 = $50 SL for ETH
+    elif 'XAU' in symbol or 'GOLD' in symbol:
+        return 0.01          # 500 * 0.01 = $5.00 SL for Gold
+    elif 'XAG' in symbol or 'SILVER' in symbol:
+        return 0.01          # 500 * 0.01 = $5.00 SL for Silver
+    elif 'USTEC' in symbol or 'NAS' in symbol or 'NDX' in symbol:
+        return 1.0           # 500 * 1.0 = 500 points SL for NASDAQ
+    elif 'US30' in symbol or 'DJI' in symbol or 'SPX' in symbol:
+        return 1.0           # 500 * 1.0 = 500 points SL for indices
+    else:
+        # Standard forex currency pairs
+        return 0.0001        # 500 * 0.0001 = 0.0500 (50 pips)
+
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
 class SimulatedTradeManager:
@@ -345,22 +377,20 @@ class SimulatedTradeManager:
         strategy_name = trigger.get('strategy', 'UNKNOWN')
 
         # 1. Stop Loss
+        point_size = get_point_size(state_obj.symbol)
         mode = sl_cfg.get('mode', 'FIXED_PIPS')
         if mode == 'FIXED_PIPS':
             raw_value = sl_cfg.get('value')
             if raw_value is None:
                 logger.warning(f"[{strategy_name}] SL mode=FIXED_PIPS but no 'value' configured — SL cannot be calculated")
                 return None, None
-            if 'JPY' in trigger['strategy'] or state_obj.symbol.endswith('JPY'):
-                 pips = raw_value / 100.0
-            else:
-                 pips = raw_value / 10000.0
-                 
-            sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+            
+            price_delta = raw_value * point_size
+            sl = (entry - price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry + price_delta)
             
         elif mode == 'SIGNAL_LOW' or mode == 'SIGNAL_HIGH':
             target_tag = sl_cfg.get('tag')
-            buffer = sl_cfg.get('buffer', 0) / 10000.0
+            buffer = sl_cfg.get('buffer', 0) * point_size
             
             # Priority 1: Check if the trigger itself has an 'ob' field (standard for Structure signals)
             ob = trigger.get('ob')
@@ -403,7 +433,7 @@ class SimulatedTradeManager:
              if raw_tp_value is None:
                  logger.warning(f"[{strategy_name}] TP mode=FIXED_PIPS but no 'value' configured — TP cannot be calculated")
                  return sl, None
-             pips = raw_tp_value / 10000.0
-             tp = (entry + pips) if 'BUY' in trigger.get('side', 'BUY') else (entry - pips)
+             price_delta = raw_tp_value * point_size
+             tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
 
         return sl, tp
