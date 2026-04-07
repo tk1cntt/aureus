@@ -95,6 +95,21 @@ class SimulatedTradeManager:
                 logger.warning(f"[{symbol}] [process_triggers] Error: Trigger {strategy_name} missing origin_timestamp, skipping order.")
                 continue
 
+            # Stale trigger check: skip if origin_timestamp is too far behind current candle time
+            # Both are in the same reference system (candle unix timestamps).
+            # If origin_timestamp > 5 seconds behind current candle, skip (realtime requirement).
+            current_candle_t = int(state_obj.last_candle.get("t", 0))
+            if current_candle_t > 0:
+                trigger_age = current_candle_t - int(origin_t)
+                if trigger_age > 5:
+                    logger.debug(
+                        f"{PIPELINE_LOG_PREFIX}[D][process_triggers][stale_trigger] "
+                        f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} "
+                        f"origin_timestamp={origin_t} current_candle_t={current_candle_t} age_seconds={trigger_age} "
+                        f"reason_code=STALE_TRIGGER"
+                    )
+                    continue
+
             trace_id = f"{symbol}:{strat_id}:{origin_t}"
             logger.debug(
                 f"{PIPELINE_LOG_PREFIX}[D][process_triggers][candidate] "

@@ -45,6 +45,19 @@ class SimulatedTradeManager:
                 logger.warning(f"Trigger {t['strategy']} missing origin_timestamp, skipping order.")
                 continue
 
+            # Stale trigger check: skip if origin_timestamp is too far behind current candle time
+            # Both are in the same reference system (candle unix timestamps).
+            # If origin_timestamp > 5 seconds behind current candle, skip (realtime requirement).
+            current_candle_t = int(state_obj.last_candle.get("t", 0))
+            if current_candle_t > 0:
+                trigger_age = current_candle_t - int(origin_t)
+                if trigger_age > 5:
+                    logger.warning(
+                        f"Trigger {t.get('strategy', 'UNKNOWN')}: stale origin_timestamp={origin_t}, "
+                        f"current_candle_t={current_candle_t}, age={trigger_age}s > 5s threshold, skipping."
+                    )
+                    continue
+
             # 1. Independent Order Tracking (TraceID)
             trace_id = f"{symbol}:{strat_id}:{origin_t}"
             
@@ -56,8 +69,6 @@ class SimulatedTradeManager:
             
             # 3. Advanced SL/TP Logic
             exit_config = t.get('exit_config', {})
-            if not exit_config:
-                logger.warning(f"⚠️ Strategy '{t.get('strategy')}' trigger has no exit_config — using FIXED_PIPS 300 default for {trace_id}")
             sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
             
             if sl is None or tp is None:
@@ -109,7 +120,12 @@ class SimulatedTradeManager:
         SL value priority:
         1. Strategy config sl.value (if specified)
         2. symbols.json sl field (per-symbol default)
-        3. Default: 100 points
+        3. REJECTED if signal point not found (no fallback)
+
+        TP value priority:
+        1. Strategy config tp.value (if specified)
+        2. RR mode: default ratio 2.0 (if tp.value not specified)
+        3. FIXED_PIPS mode: REJECTED if tp.value not specified
 
         Config keys: both 'type' and 'mode' are accepted for backward compatibility.
         Point size is loaded from symbols.json (single source of truth).
@@ -167,21 +183,37 @@ class SimulatedTradeManager:
                                 sl = sp['price'] + (buffer if sl_mode == 'SIGNAL_HIGH' else -buffer)
                                 break
             
-            # Fallback to fixed distance if signal point not found
-            if sl is None: 
-                pips = 300 / 10000.0
-                if state_obj.symbol.endswith('JPY'): pips = 300 / 100.0
-                sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+            if sl is None:
+                logger.warning(
+                    f"[_calculate_sl_tp] SL mode={sl_mode} but signal point not found — "
+                    f"SL rejected for {trigger.get('strategy', 'UNKNOWN')}. "
+                    f"Strategy must provide sl.value in exit_config or use FIXED_PIPS mode."
+                )
+                return None, None
 
         # 2. Take Profit Logic
         tp_mode = tp_cfg.get('mode', 'RR')
         if tp_mode == 'RR':
-            ratio = tp_cfg.get('value', 1.5)
-            risk = abs(entry - sl) if sl else (entry * 0.001)
+            ratio = tp_cfg.get('value', 2.0)
+            if sl is None:
+                logger.warning(
+                    f"[_calculate_sl_tp] TP mode=RR but sl is None — "
+                    f"TP rejected for {trigger.get('strategy', 'UNKNOWN')}"
+                )
+                return None, None
+            risk = abs(entry - sl)
             tp = entry + (risk * ratio) if 'BUY' in trigger.get('side', 'BUY') else entry - (risk * ratio)
         elif tp_mode == 'FIXED_PIPS':
-             price_delta = tp_cfg.get('value', 500) * point_size
-             tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
+            raw_tp_value = tp_cfg.get('value')
+            if raw_tp_value is None:
+                logger.warning(
+                    f"[_calculate_sl_tp] TP mode=FIXED_PIPS but no 'value' configured — "
+                    f"TP rejected for {trigger.get('strategy', 'UNKNOWN')}. "
+                    f"Strategy must provide tp.value in exit_config."
+                )
+                return sl, None
+            price_delta = raw_tp_value * point_size
+            tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
 
         return sl, tp
 

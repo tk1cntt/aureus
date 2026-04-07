@@ -25,8 +25,8 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
-                    "tp": {"type": "RR_RATIO", "value": 3.0},
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_down"]
@@ -45,7 +45,7 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
+                    "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
@@ -66,8 +66,8 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
-                    "tp": {"type": "RR_RATIO", "value": 2.5},
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_down"]
@@ -87,8 +87,8 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
-                    "tp": {"type": "RR_RATIO", "value": 2.5},
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_up"]
@@ -107,8 +107,8 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
-                    "tp": {"type": "RR_RATIO", "value": 4.0},
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.5,
                     "early_exits": ["choch_down"]
@@ -127,7 +127,7 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS", "value": 500},
+                    "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 4.0},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.5,
