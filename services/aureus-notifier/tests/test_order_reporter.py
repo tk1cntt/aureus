@@ -135,3 +135,51 @@ class TestFormatReport:
         ]
         result = reporter._format_report(positions, [])
         assert len(result) <= 4095
+
+class TestWaitForResponse:
+    """Test _wait_for_response handles pubsub message retrieval and timeout correctly."""
+
+    @pytest.mark.asyncio
+    async def test_wait_for_response_timeout_returns_empty(self):
+        reporter = OrderStatusReporter(
+            redis_client=None,
+            sender=None,
+            chat_id="test_chat",
+            response_timeout=0.1
+        )
+        
+        import time
+        from unittest.mock import AsyncMock
+        
+        mock_pubsub = AsyncMock()
+        mock_pubsub.get_message.return_value = None
+        
+        start_time = time.time()
+        result = await reporter._wait_for_response(mock_pubsub, "POSITION_REPORT", "positions")
+        duration = time.time() - start_time
+        
+        assert result == []
+        assert duration >= 0.1
+        assert duration < 0.5  # Ensure it doesn't hang indefinitely
+
+    @pytest.mark.asyncio
+    async def test_wait_for_response_gets_message(self):
+        reporter = OrderStatusReporter(
+            redis_client=None,
+            sender=None,
+            chat_id="test_chat",
+            response_timeout=1.0
+        )
+        
+        from unittest.mock import AsyncMock
+        import json
+        
+        mock_pubsub = AsyncMock()
+        mock_pubsub.get_message.return_value = {
+            "type": "message",
+            "data": json.dumps({"type": "POSITION_REPORT", "positions": ["test_pos"]})
+        }
+        
+        result = await reporter._wait_for_response(mock_pubsub, "POSITION_REPORT", "positions")
+        
+        assert result == ["test_pos"]

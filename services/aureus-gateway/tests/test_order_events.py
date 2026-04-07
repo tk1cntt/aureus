@@ -107,3 +107,21 @@ async def test_order_event_json_payload(mock_redis):
     assert parsed["type"] == "ORDER_CLOSED"
     assert parsed["ticket"] == 12345678
     assert parsed["profit"] == 82.50
+
+@pytest.mark.asyncio
+async def test_trade_history_event_with_error_missing_fields(mock_redis):
+    """Test Backward compatibility for old EA sending error without count/from_time."""
+    data = {
+        "type": "TRADE_HISTORY",
+        "trades": [],
+        "error": "invalid_time_range"
+    }
+    result = await process_message(mock_redis, data, source="TCP")
+    assert result is True
+    mock_redis.publish.assert_called_once()
+    
+    # Verify the published data has the error field
+    published_json = mock_redis.publish.call_args[0][1]
+    parsed = json.loads(published_json)
+    assert parsed["type"] == "TRADE_HISTORY"
+    assert parsed["error"] == "invalid_time_range"
