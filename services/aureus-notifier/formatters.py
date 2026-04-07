@@ -98,12 +98,13 @@ def format_strategy_match(event: dict) -> str:
     strategy = html.escape(str(data.get("strategy", "UNKNOWN")))
     strategy_id = data.get("strategy_id", "?")
     side = html.escape(str(data.get("side", "UNKNOWN")))
-    entry_type = html.escape(str(data.get("entry_type", "UNKNOWN")))
+    entry_type = html.escape(str(data.get("entry_type", "MARKET")))
     reason_code = html.escape(str(data.get("reason_code", "")))
 
     sl = data.get("sl_absolute") or data.get("sl")
     tp = data.get("tp_absolute") or data.get("tp")
     size_value = data.get("size_value", "N/A")
+    entry_price = data.get("entry_price")
 
     def format_price(val):
         if val is None:
@@ -111,7 +112,7 @@ def format_strategy_match(event: dict) -> str:
         if isinstance(val, dict):
             # Fallback if uncalculated config leaks
             return "Auto (Calculated at Entry)"
-        
+
         # Calculate precision statically from entry_price, fallback to 5
         entry_price_str = str(data.get("entry_price", ""))
         num_decimals = 5
@@ -127,6 +128,30 @@ def format_strategy_match(event: dict) -> str:
     sl_display = format_price(sl)
     tp_display = format_price(tp)
 
+    # Entry price display based on entry_type
+    if entry_type.upper() == "MARKET":
+        entry_display = format_price(entry_price)
+        entry_label = f"<b>Entry (Market):</b> {entry_display}"
+    elif entry_type.upper() == "LIMIT":
+        limit_price = data.get("entry_price") or data.get("limit_price")
+        if limit_price and not isinstance(limit_price, dict):
+            try:
+                lp = float(limit_price)
+                # Use limit price precision
+                lp_str = str(limit_price)
+                num_decimals = 5
+                if "." in lp_str:
+                    num_decimals = len(lp_str.split(".")[1])
+                entry_display = f"{lp:.{num_decimals}f}"
+            except (ValueError, TypeError):
+                entry_display = str(limit_price)
+        else:
+            entry_display = "N/A (pending limit)"
+        entry_label = f"<b>Entry (Limit):</b> {entry_display}"
+    else:
+        entry_display = format_price(entry_price)
+        entry_label = f"<b>Entry ({entry_type}):</b> {entry_display}"
+
     # Direction emoji
     if side.upper() == "BUY":
         direction_emoji = "🟢"
@@ -141,13 +166,12 @@ def format_strategy_match(event: dict) -> str:
         f'<b>Symbol:</b> {symbol}',
         f'<b>Strategy:</b> {strategy} #{strategy_id}',
         f'<b>Direction:</b> {side} {direction_emoji}',
-        f'<b>Entry Type:</b> {entry_type}',
+        entry_label,
         f'',
         f'<b>Trade Plan:</b>',
         f'• SL: {sl_display}',
         f'• TP: {tp_display}',
         f'• Size: {size_value} lot',
-        f'• Risk: N/A',
         f'',
         f'<b>Reason:</b> {reason_code}',
         f'<b>Time:</b> {utc_time} UTC',
