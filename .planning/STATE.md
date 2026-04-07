@@ -35,6 +35,7 @@ Last activity: 2026-04-07
 
 ### Roadmap Evolution
 
+- Phase 36 added: Fix BUY/SELL direction from strategy settings not name
 - Phase 35 added: MT5 Order Status Reporter - Gửi thông tin order MT5 lên Telegram mỗi phút
 - Phase 34 added: Fix SL TP calculation decimals and MT5 comment strategy name
 - Phase 21.1.1 inserted after Phase 21.1: Patch TradingAgents Source Code for LLM Proxy Support (URGENT)

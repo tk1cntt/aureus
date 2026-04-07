@@ -65,6 +65,7 @@ SINGLE_STEP_BULL_CONFIG = {
         {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30},
     ],
     "trade_execution": {
+        "direction": "BUY",
         "size": 1.0,
         "sl": {"type": "FIXED_PIPS", "value": 500},
         "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -81,6 +82,7 @@ MULTI_STEP_BULL_CONFIG = {
         {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
+        "direction": "BUY",
         "size": 1.5,
         "sl": {"type": "FIXED_PIPS", "value": 500},
         "tp": {"type": "RR_RATIO", "value": 2.5},

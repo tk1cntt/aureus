@@ -34,11 +34,15 @@ class TemplateStrategy(BaseStrategy):
         self.context_filters = config.get("context_filters", [])  # Pillar 1: WHAT
         self.trade_execution = config.get("trade_execution", {})  # Pillar 3: HOW
         self.magic_number = config.get("magic_number", self.strategy_id * 1000)
-        
-        # Deduce direction
-        self.direction = self.trade_execution.get("direction")
-        if not self.direction:
-            self.direction = "SELL" if "BEAR" in self.name.upper() else "BUY"
+
+        # Direction must be explicitly configured in trade_execution
+        direction = str(self.trade_execution.get("direction", "")).strip().upper()
+        if direction not in ("BUY", "SELL"):
+            raise ValueError(
+                f"Strategy '{self.name}': 'direction' must be 'BUY' or 'SELL' in trade_execution config. "
+                f"Got: {self.trade_execution.get('direction')!r}"
+            )
+        self.direction = direction
 
     # ------------------------------------------------------------------ #
     # Pillar 1: WHAT — Context Pre-condition Evaluator

@@ -24,6 +24,7 @@ async def seed_system_strategies(pool):
                     {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30 }
                 ],
                 "trade_execution": {
+                    "direction": "BUY",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -44,6 +45,7 @@ async def seed_system_strategies(pool):
                     {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30 }
                 ],
                 "trade_execution": {
+                    "direction": "SELL",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -65,6 +67,7 @@ async def seed_system_strategies(pool):
                     {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
+                    "direction": "BUY",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -86,6 +89,7 @@ async def seed_system_strategies(pool):
                     {"tag": "sweep_bear", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_up"]}
                 ],
                 "trade_execution": {
+                    "direction": "SELL",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -106,6 +110,7 @@ async def seed_system_strategies(pool):
                     {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
+                    "direction": "BUY",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
@@ -126,6 +131,7 @@ async def seed_system_strategies(pool):
                     {"tag": "sweep_bear", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
                 ],
                 "trade_execution": {
+                    "direction": "SELL",
                     "size": 0.01,
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 4.0},

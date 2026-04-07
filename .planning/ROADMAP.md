@@ -193,6 +193,16 @@ Plans:
 Plans:
 - [ ] TBD (run /gsd-plan-phase 35 to break down)
 
+## Phase 36: Fix BUY/SELL direction from strategy settings not name
+
+**Goal:** Xử lý vào lệnh BUY/SELL dựa trên thông tin setting của Strategy chứ không phải dựa trên tên BULL hay BEAR.
+**Requirements**: TBD
+**Depends on:** Phase 35
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-discuss-phase 36 to break down)
+
 ---
 
 ## Next Up

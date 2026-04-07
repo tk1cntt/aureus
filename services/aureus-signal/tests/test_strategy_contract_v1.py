@@ -193,6 +193,9 @@ class TestStrategyContractV1(unittest.TestCase):
                 "name": "TEMPLATE_DEMO",
                 "min_score_threshold": 1.0,
                 "sequence": [{"tag": "CHOCH_BULL", "weight": 2.0, "required": True}],
+                "trade_execution": {
+                    "direction": "BUY"
+                },
                 "exit_config": {
                     "entry_type": "MARKET",
                     "entry_policy": "IMMEDIATE",
@@ -241,6 +244,9 @@ class TestStrategyContractV1(unittest.TestCase):
                 "name": "TEMPLATE_BACKFILL_GATE",
                 "min_score_threshold": 1.0,
                 "sequence": [{"tag": "CHOCH_BULL", "weight": 1.0, "required": True}],
+                "trade_execution": {
+                    "direction": "BUY"
+                },
             }
         )
 
@@ -358,6 +364,9 @@ class TestStrategyContractV1(unittest.TestCase):
                         {"tag": "STEP1", "weight": 1.0, "required": True},
                         {"tag": "STEP2", "weight": 1.0, "required": True},
                     ],
+                    "trade_execution": {
+                        "direction": "BUY"
+                    },
                     "exit_config": {"tp": 120},
                 }
             )

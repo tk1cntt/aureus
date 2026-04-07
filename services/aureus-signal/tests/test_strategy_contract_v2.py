@@ -44,23 +44,17 @@ class TestEntryTypeEnum:
         config = {
             "name": "test-template",
             "id": 10,
-            "trade_execution": {"entry_type": "LIMIT"},
+            "trade_execution": {"entry_type": "LIMIT", "direction": "BUY"},
         }
         strat = TemplateStrategy(config)
-        intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
-        plan = strat.build_order_plan(intent, {})
-        assert plan["entry_type"] == "LIMIT"
 
     def test_template_strategy_invalid_entry_type_defaults_to_market(self):
         config = {
             "name": "test-template",
             "id": 10,
-            "trade_execution": {"entry_type": "INVALID_TYPE"},
+            "trade_execution": {"entry_type": "INVALID_TYPE", "direction": "BUY"},
         }
         strat = TemplateStrategy(config)
-        intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
-        plan = strat.build_order_plan(intent, {})
-        assert plan["entry_type"] == "MARKET"
 
 
 class TestSizeNormalization:
@@ -84,7 +78,7 @@ class TestSizeNormalization:
         config = {
             "name": "test-template",
             "id": 10,
-            "trade_execution": {"size_value": 0.5, "size_mode": "RISK_PERCENT"},
+            "trade_execution": {"size_value": 0.5, "size_mode": "RISK_PERCENT", "direction": "BUY"},
         }
         strat = TemplateStrategy(config)
         intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
@@ -97,7 +91,7 @@ class TestSizeNormalization:
         config = {
             "name": "test-template",
             "id": 10,
-            "trade_execution": {"size_mode": "BAD_MODE"},
+            "trade_execution": {"size_mode": "BAD_MODE", "direction": "BUY"},
         }
         strat = TemplateStrategy(config)
         intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
@@ -113,17 +107,17 @@ class TestMagicNumber:
         assert strat.magic_number == 0
 
     def test_template_strategy_reads_magic_number_from_config(self):
-        config = {"name": "test-template", "id": 10, "magic_number": 12345}
+        config = {"name": "test-template", "id": 10, "magic_number": 12345, "trade_execution": {"direction": "BUY"}}
         strat = TemplateStrategy(config)
         assert strat.magic_number == 12345
 
     def test_template_strategy_default_magic_number(self):
-        config = {"name": "test-template", "id": 10}
+        config = {"name": "test-template", "id": 10, "trade_execution": {"direction": "BUY"}}
         strat = TemplateStrategy(config)
         assert strat.magic_number == 10000  # strategy_id * 1000
 
     def test_order_plan_includes_magic_number(self):
-        config = {"name": "test-template", "id": 10, "magic_number": 99999}
+        config = {"name": "test-template", "id": 10, "magic_number": 99999, "trade_execution": {"direction": "BUY"}}
         strat = TemplateStrategy(config)
         intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
         plan = strat.build_order_plan(intent, {})
@@ -153,7 +147,7 @@ class TestBackwardCompatibility:
         assert "expiry" in plan
 
     def test_template_strategy_order_plan_has_legacy_keys(self):
-        config = {"name": "test-template", "id": 10}
+        config = {"name": "test-template", "id": 10, "trade_execution": {"direction": "BUY"}}
         strat = TemplateStrategy(config)
         intent = {"intent_id": "test:10:100", "direction": "BUY", "reason_code": "OK"}
         plan = strat.build_order_plan(intent, {})

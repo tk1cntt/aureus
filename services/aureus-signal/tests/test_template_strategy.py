@@ -30,7 +30,10 @@ def test_sequence_match_perfect():
         "sequence": [
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True}
-        ]
+        ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     }
     strategy = TemplateStrategy(config)
     state = MockState()
@@ -58,7 +61,10 @@ def test_sequence_reset_priority():
         "sequence": [
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True, "reset_signals": ["RESET_TAG"]}
-        ]
+        ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     }
     strategy = TemplateStrategy(config)
     state = MockState()
@@ -93,7 +99,10 @@ def test_sequence_timeout():
         "sequence": [
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True, "max_wait": 2}
-        ]
+        ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     }
     strategy = TemplateStrategy(config)
     state = MockState()
@@ -124,7 +133,10 @@ def test_sequence_optional_skip():
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": False}, # Optional
             {"tag": "STEP3", "weight": 1.0, "required": True}
-        ]
+        ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     }
     strategy = TemplateStrategy(config)
     state = MockState()
@@ -148,7 +160,10 @@ def test_evaluate_coverage():
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True}
         ],
-        "exit_config": {"tp": 100}
+        "exit_config": {"tp": 100},
+        "trade_execution": {
+            "direction": "BUY"
+        }
     }
     strategy = TemplateStrategy(config)
     state = MockState()
@@ -173,7 +188,7 @@ def test_evaluate_coverage():
     assert res["exit_config"]["tp"] == 100
 
 def test_on_bar_close_coverage():
-    config = {"name": "bar_strat", "min_score_threshold": 1.0, "sequence": [{"tag": "T1", "weight": 1.0, "required": True}]}
+    config = {"name": "bar_strat", "min_score_threshold": 1.0, "sequence": [{"tag": "T1", "weight": 1.0, "required": True}], "trade_execution": {"direction": "BUY"}}
     strategy = TemplateStrategy(config)
     state = MockState()
     
@@ -203,8 +218,8 @@ def test_on_bar_close_coverage():
     assert res["symbol"] == "XAUUSD"
 
 def test_validate_entry_coverage():
-    strategy = TemplateStrategy({"name": "val_strat"})
-    
+    strategy = TemplateStrategy({"name": "val_strat", "trade_execution": {"direction": "BUY"}})
+
     # Missing intent
     assert strategy.validate_entry(None, {})["reason_code"] == "NO_INTENT"
     
@@ -218,8 +233,8 @@ def test_validate_entry_coverage():
     assert strategy.validate_entry({"is_actionable": True, "reason_code": "OK"}, {})["reason_code"] == "OK"
 
 def test_build_order_plan_coverage():
-    strategy = TemplateStrategy({"name": "order_strat", "exit_config": {"tp": 50}})
-    
+    strategy = TemplateStrategy({"name": "order_strat", "exit_config": {"tp": 50}, "trade_execution": {"direction": "BUY"}})
+
     intent = {"direction": "SELL"}
     plan = strategy.build_order_plan(intent, {})
     
@@ -228,14 +243,14 @@ def test_build_order_plan_coverage():
     assert plan["reason_code"] == "OK"
 
 def test_missing_state_init():
-    strategy = TemplateStrategy({"name": "init_strat", "sequence": []})
+    strategy = TemplateStrategy({"name": "init_strat", "sequence": [], "trade_execution": {"direction": "BUY"}})
     state = PureState()
     strategy._evaluate_sequence(create_mock_df(), state)
     assert hasattr(state, "strategy_progress")
 
 
 def test_sequence_fallback_to_signal_history_when_normalized_empty():
-    # TEST BEHAVIOR UPDATE: We NO LONGER fallback to signal_history. 
+    # TEST BEHAVIOR UPDATE: We NO LONGER fallback to signal_history.
     # If events are not in log_signal_normalize, sequence matcher ignores them.
     strategy = TemplateStrategy({
         "name": "fallback_strat",
@@ -244,6 +259,9 @@ def test_sequence_fallback_to_signal_history_when_normalized_empty():
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True},
         ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     })
     state = MockState()
 
@@ -264,6 +282,9 @@ def test_sequence_prioritizes_normalized_over_signal_history():
         "name": "priority_strat",
         "min_score_threshold": 1.0,
         "sequence": [{"tag": "TARGET", "weight": 1.0, "required": True}],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     })
     state = MockState()
 
@@ -284,6 +305,9 @@ def test_sequence_normalized_records_processed_in_ascending_time_order():
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True},
         ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     })
     state = MockState()
 
@@ -307,6 +331,9 @@ def test_sequence_resets_upon_new_step0_when_complete():
             {"tag": "STEP1", "weight": 1.0, "required": True},
             {"tag": "STEP2", "weight": 1.0, "required": True},
         ],
+        "trade_execution": {
+            "direction": "BUY"
+        }
     })
     state = MockState()
 
@@ -332,3 +359,43 @@ def test_sequence_resets_upon_new_step0_when_complete():
     assert progress["origin_timestamp"] == 1100
     assert progress["current_step_index"] == 1
     assert progress["sequence"][0]["time"] == 1100
+
+
+def test_direction_required():
+    """Direction must be explicitly provided in trade_execution config."""
+    config = {
+        "name": "test_strat",
+        "min_score_threshold": 1.0,
+        "sequence": [],
+        "trade_execution": {}  # No direction
+    }
+    with pytest.raises(ValueError, match="direction.*must be.*BUY.*SELL"):
+        TemplateStrategy(config)
+
+
+def test_direction_invalid_value():
+    """Direction must be BUY or SELL, not arbitrary values."""
+    config = {
+        "name": "test_strat",
+        "min_score_threshold": 1.0,
+        "sequence": [],
+        "trade_execution": {"direction": "HEDGE"}
+    }
+    with pytest.raises(ValueError, match="direction.*must be.*BUY.*SELL"):
+        TemplateStrategy(config)
+
+
+def test_direction_case_insensitive():
+    """Direction should be normalized to uppercase."""
+    config = {
+        "name": "test_strat",
+        "min_score_threshold": 1.0,
+        "sequence": [],
+        "trade_execution": {"direction": "buy"}
+    }
+    strategy = TemplateStrategy(config)
+    assert strategy.direction == "BUY"
+
+    config["trade_execution"]["direction"] = "Sell"
+    strategy2 = TemplateStrategy(config)
+    assert strategy2.direction == "SELL"

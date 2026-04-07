@@ -35,6 +35,7 @@ TREND_CONT_CONFIG = {
         {"tag": "fvg_bull", "weight": 2.0, "required": False, "max_wait": 10},
     ],
     "trade_execution": {
+        "direction": "BUY",
         "size": 2.0,
         "sl": {"type": "FIXED_PIPS", "value": 15},
         "tp": {"type": "RR_RATIO", "value": 3.0},
@@ -54,6 +55,7 @@ SESSION_SWEEP_CONFIG = {
         {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 10, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
+        "direction": "BUY",
         "size": 1.5,
         "sl": {"type": "FIXED_PIPS", "value": 10},
         "tp": {"type": "RR_RATIO", "value": 2.5},
@@ -73,6 +75,7 @@ ORDER_FLOW_DOM_CONFIG = {
         {"tag": "sweep_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]},
     ],
     "trade_execution": {
+        "direction": "BUY",
         "size": 3.0,
         "sl": {"type": "FIXED_PIPS", "value": 12},
         "tp": {"type": "RR_RATIO", "value": 4.0},
