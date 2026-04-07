@@ -998,6 +998,41 @@ void ExecuteOpenOrder(const string &raw)
       return;
    }
 
+   // --- DEBUG LOGGING FOR INVALID_STOPS DIAGNOSIS ---
+   double askPrice = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double bidPrice = SymbolInfoDouble(symbol, SYMBOL_BID);
+   long   stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double pointVal  = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   int    symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double minVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double maxVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+
+   string fillingStr = "UNKNOWN";
+   if(fillType == ORDER_FILLING_FOK) fillingStr = "FOK";
+   else if(fillType == ORDER_FILLING_IOC) fillingStr = "IOC";
+   else if(fillType == ORDER_FILLING_RETURN) fillingStr = "RETURN";
+
+   PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts (%.5f) | digits=%d | filling=%s",
+      symbol, direction, orderType,
+      request.volume, minVol, maxVol,
+      askPrice, bidPrice,
+      request.sl, request.tp,
+      stopLevel, (stopLevel + 1) * pointVal,
+      symDigits, fillingStr);
+
+   if(orderType == "MARKET")
+   {
+      if(direction == "BUY")
+         PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
+            askPrice - request.sl, (stopLevel + 1) * pointVal,
+            request.tp - askPrice, (stopLevel + 1) * pointVal);
+      else
+         PrintFormat("[AureusProvider] [DEBUG] SELL check: SL-bid=%.5f (need>%.5f) | bid-TP=%.5f (need>%.5f)",
+            request.sl - bidPrice, (stopLevel + 1) * pointVal,
+            bidPrice - request.tp, (stopLevel + 1) * pointVal);
+   }
+   // --- END DEBUG LOGGING ---
+
    // Pre-validate with OrderCheck
    MqlTradeCheckResult checkResult;
    ZeroMemory(checkResult);
