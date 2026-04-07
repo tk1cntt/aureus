@@ -367,13 +367,21 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
       long openTimeMs = (long)openTime * 1000;
       long closeTimeMs = (long)closeTime * 1000;
 
+      long digits = SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      double mult = (digits == 3 || digits == 5) ? MathPow(10, digits - 1) : MathPow(10, digits);
+      double pips = (closePrice - openPrice) * mult;
+      // dealType == DEAL_TYPE_BUY means the closing deal is a BUY -> original position was SELL
+      if(dealType == DEAL_TYPE_BUY) pips = -pips;
+
       json += StringFormat(
          "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic_number\":%lld,"
          "\"direction\":\"%s\",\"entry_price\":%.5f,\"exit_price\":%.5f,"
          "\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"commission\":%.2f,"
-         "\"swap\":%.2f,\"profit\":%.2f,\"open_time\":%lld,\"close_time\":%lld}",
+         "\"swap\":%.2f,\"profit\":%.2f,\"open_time\":%lld,\"close_time\":%lld,"
+         "\"digits\":%lld,\"pips\":%.1f}",
          posTicket, sym, magic, direction, openPrice, closePrice,
-         sl, tp, volume, commission, swap, profit, openTimeMs, closeTimeMs
+         sl, tp, volume, commission, swap, profit, openTimeMs, closeTimeMs,
+         digits, pips
       );
    }
 
@@ -948,6 +956,16 @@ void ExecuteOpenOrder(const string &raw)
    request.comment  = comment;
    request.deviation = InpMaxSlippage;
 
+   // Determine supported filling mode for MARKET orders
+   int fillingMode = (int)SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+   ENUM_ORDER_TYPE_FILLING fillType = ORDER_FILLING_IOC; // Default
+   if((fillingMode & SYMBOL_FILLING_FOK) != 0)
+      fillType = ORDER_FILLING_FOK;
+   else if((fillingMode & SYMBOL_FILLING_IOC) != 0)
+      fillType = ORDER_FILLING_IOC;
+   else
+      fillType = ORDER_FILLING_RETURN; // Fallback
+
    if(orderType == "MARKET")
    {
       request.action = TRADE_ACTION_DEAL;
@@ -955,14 +973,14 @@ void ExecuteOpenOrder(const string &raw)
       request.price  = (direction == "BUY")
                         ? SymbolInfoDouble(symbol, SYMBOL_ASK)
                         : SymbolInfoDouble(symbol, SYMBOL_BID);
-      request.type_filling = ORDER_FILLING_IOC;
+      request.type_filling = fillType;
    }
    else if(orderType == "LIMIT")
    {
       request.action = TRADE_ACTION_PENDING;
       request.price  = NormalizeDouble(price, symDigits);
       request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
-      request.type_filling = ORDER_FILLING_RETURN;
+      request.type_filling = fillType;
       request.type_time = ORDER_TIME_GTC;
    }
    else if(orderType == "STOP")
@@ -970,7 +988,7 @@ void ExecuteOpenOrder(const string &raw)
       request.action = TRADE_ACTION_PENDING;
       request.price  = NormalizeDouble(price, symDigits);
       request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
-      request.type_filling = ORDER_FILLING_RETURN;
+      request.type_filling = fillType;
       request.type_time = ORDER_TIME_GTC;
    }
    else
