@@ -22,8 +22,9 @@ class RateLimitedDispatcher:
     bounded by the number of active chats × dispatch_loop iteration time.
     """
 
-    def __init__(self, sender: TelegramSender, delay: float = 2.0, max_queue_size: int = 100):
+    def __init__(self, sender: TelegramSender, sender_strategy: TelegramSender = None, delay: float = 2.0, max_queue_size: int = 100):
         self.sender = sender
+        self.sender_strategy = sender_strategy or sender
         self.delay = delay
         self.max_queue_size = max_queue_size
         self.queues: Dict[str, asyncio.Queue] = {}
@@ -47,7 +48,6 @@ class RateLimitedDispatcher:
             return 0
 
         count = 0
-        # Format message based on event type
         if event["type"] == "SIGNAL_EVENT":
             text = format_signal_event(event)
         elif event["type"] == "STRATEGY_MATCH":
@@ -56,16 +56,19 @@ class RateLimitedDispatcher:
             logger.warning(f"Unknown event type: {event['type']}")
             return 0
 
+        if not text:
+            return 0
+
         for chat_id in chat_ids:
             queue = self._get_queue(chat_id)
             try:
-                queue.put_nowait((chat_id, text))
+                queue.put_nowait((chat_id, text, event["type"]))
                 count += 1
             except asyncio.QueueFull:
                 # Drop oldest message when queue is full
                 try:
                     queue.get_nowait()
-                    queue.put_nowait((chat_id, text))
+                    queue.put_nowait((chat_id, text, event["type"]))
                     count += 1
                     logger.warning(f"Queue full for chat {chat_id}, dropped oldest message")
                 except Exception as e:
@@ -82,14 +85,15 @@ class RateLimitedDispatcher:
             for chat_id, queue in list(self.queues.items()):
                 if not queue.empty():
                     try:
-                        cid, text = queue.get_nowait()
-                        success = await self.sender.send_message(cid, text)
+                        cid, text, evt_type = queue.get_nowait()
+                        target_sender = self.sender_strategy if evt_type == "STRATEGY_MATCH" else self.sender
+                        success = await target_sender.send_message(cid, text)
                         if success:
                             queue.task_done()
                             sent_any = True
                         else:
                             # Re-queue if send failed (will be retried next cycle)
-                            queue.put_nowait((cid, text))
+                            queue.put_nowait((cid, text, evt_type))
                     except asyncio.QueueEmpty:
                         pass
                     except Exception as e:

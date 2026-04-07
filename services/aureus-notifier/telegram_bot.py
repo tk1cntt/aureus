@@ -5,6 +5,7 @@ import asyncio
 import os
 import logging
 from telegram import Bot
+from telegram.request import HTTPXRequest
 from telegram.error import TelegramError, RetryAfter
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,8 @@ class TelegramSender:
     """Telegram Bot API wrapper with retry and exponential backoff."""
 
     def __init__(self, bot_token: str, max_retries: int = 3, base_delay: float = 2.0):
-        self.bot = Bot(token=bot_token)
+        req = HTTPXRequest(connection_pool_size=50)
+        self.bot = Bot(token=bot_token, request=req)
         self.max_retries = max_retries
         self.base_delay = base_delay
 

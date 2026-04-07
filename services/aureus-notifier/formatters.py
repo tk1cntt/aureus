@@ -26,13 +26,38 @@ def format_signal_event(event: dict) -> str:
     signals = data.get("signals", {})
 
     # Build signals section
-    if signals:
-        signals_lines = "\n".join(
-            f"• {html.escape(str(k))}: {html.escape(str(v))}"
-            for k, v in signals.items()
-        )
-    else:
-        signals_lines = "• (no active signals)"
+    if not signals:
+        return ""
+        
+    def format_signal_value(key: str, val) -> str:
+        if isinstance(val, dict):
+            if key == "ob_state" and "active_obs" in val:
+                bull = sum(1 for ob in val.get("active_obs", []) if ob.get("ob_type") == "BULLISH")
+                bear = sum(1 for ob in val.get("active_obs", []) if ob.get("ob_type") == "BEARISH")
+                return f"{bull} Bullish / {bear} Bearish OBs"
+            if key == "zigzag_state":
+                status = val.get("status", "UNKNOWN")
+                if "last_pivot" in val and isinstance(val["last_pivot"], dict):
+                    return html.escape(f"{status} (Last: {val['last_pivot'].get('type', '?')})")
+                return html.escape(status)
+            
+            if "value" in val:
+                return html.escape(str(val["value"]))
+            
+            if "ob_type" in val and "top" in val and "bottom" in val:
+                ob_type = html.escape(str(val.get("ob_type", "")))
+                bottom = html.escape(str(val.get("bottom", "?")))
+                top = html.escape(str(val.get("top", "?")))
+                status = html.escape(str(val.get("status", "UNKNOWN")))
+                return f"{ob_type.capitalize()} {bottom} - {top} (Status: {status})"
+            inner_keys = ", ".join(str(k) for k in val.keys())
+            return html.escape(f"[Detail: {inner_keys}]")
+        return html.escape(str(val))
+
+    signals_lines = "\n".join(
+        f"• <b>{html.escape(str(k))}</b>: {format_signal_value(str(k), v)}"
+        for k, v in signals.items()
+    )
 
     # Build message
     parts = [

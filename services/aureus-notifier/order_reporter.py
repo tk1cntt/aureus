@@ -105,21 +105,17 @@ class OrderStatusReporter:
         """Wait for a specific event type on pubsub, with timeout."""
         deadline = time.time() + self.response_timeout
 
-        async for message in pubsub.listen():
-            if time.time() > deadline:
-                logger.warning(f"Timeout waiting for {expected_type} response")
-                return []
+        while time.time() < deadline:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message["type"] == "message":
+                try:
+                    event = json.loads(message["data"])
+                    if event.get("type") == expected_type:
+                        return event.get(data_key, [])
+                except (json.JSONDecodeError, KeyError):
+                    continue
 
-            if message["type"] != "message":
-                continue
-
-            try:
-                event = json.loads(message["data"])
-                if event.get("type") == expected_type:
-                    return event.get(data_key, [])
-            except (json.JSONDecodeError, KeyError):
-                continue
-
+        logger.warning(f"Timeout waiting for {expected_type} response")
         return []
 
     def _format_report(self, positions: list, closed_trades: list) -> str:
@@ -188,8 +184,11 @@ class OrderStatusReporter:
                 entry = trade.get("entry_price", 0.0)
                 exit_p = trade.get("exit_price", 0.0)
                 pips = 0.0
-                if entry > 0 and exit_p > 0:
-                    # Rough pip calc (5-digit = /0.0001, 3-digit = /0.01)
+                
+                if "pips" in trade and trade["pips"] is not None:
+                    pips = trade["pips"]
+                elif entry > 0 and exit_p > 0:
+                    # Rough pip calc backwards compatibility
                     if entry > 50:  # JPY pairs, indices
                         pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
                     else:

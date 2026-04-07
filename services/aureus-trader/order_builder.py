@@ -48,5 +48,5 @@ def build_order_command(match_event: dict) -> dict:
         "sl": sl,
         "tp": tp,
         "magic": data.get("magic_number", 0),
-        "comment": str(data.get("strategy", data.get("strategy_id", "")))[:31],
+        "comment": str(data.get("strategy_name", data.get("strategy", data.get("strategy_id", ""))))[:31],
     }

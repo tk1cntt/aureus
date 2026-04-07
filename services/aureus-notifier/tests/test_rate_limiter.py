@@ -14,7 +14,7 @@ def _make_signal_event(symbol="XAUUSD", signals=None, session="NEW_YORK"):
         "symbol": symbol,
         "t": 1712345678,
         "data": {
-            "signals": signals or {"test": "value"},
+            "signals": {"test": "value"} if signals is None else signals,
             "session": session,
         },
     }
@@ -209,3 +209,15 @@ def test_stop_sets_running_false(dispatcher):
     dispatcher._running = True
     dispatcher.stop()
     assert dispatcher._running is False
+
+
+@pytest.mark.asyncio
+async def test_enqueue_empty_formats_dropped(dispatcher):
+    """enqueue drops the message if formatter returns an empty string."""
+    event = _make_signal_event(signals={})
+    routes = [Route(chat_id="chat_1", event_types=["SIGNAL_EVENT"], symbols=None)]
+
+    count = await dispatcher.enqueue(event, routes)
+
+    assert count == 0
+    assert "chat_1" not in dispatcher.queues or dispatcher.queues["chat_1"].empty()

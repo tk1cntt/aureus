@@ -169,6 +169,30 @@
 5. Trade table pagination 20 rows/page
 6. Responsive design: 3-col → 2-col → 1-col
 
+### Phase 34: Fix SL TP calculation decimals and MT5 comment strategy name
+
+**Goal:** Fix MT5 EA hardcoded stops and volume issues, add dynamic multiplier parsing for exact broker precision (with future Digits sync backlog).
+**Requirements**: N/A
+**Status:** ✅ DONE
+
+Plans:
+- [x] 34-01-PLAN.md — Executed via direct implementation by AI
+
+## Phase 35: MT5 Order Status Reporter
+
+**Goal:** Gửi thông tin order MT5 hiện tại lên Telegram mỗi phút qua bot. Bao gồm: (1) order đang chạy (open positions) và (2) order đã close trong vòng 1 phút gần nhất (closed history).
+**Requirements**: TBD
+**Depends on:** Phase 28, Phase 29
+
+**Success Criteria:**
+1. Mỗi 1 phút tự động gửi danh sách open positions lên Telegram
+2. Nếu trong vòng 1 phút có order vừa close → gửi thông tin order đó (profit/loss, thời gian giữ, entry/exit price)
+3. Sử dụng bot token `8650116511:AAE25Gqc9WSVuZ53qrKp_l6b81_TTOVrjFk`
+4. Format message rõ ràng, dễ đọc
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 35 to break down)
+
 ---
 
 ## Next Up
@@ -178,3 +202,14 @@
 `/gsd-discuss-phase 28`
 
 <sub>`/clear` first → fresh context window</sub>
+
+## Backlog
+
+### Phase 999.1: Sync MT5 Symbol Metadata Digits (BACKLOG)
+
+**Goal:** Fetch real `SymbolInfoInteger(SYMBOL_DIGITS)` and `SYMBOL_POINT` dynamically from the MT5 broker when initializing the connection, sending it to the backend so the signal engine uses 100% accurate point-size multipliers instead of hardcoded Python fallbacks per symbol.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)

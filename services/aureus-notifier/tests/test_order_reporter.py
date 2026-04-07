@@ -92,11 +92,13 @@ class TestFormatReport:
             "profit": 4.0,
             "commission": -0.5,
             "swap": 0.0,
+            "pips": 25.5, # Explicit pips from MT5
         }]
         result = reporter._format_report([], closed)
         assert "Closed (1m)" in result
         assert "GBPUSD" in result
         assert "+3.50$" in result
+        assert "25.5 pips" in result
 
     def test_combined_positions_and_closed_trades(self):
         reporter = self._make_reporter()

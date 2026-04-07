@@ -18,8 +18,8 @@ def test_format_signal_event_basic():
     assert "📊" in result
     assert "SIGNAL ALERT" in result
     assert "XAUUSD" in result
-    assert "• zigzag_state: SWING_HIGH" in result
-    assert "• ob_state: BULLISH" in result
+    assert "• <b>zigzag_state</b>: SWING_HIGH" in result
+    assert "• <b>ob_state</b>: BULLISH" in result
     assert "NEW_YORK" in result
 
 
@@ -52,7 +52,7 @@ def test_format_signal_event_empty_signals():
         },
     }
     result = format_signal_event(event)
-    assert "(no active signals)" in result
+    assert result == ""
 
 
 def test_format_strategy_match_buy():
