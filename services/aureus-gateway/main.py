@@ -437,29 +437,29 @@ async def run_command_subscriber(r: redis.Redis):
             cmd_data = json.loads(message['data'])
             symbol = cmd_data.get("symbol")
 
-            # Global commands (no symbol) — broadcast to all active EA connections
+            # Global commands (no symbol) — send once to any active EA connection
             if not symbol:
                 global_commands = {"REQUEST_POSITIONS", "REQUEST_TRADE_HISTORY", "REQUEST_ORDERS"}
                 cmd_type = cmd_data.get("type", "")
                 if cmd_type in global_commands:
                     payload = message['data'] + "\n"
-                    dead_writers = []
-                    sent_count = 0
+                    sent = False
+                    # Send to first available active connection (EA handles all symbols)
                     for sym, writers in list(active_connections.items()):
                         for writer in writers:
                             try:
                                 writer.write(payload.encode('utf-8'))
                                 await writer.drain()
-                                sent_count += 1
+                                sent = True
+                                logger.info(f"[GLOBAL] [run_command_subscriber] Sent {cmd_type} via {sym} connection")
+                                break
                             except Exception as e:
                                 logger.error(f"Failed to send global command to EA for {sym}: {e}")
-                                dead_writers.append((sym, writer))
+                        if sent:
+                            break
 
-                    for sym, dw in dead_writers:
-                        if sym in active_connections and dw in active_connections[sym]:
-                            active_connections[sym].remove(dw)
-
-                    logger.info(f"[GLOBAL] [run_command_subscriber] Broadcast {cmd_type} to {sent_count} EA connection(s)")
+                    if not sent:
+                        logger.warning(f"[GLOBAL] [run_command_subscriber] No active EA connection to send {cmd_type}")
                 else:
                     logger.warning(f"Received command without symbol: {cmd_data}")
                 continue
