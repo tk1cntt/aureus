@@ -236,9 +236,17 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
     for symbol in symbols_list:
         signal_stream = f"aureus:stream:{symbol}:signals"
+
+        # Purge stale signals: only process real-time orders, not backlog from previous runs
         try:
-            await r.xgroup_create(signal_stream, group_name, id="0", mkstream=True)
-            logger.info(f"[EXECUTOR][{symbol}] Created consumer group on {signal_stream}")
+            await r.delete(signal_stream)
+            logger.info(f"[EXECUTOR][{symbol}] Purged stale signals stream for real-time start")
+        except Exception as e:
+            logger.warning(f"[EXECUTOR][{symbol}] Failed to purge signals stream: {e}")
+
+        try:
+            await r.xgroup_create(signal_stream, group_name, id="$", mkstream=True)
+            logger.info(f"[EXECUTOR][{symbol}] Created consumer group on {signal_stream} (real-time from now)")
         except Exception as e:
             if "already exists" not in str(e):
                 logger.error(f"[EXECUTOR][{symbol}] Group creation error: {e}")

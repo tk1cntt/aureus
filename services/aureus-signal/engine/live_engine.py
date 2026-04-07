@@ -205,6 +205,14 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     )
 
     for symbol in symbols_list:
+        # Purge stale order history: start fresh, only process real-time orders
+        order_history_key = f"aureus:orders:history:{symbol}"
+        try:
+            await r.delete(order_history_key)
+            logger.info(f"[{symbol}] Purged stale order history for real-time start")
+        except Exception as e:
+            logger.warning(f"[{symbol}] Failed to purge order history: {e}")
+
         cfg = SYMBOL_CONFIG.get(symbol, SYMBOL_CONFIG.get("XAUUSD", {}))
         if not cfg:
             logger.warning(f"[{symbol}] [run_signal_engine] Error: No config found for {symbol}, using defaults.")
@@ -240,6 +248,23 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         except Exception as e:
             if "already exists" not in str(e):
                 logger.error(f"[{symbol}] [run_signal_engine] Error: Group creation error: {e}")
+            # If group exists, purge pending (unacked) entries from previous run
+            try:
+                pending = await r.xpending(target_stream, group_name)
+                if pending and pending.get("pending", 0) > 0:
+                    from_id = "0"
+                    while True:
+                        entries = await r.xreadgroup(group_name, "_", {target_stream: from_id}, count=100)
+                        if not entries or not entries[0][1]:
+                            break
+                        for entry_id, _ in entries[0][1]:
+                            await r.xack(target_stream, group_name, entry_id)
+                        from_id = entries[0][1][-1][0]
+                        if isinstance(from_id, bytes):
+                            from_id = from_id.decode()
+                    logger.info(f"[{symbol}] Purged {pending['pending']} pending candle entries from previous run")
+            except Exception as e:
+                logger.warning(f"[{symbol}] Failed to purge pending candles: {e}")
 
         # --- Load history and spawn tasks for each symbol ---
         try:
@@ -640,6 +665,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 redis_client=r,
                             )
 
+                            signals_snapshot = build_normalized_signal_snapshot(signals, state)
                             # --- Emit signal payload to per-symbol stream for Strategy Executor ---
                             signal_payload = {
                                 "t": ts_unix,
@@ -655,7 +681,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 "current_signal": state.current_signal or {},
                                 "transient_signals": state.transient_signals or {},
                                 "swing_points": state.swing_points or [],
-                                "signals_snapshot": build_normalized_signal_snapshot(signals, state),
+                                "signals_snapshot": signals_snapshot,
                             }
                             await r.xadd(
                                 f"aureus:stream:{symbol}:signals",
@@ -666,12 +692,15 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
                             )
 
-                            # Publish signal event to pub/sub for downstream consumers
-                            from engine.signal_event_publisher import publish_signal_event
-                            await publish_signal_event(
-                                r, symbol, "SIGNAL_EVENT", ts_unix,
-                                {"signals_snapshot_keys": list(signals_snapshot.keys()) if isinstance(signals_snapshot, dict) else []}
-                            )
+                            # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
+                            if getattr(state, "transient_signals", None):
+                                from engine.event_policy import evaluate_ai_trigger_events
+                                if evaluate_ai_trigger_events(state.transient_signals):
+                                    from engine.signal_event_publisher import publish_signal_event
+                                    await publish_signal_event(
+                                        r, symbol, "SIGNAL_EVENT", ts_unix,
+                                        {"signals": state.transient_signals}
+                                    )
 
                             await r.xack(stream_key, group_name, entry_id)
 
