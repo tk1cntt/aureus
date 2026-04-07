@@ -1,41 +1,67 @@
 import logging
 from engine.logging_common import get_logger
 import json
-from typing import Dict, List, Any
+import os
+from typing import Dict, List, Any, Optional
 
 from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, VALID_SIZE_MODES
 
+# Load symbol metadata from symbols.json — single source of truth for symbol parameters.
+# When you change values in symbols.json, all calculations automatically use the new values.
+_SYMBOLS_CONFIG: Dict[str, dict] = {}
+_SYMBOLS_CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'symbols.json')
+try:
+    with open(_SYMBOLS_CONFIG_PATH, 'r') as f:
+        _SYMBOLS_CONFIG = json.load(f)
+except Exception as e:
+    get_logger(__name__).error(f"Failed to load symbols.json from {_SYMBOLS_CONFIG_PATH}: {e}")
+
+def _get_symbol_config(symbol: str) -> Optional[dict]:
+    """Get symbol configuration from symbols.json."""
+    return _SYMBOLS_CONFIG.get(symbol.upper())
+
 def get_point_size(symbol: str) -> float:
-    """Return point size for SL/TP calculation.
+    """Return point size for SL/TP calculation from symbols.json.
 
-    These values are calibrated so that strategy configs with
-    SL=500, TP_RR=3.0 produce reasonable stop distances for each asset class.
+    This value is used to convert strategy SL/TP point values to price units:
+        price_delta = sl_value * point_size
+        sl_price = entry - price_delta (for BUY)
 
-    Target: 500 "pips" should equal approximately:
-    - Forex: 50 pips (0.0050 for EURUSD)
-    - Gold: $5.00 SL
-    - BTC: $500 SL
-    - ETH: $50 SL
-    - Indices: 50 points SL
+    Example: BTCUSD point=0.01, sl=15000 → delta = $150 SL distance
     """
-    symbol = symbol.upper()
-    if 'JPY' in symbol:
-        return 0.01          # 500 * 0.01 = 5.00 (500 pips for JPY)
-    elif 'BTC' in symbol:
-        return 1.0           # 500 * 1.0 = $500 SL for BTC
-    elif 'ETH' in symbol:
-        return 0.1           # 500 * 0.1 = $50 SL for ETH
-    elif 'XAU' in symbol or 'GOLD' in symbol:
-        return 0.01          # 500 * 0.01 = $5.00 SL for Gold
-    elif 'XAG' in symbol or 'SILVER' in symbol:
-        return 0.01          # 500 * 0.01 = $5.00 SL for Silver
-    elif 'USTEC' in symbol or 'NAS' in symbol or 'NDX' in symbol:
-        return 1.0           # 500 * 1.0 = 500 points SL for NASDAQ
-    elif 'US30' in symbol or 'DJI' in symbol or 'SPX' in symbol:
-        return 1.0           # 500 * 1.0 = 500 points SL for indices
-    else:
-        # Standard forex currency pairs
-        return 0.0001        # 500 * 0.0001 = 0.0500 (50 pips)
+    cfg = _get_symbol_config(symbol)
+    if cfg and 'point' in cfg:
+        return float(cfg['point'])
+
+    get_logger(__name__).warning(
+        f"Symbol {symbol.upper()} not found in symbols.json — using default point=0.00001. "
+        f"Add it to symbols.json to configure the correct point size."
+    )
+    return 0.00001
+
+def get_symbol_digits(symbol: str) -> int:
+    """Return decimal digits for a symbol from symbols.json."""
+    cfg = _get_symbol_config(symbol)
+    if cfg and 'digits' in cfg:
+        return int(cfg['digits'])
+
+    get_logger(__name__).warning(
+        f"Symbol {symbol.upper()} not found in symbols.json — using default digits=5. "
+        f"Add it to symbols.json to configure the correct digits."
+    )
+    return 5
+
+def get_default_sl_pips(symbol: str) -> int:
+    """Return default SL in points from symbols.json."""
+    cfg = _get_symbol_config(symbol)
+    if cfg and 'sl' in cfg:
+        return int(cfg['sl'])
+
+    get_logger(__name__).warning(
+        f"Symbol {symbol.upper()} not found in symbols.json or missing 'sl' field — using default sl=100. "
+        f"Add it to symbols.json to configure the correct default SL."
+    )
+    return 100
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -366,40 +392,57 @@ class SimulatedTradeManager:
             state_obj.order_rejections = state_obj.order_rejections[-500:]
 
     def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
-        """Calculates prices for SL and TP based on strategy config."""
+        """Calculates prices for SL and TP based on strategy config.
+
+        SL value priority:
+        1. Strategy config sl.value (if specified)
+        2. symbols.json sl field (per-symbol default)
+        3. Default: 100 points
+
+        Config keys: both 'type' and 'mode' are accepted for backward compatibility.
+        Point size is loaded from symbols.json (single source of truth).
+        """
         entry = float(state_obj.last_candle['c'])
         sl = None
         tp = None
-        
+
         sl_cfg = config.get('sl', {})
         tp_cfg = config.get('tp', {})
-        
+
         strategy_name = trigger.get('strategy', 'UNKNOWN')
+        symbol = state_obj.symbol
+        side = trigger.get('side', 'BUY')
 
         # 1. Stop Loss
-        point_size = get_point_size(state_obj.symbol)
-        mode = sl_cfg.get('mode', 'FIXED_PIPS')
-        if mode == 'FIXED_PIPS':
+        point_size = get_point_size(symbol)
+        # Accept both 'type' and 'mode' keys for backward compatibility
+        sl_mode = sl_cfg.get('mode') or sl_cfg.get('type', 'FIXED_PIPS')
+
+        if sl_mode == 'FIXED_PIPS':
+            # Priority: strategy config value > symbols.json sl > default 100
             raw_value = sl_cfg.get('value')
             if raw_value is None:
-                logger.warning(f"[{strategy_name}] SL mode=FIXED_PIPS but no 'value' configured — SL cannot be calculated")
-                return None, None
-            
+                raw_value = get_default_sl_pips(symbol)
+                logger.debug(f"[{strategy_name}] [{symbol}] SL: strategy config has no value, "
+                           f"using symbols.json default sl={raw_value}")
+
             price_delta = raw_value * point_size
-            sl = (entry - price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry + price_delta)
-            
-        elif mode == 'SIGNAL_LOW' or mode == 'SIGNAL_HIGH':
+            sl = (entry - price_delta) if 'BUY' in side else (entry + price_delta)
+            logger.debug(f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=FIXED_PIPS, value={raw_value}, "
+                        f"point={point_size}, delta={price_delta}, sl={sl}, side={side}")
+
+        elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
             target_tag = sl_cfg.get('tag')
             buffer = sl_cfg.get('buffer', 0) * point_size
-            
+
             # Priority 1: Check if the trigger itself has an 'ob' field (standard for Structure signals)
             ob = trigger.get('ob')
             if ob and isinstance(ob, dict):
-                if mode == 'SIGNAL_LOW':
+                if sl_mode == 'SIGNAL_LOW':
                     sl = float(ob.get('bottom', entry)) - buffer
                 else:
                     sl = float(ob.get('top', entry)) + buffer
-            
+
             # Priority 2: Find the specific signal in progress history and match with swing points
             if sl is None:
                 progress = json.loads(trigger['progress']) if isinstance(trigger['progress'], str) else trigger['progress']
@@ -408,32 +451,39 @@ class SimulatedTradeManager:
                     if step['tag'] == target_tag:
                         found_time = step['time']
                         break
-                
+
                 if found_time:
                     for sp in state_obj.swing_points:
                         if sp['t'] == found_time:
-                            sl = sp['price'] + (buffer if mode == 'SIGNAL_HIGH' else -buffer)
+                            sl = sp['price'] + (buffer if sl_mode == 'SIGNAL_HIGH' else -buffer)
                             break
-            
+
             if sl is None:
                 logger.warning(f"[{strategy_name}] SL from SIGNAL_LOW/HIGH yielded None — no fallback, SL/TP rejected")
                 return None, None
 
         # 2. Take Profit
-        mode = tp_cfg.get('mode', 'RR')
-        if mode == 'RR':
+        # Accept both 'type' and 'mode' keys for backward compatibility
+        tp_mode = tp_cfg.get('mode') or tp_cfg.get('type', 'RR')
+
+        if tp_mode in ('RR', 'RR_RATIO'):
             ratio = tp_cfg.get('value')
             if ratio is None:
                 logger.warning(f"[{strategy_name}] TP mode=RR but no 'value' configured — TP cannot be calculated")
                 return sl, None
             risk = abs(entry - sl) if sl else (entry * 0.001)
-            tp = entry + (risk * ratio) if 'BUY' in trigger.get('side', 'BUY') else entry - (risk * ratio)
-        elif mode == 'FIXED_PIPS':
+            tp = entry + (risk * ratio) if 'BUY' in side else entry - (risk * ratio)
+            logger.debug(f"[{strategy_name}] [{symbol}] TP: entry={entry}, mode=RR, ratio={ratio}, "
+                        f"risk={risk}, tp={tp}, side={side}")
+
+        elif tp_mode == 'FIXED_PIPS':
              raw_tp_value = tp_cfg.get('value')
              if raw_tp_value is None:
                  logger.warning(f"[{strategy_name}] TP mode=FIXED_PIPS but no 'value' configured — TP cannot be calculated")
                  return sl, None
              price_delta = raw_tp_value * point_size
-             tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
+             tp = (entry + price_delta) if 'BUY' in side else (entry - price_delta)
+             logger.debug(f"[{strategy_name}] [{symbol}] TP: entry={entry}, mode=FIXED_PIPS, value={raw_tp_value}, "
+                         f"point={point_size}, delta={price_delta}, tp={tp}, side={side}")
 
         return sl, tp

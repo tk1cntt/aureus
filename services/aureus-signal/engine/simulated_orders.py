@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+from engine.orders import get_point_size, get_default_sl_pips
+
 logger = get_logger(__name__)
 class SimulatedTradeManager:
     """
@@ -103,26 +105,37 @@ class SimulatedTradeManager:
     def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
         """
         Calculates prices for SL and TP based on strategy config (Ported from Live Engine).
+
+        SL value priority:
+        1. Strategy config sl.value (if specified)
+        2. symbols.json sl field (per-symbol default)
+        3. Default: 100 points
+
+        Config keys: both 'type' and 'mode' are accepted for backward compatibility.
+        Point size is loaded from symbols.json (single source of truth).
         """
         entry = float(state_obj.last_candle['c'])
         sl = None
         tp = None
-        
+
         sl_cfg = config.get('sl', {})
         tp_cfg = config.get('tp', {})
-        
+
         # 1. Stop Loss Logic
-        sl_mode = sl_cfg.get('mode', 'FIXED_PIPS')
+        point_size = get_point_size(state_obj.symbol)
+        # Accept both 'type' and 'mode' keys for backward compatibility
+        sl_mode = sl_cfg.get('mode') or sl_cfg.get('type', 'FIXED_PIPS')
         if sl_mode == 'FIXED_PIPS':
-            pips = sl_cfg.get('value', 300) / 10000.0 # Default 30 pips for FX
-            if 'JPY' in trigger.get('strategy', '') or state_obj.symbol.endswith('JPY'):
-                 pips = sl_cfg.get('value', 300) / 100.0
-                 
-            sl = (entry - pips) if 'BUY' in trigger.get('side', 'BUY') else (entry + pips)
+            # Priority: strategy config value > symbols.json sl > default 100
+            raw_value = sl_cfg.get('value')
+            if raw_value is None:
+                raw_value = get_default_sl_pips(state_obj.symbol)
+            price_delta = raw_value * point_size
+            sl = (entry - price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry + price_delta)
             
         elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
             target_tag = sl_cfg.get('tag')
-            buffer = sl_cfg.get('buffer', 0) / 10000.0
+            buffer = sl_cfg.get('buffer', 0) * point_size
             
             # Priority 1: Check if the trigger itself has an 'ob' field (standard for Structure signals)
             ob = trigger.get('ob')
@@ -167,9 +180,8 @@ class SimulatedTradeManager:
             risk = abs(entry - sl) if sl else (entry * 0.001)
             tp = entry + (risk * ratio) if 'BUY' in trigger.get('side', 'BUY') else entry - (risk * ratio)
         elif tp_mode == 'FIXED_PIPS':
-             pips = tp_cfg.get('value', 500) / 10000.0
-             if state_obj.symbol.endswith('JPY'): pips = tp_cfg.get('value', 500) / 100.0
-             tp = (entry + pips) if 'BUY' in trigger.get('side', 'BUY') else (entry - pips)
+             price_delta = tp_cfg.get('value', 500) * point_size
+             tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
 
         return sl, tp
 
