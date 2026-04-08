@@ -232,6 +232,9 @@ services:
       - PYTHONUNBUFFERED=1
     ports:
       - "${DEV_BRIDGE_METRICS_PORT:-19158}:9108"
+    volumes:
+      - ./services/aureus-bridge-metrics-exporter:/app
+      - ./logs:/app/logs
 
   prometheus-dev:
     image: prom/prometheus:latest
@@ -293,7 +296,8 @@ services:
     ports:
       - "${DEV_API_PORT:-8002}:8001"
     volumes:
-      - ./services/aureus-signal/symbols.json:/app/symbols.json
+      - ./services/aureus-dashboard/api:/app
+      - ./services/aureus-dashboard/api/symbols.json:/app/symbols.json
       - ./logs:/app/logs
 
   aureus-notifier-dev:
@@ -315,6 +319,9 @@ services:
     depends_on:
       - redis-dev
     restart: unless-stopped
+    volumes:
+      - ./services/aureus-notifier:/app
+      - ./logs:/app/logs
 
   aureus-trader-dev:
     build:
@@ -337,6 +344,9 @@ services:
       - redis-dev
       - timescaledb-dev
     restart: unless-stopped
+    volumes:
+      - ./services/aureus-trader:/app
+      - ./logs:/app/logs
 
 networks:
   aureus_dev_net:

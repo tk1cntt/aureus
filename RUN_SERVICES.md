@@ -34,28 +34,55 @@ Mặc định dev:
 
 ---
 
-## 2) Rebuild/Restart
+### 2.3 Restart nhanh (code change — KHÔNG cần rebuild)
+> [!TIP]
+> **TẤT CẢ Python services đã có volume mount** — code sync trực tiếp từ host vào container. Sau khi sửa `.py`, chỉ cần `docker restart <service>` là apply, KHÔNG cần `--build`.
 
-### 2.1 Rebuild 1 service
+```powershell
+# Restart Python services sau khi sửa code
+wsl -d Aureus -e bash -lc "docker restart aureus-signal-dev aureus-strategy-executor-dev aureus-trader-dev aureus-notifier-dev aureus-db-writer-dev aureus-dashboard-api-dev aureus-nautilus-bridge-dev aureus-nautilus-node-dev aureus-bridge-metrics-dev"
+```
+
+### 2.4 Rebuild (chỉ khi đổi Dockerfile, requirements.txt, hoặc thêm package mới)
 ```powershell
 wsl -d Aureus -u root bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build <service_name>"
 ```
 
-Ví dụ:
-```powershell
-wsl -d Aureus -u root bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build aureus-signal-dev"
-```
-
-### 2.2 Rebuild toàn bộ dev stack
-```powershell
-wsl -d Aureus -u root bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml up -d --build"
-```
-
-### 2.3 Kiểm tra trạng thái/log
+### 2.5 Kiểm tra trạng thái/log
 ```powershell
 wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && docker compose -f docker-compose.dev.yml ps"
-wsl -d Aureus -e bash -lc "docker logs --tail 120 aureus-signal-dev 2>&1"
+wsl -d Aureus -e bash -lc "docker logs --tail 120 <service_name> 2>&1"
 ```
+
+---
+
+## 2b) Volume Mount — Services Dev
+
+> [!TIP]
+> Trong môi trường dev, TẤT CẢ Python services đều mount code từ host. Code `.py` thay đổi → restart container là apply ngay.
+
+| Service | Mount Path | Notes |
+|---------|-----------|-------|
+| `aureus-gateway-dev` | `./services/aureus-gateway:/app` | WebSocket gateway |
+| `aureus-db-writer-dev` | `./services/aureus-db-writer:/app` | DB stream consumer |
+| `aureus-signal-dev` | `./services/aureus-signal:/app` | Signal aggregator |
+| `aureus-strategy-executor-dev` | `./services/aureus-signal:/app` | Strategy evaluation |
+| `aureus-trader-dev` | `./services/aureus-trader:/app` | MT5 order dispatch |
+| `aureus-notifier-dev` | `./services/aureus-notifier:/app` | Telegram notifications |
+| `aureus-dashboard-api-dev` | `./services/aureus-dashboard/api:/app` | Dashboard REST API |
+| `aureus-nautilus-bridge-dev` | `./services/aureus-nautilus-bridge:/app` | Nautilus execution bridge |
+| `aureus-nautilus-node-dev` | `./services/aureus-nautilus-node:/app` | Nautilus adapter |
+| `aureus-bridge-metrics-dev` | `./services/aureus-bridge-metrics-exporter:/app` | Prometheus metrics |
+
+**Khi nào CẦN rebuild (`--build`):**
+- Đổi `requirements.txt` (thêm/xóa Python package)
+- Đổi `Dockerfile`
+- Đổi entrypoint/command config
+
+**Khi nào CHỈ CẦN restart (`docker restart`):**
+- Sửa file `.py` bất kỳ
+- Sửa config JSON/YAML trong service folder
+- Sửa logic business không thêm dependency mới
 
 ---
 
@@ -122,7 +149,7 @@ wsl -d Aureus -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail 
 - `DEV_API_PORT=8002`
 - `DEV_WEB_PORT=17222`
 
-4. Nếu có đổi code backend: bắt buộc `up -d --build` service tương ứng.
+4. Nếu có đổi code backend: chỉ cần `docker restart <service>`, KHÔNG cần rebuild (trừ khi đổi requirements.txt/Dockerfile).
 
 ---
 
