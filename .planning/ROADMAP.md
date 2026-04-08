@@ -21,12 +21,14 @@
 |---|---|---|---|
 | 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | ✅ DONE |
 | 27 | Telegram Notification Service | NOTIF-02→06 | ✅ DONE |
-| 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | PLANNED |
-| 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | PLANNED |
-| 30 | Trade State Management | TRADE-01→02, TRADE-05 | 1/1 Complete 2026-04-06 |
-| 31 | MT5 History Sync | TRADE-03→04 | PLANNED |
-| 32 | Trade Performance API | PERF-01→07 | 1 plan |
-| 33 | Performance Dashboard UI | PERF-08 | 1 plan |
+| 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | ✅ DONE |
+| 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | ✅ DONE |
+| 30 | Trade State Management | TRADE-01→02, TRADE-05 | ✅ DONE 2026-04-06 |
+| 31 | MT5 History Sync | TRADE-03→04 | ✅ DONE 2026-04-07 |
+| 32 | Trade Performance API | PERF-01→07 | ✅ DONE 2026-04-07 |
+| 33 | Performance Dashboard UI | PERF-08 | ✅ DONE 2026-04-07 |
+| 35 | MT5 Order Status Reporter | PERF-09 | ✅ DONE 2026-04-07 |
+| 36 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
 
 ---
 
@@ -69,147 +71,112 @@
 ## Phase 28: AureusProvider.mq5 Bidirectional Extension
 
 **Requirements:** ORDER-04, ORDER-05, ORDER-06
-**Goal:** Mở rộng MT5 EA để nhận order commands từ Aureus và push order events ngược lại.
+**Status:** ✅ DONE
 
-**Success Criteria:**
-1. EA nhận và parse order commands (OPEN_ORDER, CLOSE_ORDER) qua TCP
-2. EA execute OrderSend() cho market và pending orders
-3. EA push order events (ORDER_OPENED, ORDER_CLOSED, ORDER_FAILED) về server
-4. ACK/NACK protocol hoạt động cho mỗi command
-5. Heartbeat và reconnect logic vẫn hoạt động bình thường
+**Results:**
+- EA nhận và parse order commands (OPEN_ORDER, CLOSE_ORDER) qua TCP
+- EA execute OrderSend() cho market và pending orders
+- EA push order events (ORDER_OPENED, ORDER_CLOSED, ORDER_FAILED) về server
+- ACK/NACK protocol hoạt động cho mỗi command
+- Heartbeat và reconnect logic vẫn hoạt động bình thường
 
 ---
 
 ## Phase 29: MT5 Order Execution Service
 
 **Requirements:** ORDER-01, ORDER-02, ORDER-03, ORDER-07
-**Goal:** Xây dựng aureus-trader service nhận strategy matches và gửi orders xuống MT5.
+**Status:** ✅ DONE
 
-**Success Criteria:**
-1. Service aureus-trader chạy trong Docker, subscribe Redis strategy:matches channel
-2. Tạo và gửi market order xuống MT5 qua TCP
-3. Tạo và gửi pending order (limit/stop) xuống MT5 qua TCP
-4. Idempotency key chống duplicate execution
-5. Order queue persist pending orders khi MT5 disconnect
+**Results:**
+- Service aureus-trader chạy trong Docker, subscribe Redis strategy:matches channel
+- Tạo và gửi market order/pending order xuống MT5 qua TCP
+- Idempotency key chống duplicate execution
+- Order queue persist pending orders khi MT5 disconnect
 
 ---
 
 ## Phase 30: Trade State Management
 
 **Requirements:** TRADE-01, TRADE-02, TRADE-05
-**Goal:** Quản lý vòng đời order với state machine và persistent storage.
-
-**Plans:** 1/1 plans complete
+**Status:** ✅ DONE 2026-04-06
 
 **Plans:**
-- [x] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 5-state machine, order_buffer, magic number filters
+- [x] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 6-state machine, order_buffer, magic number filters
+- [x] 30-01-SUMMARY.md — 66 tests passed, 3 commits: 2b6b0f6, 428bc20, f21447d
 
-**Success Criteria:**
-1. Order state machine tracking (pending → sent → filled → closed) hoạt động
-2. Trade records lưu vào PostgreSQL/TimescaleDB
-3. Magic number filter phân biệt bot vs manual trades
-4. DB schema bao gồm: ticket, symbol, direction, entry_price, sl, tp, lot, status, profit, timestamps
+**Results:**
+- State machine 6 states: PENDING→SENT→FILLED→CLOSED/FAILED/CANCELLED
+- order_buffer trong DB writer với Redis stream consumer
+- Magic number filter SQL queries phân biệt bot vs manual trades
+- Validation direction BUI/SELL, entry_type MARKET/LIMIT/STOP
 
 ---
 
 ## Phase 31: MT5 History Sync
 
 **Requirements:** TRADE-03, TRADE-04
-**Goal:** Hybrid sync: push events real-time + poll reconciliation fallback.
-
-**Plans:** 1 plan
+**Status:** ✅ DONE 2026-04-07
 
 **Plans:**
-- [ ] 31-01-PLAN.md — MT5 history sync: XPENDING recovery, REQUEST_TRADE_HISTORY EA command, reconciliation loop, RECONCILED status, audit logging
+- [x] 31-01-PLAN.md — Hybrid sync: XPENDING recovery, REQUEST_TRADE_HISTORY, reconciliation loop
+- [x] 31-01-SUMMARY.md — 3 commits: 484e1c0, 000a66d, 98bd363
 
-**Success Criteria:**
-1. Push events từ MT5 EA cập nhật trade records real-time
-2. Poll reconciliation chạy mỗi 30s (configurable), phát hiện và fill gaps
-3. Không mất trade data dù có disconnect hay EA restart
-4. Reconciliation log ghi nhận mọi discrepancy được sửa
+**Results:**
+- REQUEST_TRADE_HISTORY command handler trong MT5 EA
+- XPENDING recovery trên startup của DB writer
+- Reconciliation loop (configurable interval, default 30s) phát hiện và tự sửa missing trades
+- `aureus_reconciliation_log` table cho audit
 
 ---
 
 ## Phase 32: Trade Performance API
 
 **Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07
-**Goal:** API endpoints tính toán và trả về performance metrics.
+**Status:** ✅ DONE 2026-04-07
 
-**Plans:** 1 plan
-
-**Plans:**
-- [ ] 32-01-PLAN.md — Performance API: connection pooling, /trades (pagination), /metrics (SQL+Python), /equity-curve, Redis cache
-
-**Success Criteria:**
-1. API `/api/v1/performance/trades` trả danh sách trades với pagination và filtering
-2. Win rate, Profit factor, Max drawdown, Average R:R, Sharpe ratio tính chính xác
-3. Equity curve data trả về time series từ `aureus_account_snapshots` với fallback `aureus_trades`
-4. Filter hoạt động: symbol, strategy_id, date range, status
-5. API response time < 500ms cho dataset up to 10k trades (pooling + caching)
-6. Connection pooling giảm connection overhead
-7. Redis cache cho metrics endpoints với 60s TTL
+**Results:**
+- 3 endpoints: /trades (paginated), /metrics (Redis cache 60s), /equity-curve (Redis cache 30s)
+- PostgreSQL connection pooling (asyncpg, min=2, max=10)
+- Hybrid metrics: SQL aggregation + numpy (drawdown, sharpe)
+- Consistent filtering: symbol, strategy_id, start, end
+- Commit: 98781cd
 
 ---
 
 ## Phase 33: Performance Dashboard UI
 
 **Requirements:** PERF-08
-**Goal:** Trang web thống kê performance tích hợp vào aureus-dashboard.
+**Status:** ✅ DONE 2026-04-07
 
-**Plans:** 1 plan
+**Results:**
+- Trang `/performance` với 6 metric cards, FilterBar, EquityChart, PerformanceTable
+- lightweight-charts v5.1.0 AreaSeries cho equity curve
+- URL search params cho filter state
+- 5 component files mới + Sidebar navigation
+- TypeScript zero errors, Commit: 4f0633c
 
-**Plans:**
-- [ ] 33-01-PLAN.md — Performance Dashboard UI: /performance page, MetricCard, FilterBar, EquityChart (lightweight-charts), PerformanceTable, URL params filtering
+## Phase 36: Fix BUY/SELL Direction from Strategy Settings (Not Name)
 
-**Success Criteria:**
-1. Trang `/performance` hiển thị với đầy đủ 4 sections (FilterBar → MetricCards → EquityChart → TradeTable)
-2. 6 metric cards hiển thị data từ API (Win Rate, Net PnL, Profit Factor, Max DD, Avg R:R, Sharpe)
-3. Equity curve chart render bằng lightweight-charts v5.1.0 AreaSeries
-4. Filters hoạt động: symbol, strategy, date range (URL search params)
-5. Trade table pagination 20 rows/page
-6. Responsive design: 3-col → 2-col → 1-col
+**Goal:** Bỏ fallback direction từ tên strategy, bắt buộc cấu hình rõ ràng trong trade_execution.
+**Status:** ✅ DONE 2026-04-08
 
-### Phase 34: Fix SL TP calculation decimals and MT5 comment strategy name
-
-**Goal:** Fix MT5 EA hardcoded stops and volume issues, add dynamic multiplier parsing for exact broker precision (with future Digits sync backlog).
-**Requirements**: N/A
-**Status:** ✅ DONE
-
-Plans:
-- [x] 34-01-PLAN.md — Executed via direct implementation by AI
-
-## Phase 35: MT5 Order Status Reporter
-
-**Goal:** Gửi thông tin order MT5 hiện tại lên Telegram mỗi phút qua bot. Bao gồm: (1) order đang chạy (open positions) và (2) order đã close trong vòng 1 phút gần nhất (closed history).
-**Requirements**: TBD
-**Depends on:** Phase 28, Phase 29
-
-**Success Criteria:**
-1. Mỗi 1 phút tự động gửi danh sách open positions lên Telegram
-2. Nếu trong vòng 1 phút có order vừa close → gửi thông tin order đó (profit/loss, thời gian giữ, entry/exit price)
-3. Sử dụng bot token `8650116511:AAE25Gqc9WSVuZ53qrKp_l6b81_TTOVrjFk`
-4. Format message rõ ràng, dễ đọc
+**Results:**
+- TemplateStrategy.__init__ validate direction từ trade_execution (line 39-45)
+- Không còn fallback "BEAR"/"BULL" vào tên strategy
+- Raise ValueError nếu thiếu hoặc sai direction
+- 6 seed strategies đều có direction trong trade_execution
+- DB xác nhận 6 rows đều có direction đúng
+- 16 tests pass (có 3 tests mới: direction_required, invalid_value, case_insensitive)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 35 to break down)
-
-## Phase 36: Fix BUY/SELL direction from strategy settings not name
-
-**Goal:** Xử lý vào lệnh BUY/SELL dựa trên thông tin setting của Strategy chứ không phải dựa trên tên BULL hay BEAR.
-**Requirements**: TBD
-**Depends on:** Phase 35
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-discuss-phase 36 to break down)
+- [x] 36-01-PLAN.md — Executed
 
 ---
 
 ## Next Up
 
-**Phase 28: AureusProvider.mq5 Bidirectional Extension** — mở rộng MT5 EA để nhận order commands.
-
-`/gsd-discuss-phase 28`
+- Cần discuss v1.5 milestone completion
+- Phase 999.1 (Backlog): Sync MT5 Symbol Metadata Digits
 
 <sub>`/clear` first → fresh context window</sub>
 
