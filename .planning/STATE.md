@@ -34,6 +34,7 @@ Last activity: 2026-04-07
 ## Accumulated Context
 
 ### Roadmap Evolution
+- Phase 37 inserted after Phase 36: Trade Execution Journal — lưu nhật ký thực thi trade từ trigger đến close để phân tích (URGENT)
 
 - Phase 36 added: Fix BUY/SELL direction from strategy settings not name
 - Phase 35 added: MT5 Order Status Reporter - Gửi thông tin order MT5 lên Telegram mỗi phút

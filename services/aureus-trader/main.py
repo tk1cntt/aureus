@@ -45,7 +45,34 @@ async def run_trader():
 
     # 3. Initialize components
     dedup = IdempotencyChecker(r, config.dedup_ttl)
-    dispatcher = OrderDispatcher(r, config)
+
+    # Journal manager — needs asyncpg pool for DB writes
+    journal = None
+    db_pool = None
+    logger.info("Initializing trade journal (non-blocking mode)")
+    try:
+        import asyncpg
+        from journal import TradeJournalManager
+
+        db_pool = await asyncpg.create_pool(
+            host=config.db_host,
+            port=config.db_port,
+            database=config.db_name,
+            user=config.db_user,
+            password=config.db_password,
+            min_size=1,
+            max_size=3,
+        )
+        journal = TradeJournalManager(db_pool)
+        logger.info(
+            f"Trade journal initialized (db={config.db_host}:{config.db_port}/{config.db_name})"
+        )
+    except ImportError:
+        logger.warning("asyncpg not installed — trade journal disabled")
+    except Exception as e:
+        logger.warning(f"Trade journal initialization failed: {e}")
+
+    dispatcher = OrderDispatcher(r, config, journal_manager=journal)
 
     # 4. Start dispatcher loop
     dispatch_task = asyncio.create_task(dispatcher.dispatch_loop())
@@ -96,6 +123,9 @@ async def run_trader():
                         f"Order queued: {order_cmd['cmd_id']} "
                         f"{order_cmd['symbol']} {order_cmd['direction']}"
                     )
+                    # Journal: record strategy match (non-blocking)
+                    if journal:
+                        asyncio.create_task(journal.on_strategy_match(event))
                 else:
                     logger.error(
                         f"Queue full, order rejected: {order_cmd['cmd_id']}"
@@ -113,6 +143,10 @@ async def run_trader():
         dispatch_task.cancel()
         event_task.cancel()
         await pubsub.unsubscribe()
+        # Close DB pool if journal was initialized
+        if db_pool:
+            await db_pool.close()
+            logger.info("Trade journal DB pool closed")
         await r.close()
         logger.info("Trader shutdown complete")
 

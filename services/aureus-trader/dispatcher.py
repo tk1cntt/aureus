@@ -51,11 +51,12 @@ def is_retryable(event: dict) -> bool:
 class OrderDispatcher:
     """Dispatches orders from the Redis queue to MT5 with retry logic."""
 
-    def __init__(self, redis_client, config: TraderConfig):
+    def __init__(self, redis_client, config: TraderConfig, journal_manager=None):
         self.redis = redis_client
         self.config = config
         self._running = False
         self._pending_responses: dict[str, asyncio.Future] = {}
+        self.journal = journal_manager
 
     async def enqueue_order(self, order_cmd: dict) -> bool:
         """Add an order to the Redis queue if not full.
@@ -152,6 +153,9 @@ class OrderDispatcher:
                     logger.info(
                         f"Order executed: {cmd_id} ticket={final.get('ticket')}"
                     )
+                    # Journal: record execution
+                    if self.journal:
+                        await self.journal.on_order_opened(final)
                     return
 
                 if is_retryable(final):
@@ -182,6 +186,13 @@ class OrderDispatcher:
 
                 try:
                     event = json.loads(message["data"])
+
+                    # Journal: record trade closure (ORDER_CLOSED events don't have cmd_id)
+                    if event.get("type") in ("ORDER_CLOSED", "ORDER_CLOSED_PARTIAL"):
+                        if self.journal:
+                            # Fire-and-forget: don't block event resolution
+                            asyncio.create_task(self.journal.on_order_closed(event))
+
                     cmd_id = event.get("cmd_id")
                     if cmd_id and cmd_id in self._pending_responses:
                         future = self._pending_responses.pop(cmd_id)

@@ -20,6 +20,12 @@ class TraderConfig:
     result_timeout: float = 30.0
     max_retries: int = 3
     dedup_ttl: int = 86400
+    # Database config for trade journal
+    db_host: str = "aureus-db"
+    db_port: int = 5432
+    db_name: str = "aureus"
+    db_user: str = "aureus"
+    db_password: str = "aureus"
 
     def __post_init__(self):
         if self.symbols is None:
@@ -44,6 +50,11 @@ def load_config() -> TraderConfig:
         result_timeout=float(os.environ.get("RESULT_TIMEOUT", "30.0")),
         max_retries=int(os.environ.get("MAX_RETRIES", "3")),
         dedup_ttl=int(os.environ.get("DEDUP_TTL", "86400")),
+        db_host=os.environ.get("DB_HOST", "aureus-db"),
+        db_port=int(os.environ.get("DB_PORT", "5432")),
+        db_name=os.environ.get("DB_NAME", "aureus"),
+        db_user=os.environ.get("DB_USER", "aureus"),
+        db_password=os.environ.get("DB_PASSWORD", "aureus"),
     )
 
 

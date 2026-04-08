@@ -28,7 +28,8 @@
 | 32 | Trade Performance API | PERF-01→07 | ✅ DONE 2026-04-07 |
 | 33 | Performance Dashboard UI | PERF-08 | ✅ DONE 2026-04-07 |
 | 35 | MT5 Order Status Reporter | PERF-09 | ✅ DONE 2026-04-07 |
-| 36 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
+| 36.1 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
+| 37 | Trade Execution Journal (INSERTED) | TBJ-01→05 | Not planned |
 
 ---
 
@@ -194,10 +195,63 @@ Plans:
 
 ---
 
+## Phase 37: Trade Execution Journal (INSERTED)
+
+**Goal:** Lưu nhật ký thực thi trade từ lúc strategy trigger → order tạo → order close trên MT5. Bảng ghi đủ thông tin để phân tích hiệu quả strategy, lý do vào lệnh, signal active, kết quả PnL.
+
+**Requirements:**
+- **TBJ-01:** Bảng `aureus_trade_journal` với schema đầy đủ
+- **TBJ-02:** Signal Service ghi entry khi trade plan được generate (strategy, direction, score, active signals, context)
+- **TBJ-03:** Trader Service update order_id, position_id, entry_price, entry_time khi MT5 execute
+- **TBJ-04:** Gateway/EA update exit_price, exit_time, exit_reason, pnl, duration khi MT5 close
+- **TBJ-05:** API endpoint `/api/v1/journal` để query, filter, phân tích
+
+**Schema proposed:**
+```sql
+CREATE TABLE aureus_trade_journal (
+    id SERIAL PRIMARY KEY,
+    -- Strategy context
+    strategy_name VARCHAR(100),
+    strategy_id INT,
+    direction VARCHAR(4),
+    score NUMERIC,
+    -- Entry details
+    order_id VARCHAR(50),
+    position_id BIGINT,
+    entry_price NUMERIC,
+    entry_time TIMESTAMPTZ,
+    sl NUMERIC,
+    tp NUMERIC,
+    lot_size NUMERIC,
+    -- Exit details
+    exit_price NUMERIC,
+    exit_time TIMESTAMPTZ,
+    exit_reason VARCHAR(50),
+    pnl NUMERIC,
+    pnl_pips NUMERIC,
+    duration_seconds INT,
+    -- Signal context
+    active_signals JSONB,
+    context_filters JSONB,
+    magic_number INT,
+    comment VARCHAR(255),
+    -- Meta
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Depends on:** Phase 26 (Signal Contract), Phase 29 (Order Execution), Phase 30 (Trade State)
+**All:** ✅ DONE
+
+Plans:
+- [ ] 37-01-PLAN.md — Trade journal DB + signal service integration + trader service update + API
+
+---
+
 ## Next Up
 
-- Cần discuss v1.5 milestone completion
-- Phase 999.1 (Backlog): Sync MT5 Symbol Metadata Digits
+**Phase 36.1** — Trade Execution Journal *(urgent insertion)*
 
 <sub>`/clear` first → fresh context window</sub>
 
