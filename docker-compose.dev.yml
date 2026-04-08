@@ -305,7 +305,7 @@ services:
       context: ./services/aureus-notifier
     container_name: aureus-notifier-dev
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_SIGNAL_BOT_TOKEN=${TELEGRAM_SIGNAL_BOT_TOKEN}
       - TELEGRAM_STRATEGY_BOT_TOKEN=${TELEGRAM_STRATEGY_BOT_TOKEN}
       - TELEGRAM_DEFAULT_CHAT_ID=${TELEGRAM_DEFAULT_CHAT_ID}
       - REDIS_HOST=redis-dev

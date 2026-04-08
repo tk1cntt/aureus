@@ -34,9 +34,9 @@ async def run_notifier():
     logger.info("Redis connected")
 
     # 2. Initialize Telegram sender
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    bot_token = os.environ.get("TELEGRAM_SIGNAL_BOT_TOKEN")
     if not bot_token:
-        logger.error("TELEGRAM_BOT_TOKEN not set. Please configure Telegram bot token in .env file.")
+        logger.error("TELEGRAM_SIGNAL_BOT_TOKEN not set. Please configure signal Telegram bot token in .env file.")
         logger.error("Service will exit. See .env.example for configuration instructions.")
         import sys
         sys.exit(1)
