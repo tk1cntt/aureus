@@ -55,9 +55,14 @@ async def publish_strategy_match(
 ) -> bool:
     """Publish a strategy match event to Redis pub/sub."""
     t = int(strategy_result.get("t", 0))
+    strat_id = strategy_result.get("strategy_id", "")
+    origin_ts = strategy_result.get("origin_timestamp", t)
+    trace_id = f"{symbol}:{strat_id}:{origin_ts}"
     data = {
+        "trace_id": trace_id,
         "strategy": strategy_result.get("strategy"),
         "strategy_id": strategy_result.get("strategy_id"),
+        "strategy_name": strategy_result.get("strategy"),
         "side": strategy_result.get("side"),
         "entry_type": strategy_result.get("entry_type", "MARKET"),
         "size_value": strategy_result.get("size_value", strategy_result.get("size")),
@@ -70,6 +75,7 @@ async def publish_strategy_match(
         "reason_code": strategy_result.get("reason_code"),
         "origin_timestamp": strategy_result.get("origin_timestamp"),
         "entry_price": strategy_result.get("entry_price"),
+        "direction": strategy_result.get("side"),
     }
     return await publish_signal_event(
         redis_client, symbol, "STRATEGY_MATCH", t, data
