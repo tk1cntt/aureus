@@ -163,25 +163,158 @@ class TradeJournalManager:
 
 ## Testing Strategy
 
-### Unit Tests
-- `services/aureus-trader/tests/test_journal.py`
-  - Test `on_strategy_match` tạo entry với đúng fields
-  - Test `on_order_opened` update ticket, entry_price
-  - Test `on_order_closed` tính toán duration, result, pnl_pips
-  - Test GIN index cho active_signals và context_filters
-
-### Integration Tests
-- E2E test: strategy match → journal entry created → ORDER_OPENED → journal updated → ORDER_CLOSED → journal finalized
-- Verify jsonb queries hoạt động đúng với GIN indexes
-
-### API Tests
-- Test `/api/v1/journal` với various filters
-- Test pagination và stats aggregation
+### Test Architecture
+- **Framework**: pytest + pytest-asyncio + fakeredis (reuse từ existing test patterns)
+- **Mock approach**: FakeRedisMock (tái chế từ test_dispatcher.py) + asyncpg mock pool cho DB
+- **Coverage target**: **100% line coverage** + ≥95% branch coverage trên `journal.py`
+- **Test files**:
+  - `services/aureus-trader/tests/conftest.py` — FIXTURES: mock_redis, mock_db_pool, journal_manager
+  - `services/aureus-trader/tests/test_journal.py` — Unit tests (inbound, outbound, white-box, abnormal)
+  - `services/aureus-trader/tests/test_journal_integration.py` — dispatcher + journal integration
+  - `services/aureus-trader/tests/test_journal_e2e.py` — E2E lifecycle (inspired by test_e2e_mt5_orders.py)
+  - `services/aureus-api/tests/test_journal_api.py` — API endpoint black-box tests
 
 ---
 
-## Verification
-- Migration chạy thành công trên TimescaleDB dev
-- Journal entries được tạo khi strategy match được emit
-- Journal được update khi ORDER_OPENED/ORDER_CLOSED events được published
-- API trả về data chính xác với filters
+### Pillar 1: Inbound Tests — Data Input Validation (13 tests)
+**White-box: `test_journal.py`**
+- **TJ-IN-01**: Valid strategy match → INSERT success với status=TRIGGERED ✓
+- **TJ-IN-02**: Missing `trace_id` → RAISE ValueError("trace_id is required") ✓
+- **TJ-IN-03**: Missing `strategy_name` → RAISE ValueError("strategy_name is required") ✓
+- **TJ-IN-04**: Missing `direction` or direction != BUY/SELL → RAISE ValueError ✓
+- **TJ-IN-05**: Missing `symbol` → RAISE ValueError("symbol is required") ✓
+- **TJ-IN-06**: `score` là string "abc" → RAISE ValueError("score must be numeric") ✓
+- **TJ-IN-07**: `active_signals` không phải list → RAISE TypeError ✓
+- **TJ-IN-08**: `origin_timestamp` Unix int → convert sang datetime thành công ✓
+- **TJ-IN-09**: Missing `ticket` trong ORDER_OPENED → RAISE ValueError ✓
+- **TJ-IN-10**: `entry_price` <= 0 → RAISE ValueError("entry_price must be positive") ✓
+- **TJ-IN-11**: Missing `close_price` trong ORDER_CLOSED → RAISE ValueError ✓
+- **TJ-IN-12**: `close_time` < `entry_time` → RAISE ValueError ✓
+- **TJ-IN-13**: Exit reason invalid ("MAGIC") → RAISE ValueError; valid (TP_HIT, SL_HIT, etc.) → PASS ✓
+
+### Pillar 2: Outbound Tests — Data Output Verification (9 tests)
+**White-box: `test_journal.py`**
+- **TJ-OUT-01**: on_strategy_match() → INSERT với đầy đủ fields: status=TRIGGERED, strategy_name, direction, symbol, score, active_signals (JSONB), context_filters (JSONB), origin_timestamp ✓
+- **TJ-OUT-02**: on_order_opened() → UPDATE: status=EXECUTED, ticket, entry_price, entry_time, sl_initial, tp_initial, updated_at ✓
+- **TJ-OUT-03**: on_order_closed() → UPDATE: status=CLOSED, exit_price, exit_time, pnl, commission, swap ✓
+- **TJ-OUT-04**: duration_seconds = (exit_time - entry_time).total_seconds() ✓
+- **TJ-OUT-05**: result = WIN khi pnl > 0 ✓
+- **TJ-OUT-06**: result = LOSS khi pnl < 0 ✓
+- **TJ-OUT-07**: result = BE khi pnl == 0 (tolerance ±0.01) ✓
+- **TJ-OUT-08**: active_signals và context_filters KHÔNG bị modify sau khi close ✓
+- **TJ-OUT-09**: Multiple UPDATEs → verify only target columns change, others preserved ✓
+
+### Pillar 3: Black-box Tests — External API Contract (13 tests)
+**`test_journal_api.py`**
+- **TJ-BB-01**: GET /api/v1/journal → 200, {trades: [], total: 0} ✓
+- **TJ-BB-02**: `?strategy=chandelier_breakout` → filtered correct ✓
+- **TJ-BB-03**: `?direction=BUY` → only BUY trades ✓
+- **TJ-BB-04**: `?direction=SELL` → only SELL trades ✓
+- **TJ-BB-05**: `?result=WIN` → only WIN trades ✓
+- **TJ-BB-06**: `?symbol=XAUUSD` → only XAUUSD ✓
+- **TJ-BB-07**: `?date_from=...&date_to=...` → date range filter ✓
+- **TJ-BB-08**: `?page=1&limit=10` → correct pagination format ✓
+- **TJ-BB-09**: `?page=0` → 400 Bad Request ✓
+- **TJ-BB-10**: stats.response có win_rate, avg_pnl, avg_duration, total_trades ✓
+- **TJ-BB-11**: active_signals, context_filters parseable JSON objects ✓
+- **TJ-BB-12**: `?strategy=nonexistent` → 200, empty trades [] ✓
+- **TJ-BB-13**: Multiple filters combined → correct intersection ✓
+
+### Pillar 4: White-box Tests — Internal Logic (13 tests)
+**`test_journal.py` + `test_journal_integration.py`**
+- **TJ-WB-01**: __init__ với valid redis + db → TradeJournalManager created ✓
+- **TJ-WB-02**: INSERT SQL query đúng syntax cho tất cả columns ✓
+- **TJ-WB-03**: UPDATE SQL cho ORDER_OPENED đúng columns ✓
+- **TJ-WB-04**: UPDATE SQL cho ORDER_CLOSED đúng columns ✓
+- **TJ-WB-05**: JSONB serialize: active_signals = json.dumps() trước INSERT ✓
+- **TJ-WB-06**: JSONB deserialize: fetch → json.loads() ✓
+- **TJ-WB-07**: Timezone: entry_time/exit_time phải UTC-aware ✓
+- **TJ-WB-08**: pnl_pips = abs(exit - entry) / pip_value (XAUUSD=0.01, EURUSD=0.0001) ✓
+- **TJ-WB-09**: JournalManager inject vào OrderDispatcher lúc khởi tạo ✓
+- **TJ-WB-10**: on_strategy_match() gọi TRƯỚC khi dispatch_order() ✓
+- **TJ-WB-11**: event_listener() → ORDER_OPENED → on_order_opened() ✓
+- **TJ-WB-12**: event_listener() → ORDER_CLOSED → on_order_closed() ✓
+- **TJ-WB-13**: ORDER_FAILED → KHÔNG gọi journal methods (trade chưa thành công) ✓
+
+### Pillar 5: Abnormal Case Tests — Error Handling & Resilience (18 tests)
+**`test_journal.py` + `test_journal_integration.py`**
+- **TJ-AB-01**: DB connection error on on_strategy_match() → LOG error, trade plan VẪN dispatch (journal KHÔNG block execution) ✓
+- **TJ-AB-02**: DB connection error on on_order_opened() → LOG error + retry next event cycle ✓
+- **TJ-AB-03**: DB connection error on on_order_closed() → LOG error + retry ✓
+- **TJ-AB-04**: Redis connection loss during match consume → LOG error, event NOT retried (đã consumed) ✓
+- **TJ-AB-05**: Duplicate ORDER_OPENED (EA gửi 2 lần) → UPDATE idempotent (không duplicate) ✓
+- **TJ-AB-06**: on_order_closed() khi journal entry chưa tồn tại → LOG warning, KHÔNG crash ✓
+- **TJ-AB-07**: trace_id không khớp → LOG warning "No journal entry", KHÔNG crash ✓
+- **TJ-AB-08**: ORDER_CLOSED cho entry đã CLOSED → LOG warning "Already closed", KHÔNG update ✓
+- **TJ-AB-09**: Database timeout (5s) → LOG error + retry with backoff ✓
+- **TJ-AB-10**: JSONB quá lớn (10MB active_signals) → LOG warning + truncate ✓
+- **TJ-AB-11**: Race condition: ORDER_OPENED đến TRƯỚC on_strategy_match() hoàn thành → retry 3 lần, 1s interval ✓
+- **TJ-AB-12**: Concurrent strategy matches → entries KHÔNG overwritten (trace_id unique) ✓
+- **TJ-AB-13**: Trader restart giữa chừng → entries KHÔNG mất (đã persist DB) ✓
+- **TJ-AB-14**: E2E lifecycle: match → TRIGGERED → OPENED → EXECUTED → CLOSED → data integrity ✓
+- **TJ-AB-15**: E2E: ORDER_FAILED → KHÔNG có journal entry (hoặc status=FAILED) ✓
+- **TJ-AB-16**: E2E: verify active_signals = signal sequence từ strategy match ✓
+- **TJ-AB-17**: E2E: verify context_filters = context filters từ match ✓
+- **TJ-AB-18**: E2E: verify duration, result, pnl_pips calculation correctness ✓
+
+### Pillar 6: Schema & Migration Tests (7 tests)
+**Schema validation**
+- **TJ-SCH-01**: Migration chạy thành công → bảng aureus_trade_journal tồn tại ✓
+- **TJ-SCH-02**: Foreign key trace_id → CASCADE DELETE khi aureus_trades bị xóa ✓
+- **TJ-SCH-03**: CHECK direction IN ('BUY', 'SELL') → INSERT 'HODL' → ERROR ✓
+- **TJ-SCH-04**: NOT NULL strategy_name → INSERT NULL → ERROR ✓
+- **TJ-SCH-05**: Indexes tồn tại: idx_journal_strategy, idx_journal_symbol, idx_journal_status, idx_journal_result ✓
+- **TJ-SCH-06**: GIN indexes: active_signals, context_filters → JSONB containment queries ✓
+- **TJ-SCH-07**: DEFAULT: status='TRIGGERED', commission=0, swap=0, created_at=now() ✓
+
+---
+
+## Test Coverage Requirement
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Line coverage (journal.py) | **100%** | `pytest --cov=journal --cov-report=term-missing` |
+| Branch coverage (journal.py) | ≥ 95% | `pytest --cov=journal --cov-branch --cov-report=term-missing` |
+
+---
+
+## Verification Commands (HOW TO RUN)
+
+### 1. Unit Tests
+```bash
+cd services/aureus-trader
+pytest tests/test_journal.py -v --cov=journal --cov-report=term-missing
+```
+
+### 2. Integration Tests
+```bash
+cd services/aureus-trader
+pytest tests/test_journal_integration.py -v
+```
+
+### 3. E2E Tests (need running Redis + MT5 + Gateway)
+```bash
+cd services/aureus-trader
+pytest tests/test_journal_e2e.py -v -s
+```
+
+### 4. API Tests
+```bash
+cd services/aureus-api
+pytest tests/test_journal_api.py -v
+```
+
+### 5. Schema/Migration Validation
+```bash
+# Run migration
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -f /mnt/d/Aureus/services/aureus-db-writer/migrations/add_trade_journal.sql"
+
+# Verify schema
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c '\d aureus_trade_journal'"
+```
+
+### 6. Full Coverage Report
+```bash
+cd services/aureus-trader
+pytest tests/test_journal*.py --cov=journal --cov-report=term-missing --cov-report=html
+# Verify htmlcov/index.html shows 100% line coverage and ≥95% branch coverage
+```
