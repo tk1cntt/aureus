@@ -131,9 +131,10 @@ class TemplateStrategy(BaseStrategy):
         sequence_progress = state.get("sequence", [])
         last_matched_candle_idx = state.get("last_matched_candle_idx", -1)
         last_processed_t = state.get("last_processed_t", 0)
+        last_processed_record_index = state.get("last_processed_record_index", -1)  # ← NEW: Track by index instead of timestamp
         internal_candle_counter = state.get("internal_candle_counter", 0)
         triggered_t = state.get("triggered_t", 0)  # Timestamp of last successful trigger
-        
+
         if not sequence_progress:
             for step in self.sequence:
                 sequence_progress.append({
@@ -164,22 +165,38 @@ class TemplateStrategy(BaseStrategy):
                         s["time"] = None
 
         normalized_log = getattr(state_obj, "log_signal_normalize", [])
-        
+
+        # DEBUG LOGGING: Trace event processing
+        symbol = getattr(state_obj, "symbol", "UNKNOWN")
+        logger.debug(
+            f"[{symbol}] [{self.name}] [_evaluate_sequence] "
+            f"Processing {len(normalized_log)} log entries, "
+            f"last_processed_t={last_processed_t}, "
+            f"last_processed_record_index={last_processed_record_index}, "
+            f"current_step_index={current_step_index}"
+        )
+
         # We now STRICTLY rely on normalized signal events. No fallback to raw history.
         source_records = normalized_log if isinstance(normalized_log, list) else []
 
         # 2. Process new signals/events
+        # BUG FIX: Use BOTH record index AND timestamp to:
+        #   - Avoid skipping records with same timestamp (use index)
+        #   - Only process RECENT events (use timestamp for max_wait checks)
+        # Old logic: `rec_t > last_processed_t` would skip records with same timestamp
+        # New logic: Process all records after last_processed_record_index
         pending_records = []
-        for rec in source_records:
-            if isinstance(rec, dict):
-                rec_t = rec.get("t")
-                if isinstance(rec_t, (int, float)) and rec_t > last_processed_t:
-                    pending_records.append(rec)
+        for idx, rec in enumerate(source_records):
+            if not isinstance(rec, dict):
+                continue
+            if idx > last_processed_record_index:
+                pending_records.append((idx, rec))  # ← Store index with record
 
         if pending_records:
-            pending_records.sort(key=lambda x: x.get("t", 0))
+            # Sort by timestamp while preserving index
+            pending_records.sort(key=lambda x: x[1].get("t", 0))
 
-            for record in pending_records:
+            for record_idx, record in pending_records:
                 events_to_process: List[Dict[str, Any]] = []
 
                 if isinstance(record, dict):
@@ -187,17 +204,29 @@ class TemplateStrategy(BaseStrategy):
                     signals_obj = record.get("signals") if isinstance(record.get("signals"), dict) else {}
                     events_obj = signals_obj.get("events") if isinstance(signals_obj.get("events"), list) else []
 
+                    # DEBUG: Log raw events before normalization
+                    logger.debug(
+                        f"[{symbol}] [{self.name}] [process_events] "
+                        f"Found {len(events_obj) if events_obj else 0} raw events at t={record_time} (record_idx={record_idx})"
+                    )
+
                     for ev in events_obj:
                         if not isinstance(ev, dict):
                             continue
                         ev_tag = ev.get("tag")
                         if ev_tag is None:
                             continue
-                            
+
                         ev_val = ev.get("value")
+                        original_tag = ev_tag
                         if ev_val and isinstance(ev_val, str) and ev_tag in ["choch", "sweep", "ob", "fvg", "bos"]:
                             ev_tag = ev_val
-                            
+                            # DEBUG: Log normalization
+                            logger.debug(
+                                f"[{symbol}] [{self.name}] [normalize_event] "
+                                f"Normalized '{original_tag}' + '{ev_val}' → '{ev_tag}'"
+                            )
+
                         events_to_process.append({"tag": ev_tag, "t": record_time})
 
                 for latest_signal in events_to_process:
@@ -206,10 +235,30 @@ class TemplateStrategy(BaseStrategy):
                         continue
                     latest_time = latest_signal.get("t")
 
+                    # SKIP OLD EVENTS: If event time <= triggered_t, it's from a previous trigger cycle
+                    # This prevents re-processing events after executor restart
+                    if triggered_t > 0 and latest_time <= triggered_t:
+                        logger.debug(
+                            f"[{symbol}] [{self.name}] [skip_old_event] "
+                            f"Event tag='{latest_tag}' at t={latest_time} <= triggered_t={triggered_t} - skipping"
+                        )
+                        continue
+
+                    # DEBUG: Log each signal being processed
+                    logger.debug(
+                        f"[{symbol}] [{self.name}] [process_signal] "
+                        f"Processing tag='{latest_tag}' at t={latest_time}, "
+                        f"current_step_index={current_step_index}"
+                    )
+
                     # Check if sequence is already completed but a new step 0 event occurs
                     if current_step_index >= len(self.sequence) and len(self.sequence) > 0:
                         first_step_tag = self.sequence[0]["tag"]
                         if latest_tag == first_step_tag:
+                            logger.debug(
+                                f"[{symbol}] [{self.name}] [reset_completed_sequence] "
+                                f"Sequence completed, new '{first_step_tag}' event detected - resetting"
+                            )
                             current_step_index = 0
                             origin_timestamp = None
                             matched_timestamps = []
@@ -227,6 +276,10 @@ class TemplateStrategy(BaseStrategy):
 
                         # Reset condition has priority
                         if latest_tag in reset_tags:
+                            logger.debug(
+                                f"[{symbol}] [{self.name}] [reset_signal_detected] "
+                                f"Reset signal '{latest_tag}' matched reset_tags={reset_tags} - resetting sequence"
+                            )
                             current_step_index = 0
                             origin_timestamp = None
                             matched_timestamps = []
@@ -238,6 +291,10 @@ class TemplateStrategy(BaseStrategy):
 
                         # Match condition
                         if latest_tag == tag:
+                            logger.debug(
+                                f"[{symbol}] [{self.name}] [signal_matched] "
+                                f"Signal '{latest_tag}' matched step {current_step_index} '{tag}'"
+                            )
                             if current_step_index == 0:
                                 origin_timestamp = latest_time
                                 triggered_t = 0  # Clear triggered flag — new sequence cycle begins
@@ -250,14 +307,27 @@ class TemplateStrategy(BaseStrategy):
                             break  # Consumed the signal
                         else:
                             if not required:
+                                logger.debug(
+                                    f"[{symbol}] [{self.name}] [skip_optional_step] "
+                                    f"Signal '{latest_tag}' != step {current_step_index} '{tag}' (optional) - skipping"
+                                )
                                 sequence_progress[current_step_index]["status"] = "missed"
                                 current_step_index += 1
                                 continue # Try next step with the SAME signal
                             else:
+                                logger.debug(
+                                    f"[{symbol}] [{self.name}] [waiting_for_required] "
+                                    f"Signal '{latest_tag}' != required step {current_step_index} '{tag}' - waiting"
+                                )
                                 break # Step is required, wait for next event
 
             if pending_records:
-                last_processed_t = pending_records[-1].get("t", last_processed_t)
+                last_processed_t = pending_records[-1][1].get("t", last_processed_t)
+                last_processed_record_index = pending_records[-1][0]  # ← Update index
+                logger.debug(
+                    f"[{symbol}] [{self.name}] [update_last_processed] "
+                    f"last_processed_t={last_processed_t}, last_processed_record_index={last_processed_record_index}"
+                )
 
         # Compute results
         matched_steps = 0
@@ -288,12 +358,13 @@ class TemplateStrategy(BaseStrategy):
             "origin_timestamp": origin_timestamp,
             "sequence": sequence_progress,
             "t": int(df.iloc[-1]["t"]) if df is not None and not df.empty else 0,
-            
+
             # State elements to persist
             "current_step_index": current_step_index,
             "matched_timestamps": matched_timestamps,
             "last_matched_candle_idx": last_matched_candle_idx,
             "last_processed_t": last_processed_t,
+            "last_processed_record_index": last_processed_record_index,  # ← NEW
             "internal_candle_counter": internal_candle_counter,
             "triggered_t": triggered_t,
             "sequence_completed_t": sequence_completed_t,
@@ -334,11 +405,29 @@ class TemplateStrategy(BaseStrategy):
             "matched_timestamps": [],
             "last_matched_candle_idx": -1,
             "last_processed_t": last_processed_t,
+            "last_processed_record_index": -1,  # ← Reset index tracking
             "internal_candle_counter": internal_candle_counter,
             "triggered_t": triggered_t,
         }
 
     def evaluate(self, df: pd.DataFrame, signals: Dict[str, Any], state_obj: Any) -> Optional[Dict[str, Any]]:
+        """Legacy evaluate contract — now includes context filter checking.
+
+        BUG FIX: Previously evaluate() skipped _evaluate_context(), which meant
+        context filters were only checked in on_bar_close(). This caused inconsistency
+        where evaluate() would trigger strategies that on_bar_close() would reject.
+
+        Now both paths enforce context filters identically.
+        """
+        # Pillar 1: Evaluate context pre-conditions (BUG FIX - was missing)
+        ctx = self._evaluate_context(state_obj)
+        if not ctx["passed"]:
+            logger.debug(
+                f"[{getattr(state_obj, 'symbol', 'UNKNOWN')}] [evaluate][context_filter_failed] "
+                f"strategy={self.name} failed_filters={ctx['failed_filters']}"
+            )
+            return None
+
         core = self._evaluate_sequence(df, state_obj)
         if core["missing_required"]:
             return None
