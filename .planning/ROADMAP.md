@@ -155,6 +155,27 @@
 - 5 component files mới + Sidebar navigation
 - TypeScript zero errors, Commit: 4f0633c
 
+---
+
+## Phase 35: MT5 Order Status Reporter
+
+**Goal:** Gửi thông tin order MT5 hiện tại lên Telegram mỗi phút qua bot. Bao gồm open positions và recently closed trades.
+**Status:** ✅ DONE 2026-04-07
+
+**Results:**
+- REQUEST_POSITIONS command trong MT5 EA
+- BuildPositionsJSON() với pips calculation từ SYMBOL_DIGITS
+- OrderStatusReporter class trong aureus-notifier
+- Polling mỗi 60s, gửi báo cáo open positions + closed trades lên Telegram
+- 19 tests pass (9 gateway + 10 notifier)
+
+Plans:
+- [x] 35-01-PLAN.md — Executed
+- [x] 35-02-PLAN.md — Pips accuracy fix
+- [x] 35-VERIFICATION.md — ✅ PASS
+
+---
+
 ## Phase 36: Fix BUY/SELL Direction from Strategy Settings (Not Name)
 
 **Goal:** Bỏ fallback direction từ tên strategy, bắt buộc cấu hình rõ ràng trong trade_execution.
