@@ -323,6 +323,11 @@ services:
     environment:
       - REDIS_HOST=redis-dev
       - REDIS_PORT=6379
+      - DB_HOST=timescaledb-dev
+      - DB_PORT=5432
+      - DB_NAME=aureus
+      - DB_USER=aureus
+      - DB_PASSWORD=${DB_PASSWORD}
       - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
@@ -330,6 +335,7 @@ services:
       - aureus_dev_net
     depends_on:
       - redis-dev
+      - timescaledb-dev
     restart: unless-stopped
 
 networks:

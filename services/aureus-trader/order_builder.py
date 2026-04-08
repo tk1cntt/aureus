@@ -48,5 +48,21 @@ def build_order_command(match_event: dict) -> dict:
         "sl": sl,
         "tp": tp,
         "magic": data.get("magic_number", 0),
-        "comment": str(data.get("strategy_name", data.get("strategy", data.get("strategy_id", ""))))[:31],
+        "comment": _build_comment(match_event, data),
     }
+
+
+def _build_comment(match_event: dict, data: dict) -> str:
+    """Build MT5 comment embedding strategy_name + trace_id for journal correlation.
+
+    Format: "strategy_name|trace_id_suffix" (max 31 chars).
+    If no trace_id, falls back to strategy_name only.
+    """
+    strategy_name = str(
+        data.get("strategy_name", data.get("strategy", data.get("strategy_id", "")))
+    )
+    trace_id = match_event.get("trace_id", "")
+    trace_suffix = f"|{trace_id[:9]}" if trace_id else ""
+    # Reserve space for trace_suffix (10 chars: "|" + 9 hex), rest for strategy name
+    max_name_len = 31 - len(trace_suffix)
+    return f"{strategy_name[:max_name_len]}{trace_suffix}"
