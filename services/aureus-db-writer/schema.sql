@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS aureus_ai_analysis (
     completion_tokens  INTEGER,
     llm_latency_ms     INTEGER,
     total_latency_ms   INTEGER,
-    request_payload    TEXT
+    request_payload    TEXT,
+    response_payload   TEXT
 );
 
 
@@ -217,6 +218,7 @@ ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS analysis_type TEXT NOT N
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS decision TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS key_insight TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS trigger_id TEXT;
+ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS response_payload TEXT;
 ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
 
 -- ============================================================================
