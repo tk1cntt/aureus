@@ -126,6 +126,32 @@ class DBWriter:
                 await self.ensure_consumer_group(stream)
             self.known_streams.update(new_streams)
 
+    def _normalize_order_payload(self, payload):
+        """Normalize wrapped order payload from Redis stream.
+        
+        Producer emits: {"type": "ORDER_OPEN", "data": json.dumps(order_dict)}
+        Returns: (event_type, order_data) where order_data is the unwrapped dict.
+        """
+        event_type = payload.get('type', '')
+        raw_data = payload.get('data')
+        
+        if raw_data is not None:
+            if isinstance(raw_data, str):
+                try:
+                    order_data = json.loads(raw_data)
+                except (json.JSONDecodeError, TypeError) as e:
+                    raise ValueError(f"Failed to parse order data JSON: {e}")
+            else:
+                order_data = raw_data
+            if not isinstance(order_data, dict):
+                raise ValueError("Order payload data must be a JSON object")
+        else:
+            # No data field - treat entire payload as order_data (backward compat for tests)
+            order_data = dict(payload)
+            order_data.pop('type', None)
+        
+        return event_type, order_data
+
     async def process_batch(self):
         if not self.candle_buffer and not self.swing_point_buffer and not self.execution_buffer and not self.position_buffer and not self.account_buffer and not self.order_buffer and not self.tick_buffer:
             return
@@ -456,25 +482,34 @@ class DBWriter:
 
                 for stream, msg_id, payload in orders_to_process:
                     try:
-                        event_type = payload.get('type', '')
+                        # Normalize wrapped payload: extract data field, parse JSON
+                        try:
+                            event_type, order_data = self._normalize_order_payload(payload)
+                        except ValueError as e:
+                            logger.warning("[GLOBAL] [process_batch] Invalid order payload on %s msg %s: %s", stream, msg_id, e)
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
 
                         # Skip ORDER_REJECTED events — they're not real orders, just signal rejections
                         if event_type == 'ORDER_REJECTED':
-                            logger.debug(f"[GLOBAL] [process_batch] Skipping ORDER_REJECTED (not a trade): {payload.get('strategy', 'unknown')} on {payload.get('symbol', '?')}")
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping ORDER_REJECTED (not a trade): {order_data.get('strategy', 'unknown')} on {order_data.get('symbol', '?')}")
                             rejected_msg_ids.append((stream, msg_id))
                             continue
 
-                        trace_id = payload.get('trace_id')
+                        trace_id = order_data.get('trace_id')
                         if not trace_id:
-                            # Skip events that don't have trace_id and can't be trades
-                            logger.debug(f"[GLOBAL] [process_batch] Skipping order event without trace_id: {payload.get('type', '?')} on {payload.get('symbol', '?')}")
+                            logger.debug(f"[GLOBAL] [process_batch] Skipping order event without trace_id: {event_type or 'unknown'} on {order_data.get('symbol', '?')}")
                             rejected_msg_ids.append((stream, msg_id))
                             continue
 
-                        # Validate required fields before processing
-                        direction = payload.get('direction', payload.get('side', ''))
-                        entry_type = payload.get('entry_type', '')
-                        status = payload.get('status', 'PENDING')
+                        # Read business fields from order_data (not envelope payload)
+                        direction = order_data.get('side', order_data.get('direction', ''))
+                        entry_type = order_data.get('entry_type', order_data.get('type', ''))
+                        status = order_data.get('status', 'PENDING')
+
+                        # Normalize producer status values to state machine compatible values
+                        if status in ('PENDING_AI', 'ACTIVE'):
+                            status = 'PENDING'
 
                         # Skip events that are not real order states
                         if direction not in ('BUY', 'SELL'):
@@ -487,8 +522,8 @@ class DBWriter:
                             rejected_msg_ids.append((stream, msg_id))
                             continue
 
-                        symbol = payload.get('symbol', 'UNKNOWN')
-                        new_status = payload.get('status', 'PENDING')
+                        symbol = order_data.get('symbol', 'UNKNOWN')
+                        new_status = status
 
                         # Validate direction and entry_type
                         if direction not in ('BUY', 'SELL'):
@@ -516,7 +551,7 @@ class DBWriter:
                                     f"[GLOBAL] [process_batch] Warning: Invalid state transition "
                                     f"{existing_status}\u2192{new_status} for trace_id={trace_id}. Skipping."
                                 )
-                                ack_skip_msg_ids.append((stream, msg_id))
+                                rejected_msg_ids.append((stream, msg_id))
                                 continue
                         else:
                             # New record: first status must be PENDING
@@ -525,14 +560,21 @@ class DBWriter:
                                     f"[GLOBAL] [process_batch] Warning: New trade must start as PENDING, "
                                     f"got '{new_status}' for trace_id={trace_id}. Skipping."
                                 )
-                                ack_skip_msg_ids.append((stream, msg_id))
+                                rejected_msg_ids.append((stream, msg_id))
                                 continue
 
+                        # Strict timestamp validation (D-06, D-07, D-08)
+                        open_time = order_data.get('open_time')
+                        if open_time is None or open_time == '':
+                            logger.warning(
+                                f"[GLOBAL] [process_batch] Rejecting order event -- missing required timestamp: trace_id={trace_id} event_type={event_type} msg_id={msg_id}"
+                            )
+                            rejected_msg_ids.append((stream, msg_id))
+                            continue
+
                         # Parse timestamp fields
-                        def parse_ts(val, fallback_msg_id=None):
+                        def parse_ts(val):
                             if val is None:
-                                if fallback_msg_id:
-                                    return datetime.fromtimestamp(int(fallback_msg_id.split('-')[0]) / 1000.0)
                                 return None
                             if isinstance(val, str):
                                 try:
@@ -544,30 +586,30 @@ class DBWriter:
                                 return datetime.fromtimestamp(val / (1000.0 if val > 1e11 else 1.0))
                             return None
 
-                        filled_at = parse_ts(payload.get('filled_at'))
-                        closed_at = parse_ts(payload.get('closed_at'))
+                        filled_at = parse_ts(order_data.get('filled_at'))
+                        closed_at = parse_ts(order_data.get('closed_at'))
 
-                        # Build payload JSONB
-                        order_payload = json.dumps(payload)
+                        # Build canonical payload JSONB (store order_data, not raw envelope)
+                        order_payload = json.dumps(order_data)
 
                         row = (
                             trace_id,
-                            payload.get('ticket'),
+                            order_data.get('ticket'),
                             symbol,
-                            payload.get('magic_number'),
-                            payload.get('strategy_id'),
-                            payload.get('strategy_name'),
+                            order_data.get('magic_number'),
+                            order_data.get('strategy_id'),
+                            order_data.get('strategy_name'),
                             direction,
                             entry_type,
                             new_status,
-                            float(payload['entry_price']) if payload.get('entry_price') is not None else None,
-                            float(payload['exit_price']) if payload.get('exit_price') is not None else None,
-                            float(payload['sl']) if payload.get('sl') is not None else None,
-                            float(payload['tp']) if payload.get('tp') is not None else None,
-                            float(payload['volume']) if payload.get('volume') is not None else None,
-                            float(payload.get('commission', 0)),
-                            float(payload.get('swap', 0)),
-                            float(payload.get('profit', 0)),
+                            float(order_data['entry_price']) if order_data.get('entry_price') is not None else None,
+                            float(order_data['exit_price']) if order_data.get('exit_price') is not None else None,
+                            float(order_data['sl']) if order_data.get('sl') is not None else None,
+                            float(order_data['tp']) if order_data.get('tp') is not None else None,
+                            float(order_data['volume']) if order_data.get('volume') is not None else None,
+                            float(order_data.get('commission', 0)),
+                            float(order_data.get('swap', 0)),
+                            float(order_data.get('profit', 0)),
                             filled_at,
                             closed_at,
                             order_payload,
@@ -668,9 +710,26 @@ class DBWriter:
                             
                             # Only recover real trade events (PENDING, OPEN, CLOSE)
                             if event_type in ('ORDER_PENDING', 'ORDER_OPEN', 'ORDER_CLOSE'):
-                                self.order_buffer.append((stream, msg_id, payload))
-                                total_recovered += 1
-                                logger.info(f"[RECONCILIATION] Recovered unacked message: {msg_id} from {stream}")
+                                # Unwrap data field before adding to buffer (same as process_batch)
+                                raw_data = payload.get('data')
+                                if raw_data is not None:
+                                    try:
+                                        if isinstance(raw_data, str):
+                                            unwrapped = json.loads(raw_data)
+                                        else:
+                                            unwrapped = raw_data
+                                        if isinstance(unwrapped, dict):
+                                            self.order_buffer.append((stream, msg_id, payload))
+                                            total_recovered += 1
+                                            logger.info(f"[RECONCILIATION] Recovered unacked message: {msg_id} from {stream}")
+                                        else:
+                                            logger.warning("[RECONCILIATION] XPENDING order recovery - non-dict data on %s msg %s, skipping", stream, msg_id)
+                                    except (json.JSONDecodeError, TypeError) as e:
+                                        logger.warning("[RECONCILIATION] XPENDING order recovery - unparseable data on %s msg %s: %s", stream, msg_id, e)
+                                else:
+                                    # No data field - backward compat
+                                    self.order_buffer.append((stream, msg_id, payload))
+                                    total_recovered += 1
                             else:
                                 logger.debug(f"[RECONCILIATION] Skipping unknown event type '{event_type}' during XPENDING recovery: {msg_id}")
                             
