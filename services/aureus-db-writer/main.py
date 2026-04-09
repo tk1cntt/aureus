@@ -126,6 +126,32 @@ class DBWriter:
                 await self.ensure_consumer_group(stream)
             self.known_streams.update(new_streams)
 
+    async def cleanup_stale_order_streams(self):
+        """Delete stale order streams on startup before processing.
+        
+        Previous pending messages may be from an older producer format
+        (missing 'open_time', missing 'data' wrapper). Clearing them
+        prevents strict validation from rejecting every batch.
+        """
+        order_streams = ["aureus:stream:XAUUSD:orders", "aureus:stream:EURUSD:orders",
+                         "aureus:stream:GBPUSD:orders", "aureus:stream:USDJPY:orders",
+                         "aureus:stream:AUDUSD:orders", "aureus:stream:BTCUSD:orders",
+                         "aureus:stream:ETHUSD:orders", "aureus:stream:USTEC:orders"]
+        deleted_count = 0
+        for stream in order_streams:
+            try:
+                length = await self.redis.xlen(stream)
+                if length > 0:
+                    await self.redis.delete(stream)
+                    deleted_count += 1
+                    logger.info(f"[GLOBAL] [cleanup] Deleted stale order stream {stream} ({length} pending messages)")
+            except Exception as e:
+                logger.warning(f"[GLOBAL] [cleanup] Could not clean {stream}: {e}")
+        if deleted_count > 0:
+            logger.info(f"[GLOBAL] [cleanup] Cleared {deleted_count} stale order streams. Consumer groups will be recreated on next discover_streams().")
+        else:
+            logger.info("[GLOBAL] [cleanup] No stale order streams to clean.")
+
     def _normalize_order_payload(self, payload):
         """Normalize wrapped order payload from Redis stream.
         
@@ -980,6 +1006,9 @@ class DBWriter:
     async def run(self):
         await self.connect_redis()
         await self.connect_postgres()
+
+        # Phase 38: Clear stale order streams before processing
+        await self.cleanup_stale_order_streams()
 
         # Phase 31: Check XPENDING on startup (recover unacked messages)
         await self.check_xpending()
