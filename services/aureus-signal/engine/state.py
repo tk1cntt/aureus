@@ -225,7 +225,7 @@ class SymbolState:
             return
 
         self.log_signal_normalize.append(payload)
-        if len(self.log_signal_normalize) > 240:
+        if len(self.log_signal_normalize) > 500:
             self.log_signal_normalize.pop(0)
 
     def _normalize_signal_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

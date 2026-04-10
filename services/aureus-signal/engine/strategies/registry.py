@@ -345,6 +345,16 @@ class StrategyRegistry:
                         f"intent_id={intent.get('intent_id')} reason_code={intent_reason} "
                         f"bar_t={intent.get('t', bar_ts)}"
                     )
+                    # D-02: INFO-level logging for SEQUENCE_NOT_MATCHED to enable stall detection
+                    if intent_reason == "SEQUENCE_NOT_MATCHED":
+                        logger.info(
+                            f"{PIPELINE_LOG_PREFIX}[{symbol}][A][on_bar_close][SEQUENCE_NOT_MATCHED] "
+                            f"strategy={name} strategy_id={strategy_id} "
+                            f"matched_steps={reject_diag.get('matched_steps')}/{reject_diag.get('total_steps')} "
+                            f"current_step_index={reject_diag.get('current_step_index')} "
+                            f"missing_required_tags={reject_diag.get('missing_required_tags', [])} "
+                            f"mismatch_reason={reject_diag.get('mismatch_reason')}"
+                        )
                     continue
 
                 validation = strategy.validate_entry(intent, context)
