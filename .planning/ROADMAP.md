@@ -247,6 +247,16 @@ CREATE TABLE aureus_trade_journal (
 Plans:
 - [ ] 37-01-PLAN.md — Trade journal DB + signal service integration + trader service update + API
 
+### Phase 39: Fix strategy service crash from unhandled exceptions
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 38
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 39 to break down)
+
 ---
 
 ## Next Up
@@ -256,6 +266,38 @@ Plans:
 <sub>`/clear` first → fresh context window</sub>
 
 ## Backlog
+
+### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 37
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 38 to break down)
+
+### Phase 34: Fix SL TP calculation decimals and MT5 comment strategy name
+
+**Goal:** Sửa lỗi tính toán SL/TP bị sai decimal và thêm tên strategy vào MT5 comment.
+**Status:** ✅ DONE 2026-04-07
+
+**Plans:**
+- [ ] 34-01-PLAN.md — Fix SL/TP decimal precision and MT5 comment strategy name
+
+---
+
+### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
+
+**Goal:** Sửa aureus-db-writer để parse đúng order events dạng wrapped payload (`type` + `data`) từ Redis stream, đảm bảo ghi dữ liệu trade nhất quán cho trade journal FK.
+**Requirements**: TBD
+**Depends on:** Phase 37
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 38 to break down)
+
+---
 
 ### Phase 999.1: Sync MT5 Symbol Metadata Digits (BACKLOG)
 
