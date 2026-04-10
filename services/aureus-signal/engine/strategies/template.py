@@ -329,6 +329,66 @@ class TemplateStrategy(BaseStrategy):
                     f"last_processed_t={last_processed_t}, last_processed_record_index={last_processed_record_index}"
                 )
 
+        # --- Auto-reset: detect truncation stall (D-01) ---
+        # Only check if we've advanced past step 0 AND have a trigger (prevents false reset during normal matching)
+        if current_step_index > 0 and triggered_t > 0:
+            remaining_steps = len(self.sequence) - current_step_index
+            # Count usable events: those with t > triggered_t
+            events_after_trigger = sum(
+                1 for rec in source_records
+                if isinstance(rec, dict) and rec.get("t", 0) > triggered_t
+            )
+            if events_after_trigger < remaining_steps:
+                logger.warning(
+                    f"[{symbol}] [{self.name}] [auto_reset] "
+                    f"Truncation stall: only {events_after_trigger} usable events "
+                    f"(t > triggered_t={triggered_t}), need {remaining_steps} steps. "
+                    f"Resetting sequence to step 0."
+                )
+                self._reset_sequence_state(
+                    state_obj,
+                    triggered_t=0,
+                    last_processed_t=last_processed_t,
+                    internal_candle_counter=internal_candle_counter,
+                )
+                # Reset local variables to reflect the reset state
+                current_step_index = 0
+                origin_timestamp = None
+                matched_timestamps = []
+                last_matched_candle_idx = -1
+                for s in sequence_progress:
+                    s["status"] = "waiting" if s.get("required", False) else "missed"
+                    s["time"] = None
+                total_score = 0.0
+                matched_steps = 0
+                missing_required = any(s.get("required", False) for s in self.sequence)
+                # Jump to compute results with reset state
+                progress_data = {
+                    "strategy": self.name,
+                    "strategy_id": self.strategy_id,
+                    "progress_pct": 0,
+                    "origin_timestamp": None,
+                    "sequence": sequence_progress,
+                    "t": int(df.iloc[-1]["t"]) if df is not None and not df.empty else 0,
+                    "current_step_index": 0,
+                    "matched_timestamps": [],
+                    "last_matched_candle_idx": -1,
+                    "last_processed_t": last_processed_t,
+                    "last_processed_record_index": last_processed_record_index,
+                    "internal_candle_counter": internal_candle_counter,
+                    "triggered_t": 0,
+                    "sequence_completed_t": 0,
+                }
+                state_obj.strategy_progress[self.name] = progress_data
+                return {
+                    "missing_required": missing_required,
+                    "score": 0.0,
+                    "origin_timestamp": None,
+                    "details": [f"Auto-reset: {events_after_trigger} usable events < {remaining_steps} remaining steps"],
+                    "progress_data": progress_data,
+                    "matched_steps": 0,
+                }
+
         # Compute results
         matched_steps = 0
         missing_required = False
