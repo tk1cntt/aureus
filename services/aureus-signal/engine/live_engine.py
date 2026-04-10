@@ -38,6 +38,38 @@ from engine.event_policy import evaluate_ai_trigger_events
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
+
+# --- Phase 39: Supervised background task wrapper & safe wrappers ---
+
+async def _safe_insert_snapshot(pool, snap):
+    """Fire-and-forget safe wrapper for snapshot DB inserts."""
+    try:
+        await insert_single_snapshot(pool, snap)
+    except Exception as e:
+        logger.warning(f"[Snapshot] DB insert failed: {e}")
+
+
+async def supervised_background_task(name: str, coro):
+    """Wraps background tasks with logging, restart, and crash reporting."""
+    max_restarts = 5
+    restart_count = 0
+    while True:
+        try:
+            await coro
+            break
+        except asyncio.CancelledError:
+            logger.info(f"[SUPERVISOR] Task '{name}' cancelled")
+            raise
+        except Exception:
+            restart_count += 1
+            if restart_count > max_restarts:
+                logger.critical(f"[SUPERVISOR] Task '{name}' crashed {max_restarts}x — giving up", exc_info=True)
+                break
+            delay = min(2 ** restart_count, 60)
+            logger.warning(f"[SUPERVISOR] Task '{name}' crashed ({restart_count}/{max_restarts}), restarting in {delay}s", exc_info=True)
+            await asyncio.sleep(delay)
+
+
 def load_symbols_config(path="symbols.json"):
     try:
         if not os.path.exists(path):
@@ -733,7 +765,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 # Write signal snapshot (async, fire-and-forget)
                                 try:
                                     snapshot = build_snapshot(state, data)
-                                    asyncio.create_task(insert_single_snapshot(db_pool, snapshot))
+                                    asyncio.create_task(_safe_insert_snapshot(db_pool, snapshot))
                                 except Exception as e:
                                     logger.warning(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
                             
@@ -816,6 +848,9 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {eid_str}: {e}")
                             await r.xack(stream_key, group_name, entry_id)
 
+        except asyncio.CancelledError:
+            logger.info("[GLOBAL] Engine loop cancelled, shutting down gracefully")
+            raise
         except Exception as e:
             if "NOGROUP" in str(e):
                 logger.warning(
@@ -825,7 +860,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     await ensure_stream_group(stream_key, group_name, start_id="0")
                 await asyncio.sleep(1)
                 continue
-            logger.error(f"[GLOBAL] [run_signal_engine] Error: Engine loop error: {e}", exc_info=True)
+            logger.error(f"[GLOBAL] [run_signal_engine] Engine loop error: {e}", exc_info=True)
+            traceback.print_exc()
             await asyncio.sleep(1)
 
 # --- AI Queue Logic ---
