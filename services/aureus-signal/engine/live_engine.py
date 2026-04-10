@@ -459,26 +459,33 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
     # --- Strategy Reload Task ---
     async def listen_for_reload():
-        pubsub = r.pubsub()
-        await pubsub.subscribe("aureus:cmd:refresh_strategies")
-        logger.info("[GLOBAL] [listen_for_reload] 1... Subscribed to global strategy refresh channel")
-        async for message in pubsub.listen():
-            if message['type'] == 'message':
-                target_symbol = message['data']
-                if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
-                    logger.info(f"[GLOBAL] [listen_for_reload] 2... Strategy refresh requested for {target_symbol}")
-                    # Load for specific symbol or all
-                    refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
-                    for s in refresh_list:
-                        if s not in symbol_strategies:
-                            symbol_strategies[s] = StrategyRegistry()
-                        await symbol_strategies[s].load_from_db(db_pool, s)
-                        _apply_ab_mode_to_registry(
-                            symbol_strategies[s],
-                            symbol=s,
-                            mode=ab_mode,
-                            keep_names=ab_target_strategies,
-                        )
+        while True:
+            try:
+                pubsub = r.pubsub()
+                await pubsub.subscribe("aureus:cmd:refresh_strategies")
+                logger.info("[GLOBAL] [listen_for_reload] 1... Subscribed to global strategy refresh channel")
+                async for message in pubsub.listen():
+                    if message['type'] == 'message':
+                        target_symbol = message['data']
+                        if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
+                            logger.info(f"[GLOBAL] [listen_for_reload] 2... Strategy refresh requested for {target_symbol}")
+                            # Load for specific symbol or all
+                            refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
+                            for s in refresh_list:
+                                if s not in symbol_strategies:
+                                    symbol_strategies[s] = StrategyRegistry()
+                                await symbol_strategies[s].load_from_db(db_pool, s)
+                                _apply_ab_mode_to_registry(
+                                    symbol_strategies[s],
+                                    symbol=s,
+                                    mode=ab_mode,
+                                    keep_names=ab_target_strategies,
+                                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"[GLOBAL] [listen_for_reload] Error: {e}", exc_info=True)
+                await asyncio.sleep(5)  # Wait before reconnect
 
     asyncio.create_task(listen_for_reload())
 
@@ -536,10 +543,15 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     # --- News Refresh Task (Every 24h) ---
     async def news_refresh_loop():
         while True:
-            await asyncio.sleep(86400) # 24 hours
-            logger.info("[GLOBAL] [news_refresh_loop] 1... Refreshing weekly news calendar...")
-            NewsProvider.fetch_this_week()
-            
+            try:
+                await asyncio.sleep(86400) # 24 hours
+                logger.info("[GLOBAL] [news_refresh_loop] 1... Refreshing weekly news calendar...")
+                NewsProvider.fetch_this_week()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"[GLOBAL] [news_refresh_loop] News refresh failed: {e}", exc_info=True)
+
     asyncio.create_task(news_refresh_loop())
     
     # --- Daily GC Loop (5AM GMT+7 / 0:00 UTC) ---
@@ -763,22 +775,27 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                             ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
                                         )
                                     elif provider_mode == "ta_primary":
-                                        ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
-                                        decision = await tradingagents_provider.get_decision(symbol, ctx)
-                                        logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 TA Primary Decision logic evaluated")
-                                        if decision:
-                                            if state.current_signal:
-                                                state.current_signal["ta_decision"] = decision.action
-                                            # Write to AI latest namespace
-                                            await r.set(f"aureus:ai:latest:{symbol}", json.dumps({
-                                                "action": decision.action,
-                                                "confidence": decision.confidence,
-                                                "narrative": decision.reasoning,
-                                                "timestamp": decision.timestamp,
-                                                "symbol": symbol,
-                                                "sentiment": "BULLISH" if decision.action == "BUY" else ("BEARISH" if decision.action == "SELL" else "NEUTRAL"),
-                                                "aci": int(decision.confidence * 100)
-                                            }))
+                                        try:
+                                            ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
+                                            decision = await tradingagents_provider.get_decision(symbol, ctx)
+                                            logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 TA Primary Decision logic evaluated")
+                                            if decision:
+                                                if state.current_signal:
+                                                    state.current_signal["ta_decision"] = decision.action
+                                                # Write to AI latest namespace
+                                                await r.set(f"aureus:ai:latest:{symbol}", json.dumps({
+                                                    "action": decision.action,
+                                                    "confidence": decision.confidence,
+                                                    "narrative": decision.reasoning,
+                                                    "timestamp": decision.timestamp,
+                                                    "symbol": symbol,
+                                                    "sentiment": "BULLISH" if decision.action == "BUY" else ("BEARISH" if decision.action == "SELL" else "NEUTRAL"),
+                                                    "aci": int(decision.confidence * 100)
+                                                }))
+                                        except asyncio.TimeoutError:
+                                            logger.error(f"[t={ts_unix}] [{symbol}] TA Primary timeout — skipping pulse")
+                                        except Exception as e:
+                                            logger.error(f"[t={ts_unix}] [{symbol}] TA Primary error: {e}", exc_info=True)
                                     elif provider_mode == "ta_shadow":
                                         # Queue usual redis_primary job first
                                         await queue_periodic_ai_analysis(
@@ -1086,9 +1103,9 @@ async def recalculate_all_signals(symbol, db_pool, r, window_manager, signals, s
                 "processed": processed_new, "total": total_new
             }))
             window_manager.set_backfill_status(symbol, "READY", reason="RECALC_COMPLETED", updated_at=time.time())
-        except Exception:
+        except Exception as e:
             window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_FAILED", updated_at=time.time())
-            raise
+            logger.error(f"[{symbol}] [recalculate_all_signals] Recalculation failed — will retry on next cycle", exc_info=True)
 
 
 async def integrity_and_recalc_task(symbol, db_pool, r, window_manager, signals, strategy_registry, lock):

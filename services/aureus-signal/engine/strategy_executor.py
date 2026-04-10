@@ -253,19 +253,26 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
     # --- Strategy Reload Listener ---
     async def listen_for_reload():
-        pubsub = r.pubsub()
-        await pubsub.subscribe("aureus:cmd:refresh_strategies")
-        logger.info("[EXECUTOR] Subscribed to strategy refresh channel")
-        async for message in pubsub.listen():
-            if message['type'] == 'message':
-                target_symbol = message['data']
-                if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
-                    refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
-                    for s in refresh_list:
-                        if s not in symbol_strategies:
-                            symbol_strategies[s] = StrategyRegistry()
-                        await symbol_strategies[s].load_from_db(db_pool, s)
-                    logger.info(f"[EXECUTOR] Strategies reloaded for {refresh_list}")
+        while True:
+            try:
+                pubsub = r.pubsub()
+                await pubsub.subscribe("aureus:cmd:refresh_strategies")
+                logger.info("[EXECUTOR] Subscribed to strategy refresh channel")
+                async for message in pubsub.listen():
+                    if message['type'] == 'message':
+                        target_symbol = message['data']
+                        if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
+                            refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
+                            for s in refresh_list:
+                                if s not in symbol_strategies:
+                                    symbol_strategies[s] = StrategyRegistry()
+                                await symbol_strategies[s].load_from_db(db_pool, s)
+                            logger.info(f"[EXECUTOR] Strategies reloaded for {refresh_list}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"[EXECUTOR] [listen_for_reload] Error: {e}", exc_info=True)
+                await asyncio.sleep(5)  # Wait before reconnect
 
     asyncio.create_task(listen_for_reload())
 
@@ -433,21 +440,27 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 "c": str(payload.get("close", 0)),
                                 "v": str(payload.get("volume", 0)),
                             }
-                            await trade_manager.update_orders(symbol, candle_data, executor_state)
+                            try:
+                                await trade_manager.update_orders(symbol, candle_data, executor_state)
+                            except Exception as e:
+                                logger.error(f"[EXECUTOR][{symbol}] update_orders failed: {e}", exc_info=True)
 
                         if strategy_results:
-                            pending_order = await trade_manager.process_triggers(
-                                symbol,
-                                strategy_results,
-                                executor_state,
-                                ai_validator,
-                                execution_mode=execution_mode,
-                            )
-                            if pending_order:
-                                await queue_ai_audit_task(ai_queue, ai_validator, symbol, mini_df, executor_state, pending_order)
+                            try:
+                                pending_order = await trade_manager.process_triggers(
+                                    symbol,
+                                    strategy_results,
+                                    executor_state,
+                                    ai_validator,
+                                    execution_mode=execution_mode,
+                                )
+                                if pending_order:
+                                    await queue_ai_audit_task(ai_queue, ai_validator, symbol, mini_df, executor_state, pending_order)
 
-                            for res in strategy_results:
-                                logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
+                                for res in strategy_results:
+                                    logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
+                            except Exception as e:
+                                logger.error(f"[EXECUTOR][{symbol}] process_triggers failed: {e}", exc_info=True)
 
                         await r.xack(stream_key, group_name, entry_id)
 

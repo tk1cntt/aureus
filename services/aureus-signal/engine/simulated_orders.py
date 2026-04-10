@@ -167,7 +167,7 @@ class SimulatedTradeManager:
                 if isinstance(progress, str):
                     try:
                         progress = json.loads(progress)
-                    except:
+                    except Exception:
                         progress = {}
                 
                 if isinstance(progress, dict):
