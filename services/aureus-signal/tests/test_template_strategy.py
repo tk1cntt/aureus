@@ -399,3 +399,118 @@ def test_direction_case_insensitive():
     config["trade_execution"]["direction"] = "Sell"
     strategy2 = TemplateStrategy(config)
     assert strategy2.direction == "SELL"
+
+
+def fill_history_with_old_events(state, count, max_t):
+    """Append `count` events with incrementing timestamps up to `max_t`."""
+    for i in range(count):
+        append_normalized_events(state, max_t - count + 1 + i, "NOISE")
+
+
+class TestAutoReset:
+    """Tests for auto-reset when signal history truncation causes permanent SEQUENCE_NOT_MATCHED."""
+
+    def test_auto_reset_on_insufficient_events(self):
+        """When step > 0 and usable events < remaining steps, auto-reset fires."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+                {"tag": "STEP3", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # First candle: match STEP1 -> advance to step 1
+        append_normalized_events(state, 1000, "STEP1")
+        result1 = strategy._evaluate_sequence(create_mock_df(1000), state)
+
+        assert state.strategy_progress["test_strat"]["current_step_index"] == 1
+        assert result1["score"] == 1.0
+
+        # Simulate trigger: set triggered_t
+        state.strategy_progress["test_strat"]["triggered_t"] = 1000
+
+        # Fill history with 50 old events (all t <= 1000)
+        fill_history_with_old_events(state, count=50, max_t=1000)
+
+        # Evaluate on a new candle
+        result2 = strategy._evaluate_sequence(create_mock_df(2000), state)
+        progress = state.strategy_progress["test_strat"]
+
+        # Auto-reset should have fired: step back to 0, triggered_t cleared
+        assert progress["current_step_index"] == 0
+        assert progress["triggered_t"] == 0
+        assert progress["progress_pct"] == 0.0
+        assert progress["sequence"][0]["status"] == "waiting"
+
+    def test_no_auto_reset_when_already_at_step_zero(self):
+        """When current_step_index == 0, auto-reset does NOT fire (normal rejection)."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+                {"tag": "STEP3", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Empty history — no events
+        result = strategy._evaluate_sequence(create_mock_df(1000), state)
+
+        # current_step_index stays 0 (never advanced, so no auto-reset needed)
+        assert state.strategy_progress["test_strat"]["current_step_index"] == 0
+        assert state.strategy_progress["test_strat"]["triggered_t"] == 0
+        # The result should be normal rejection, not auto-reset
+        assert "Auto-reset" not in str(result.get("details", []))
+
+    def test_auto_reset_preserves_last_processed_t(self):
+        """After auto-reset, last_processed_record_index is preserved (not reset to -1)."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+                {"tag": "STEP3", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Match step 0
+        append_normalized_events(state, 1000, "STEP1")
+        strategy._evaluate_sequence(create_mock_df(1000), state)
+
+        # Simulate trigger
+        state.strategy_progress["test_strat"]["triggered_t"] = 1000
+
+        # Fill history with old events
+        fill_history_with_old_events(state, count=50, max_t=1000)
+
+        # Evaluate — should trigger auto-reset
+        result = strategy._evaluate_sequence(create_mock_df(2000), state)
+        progress = state.strategy_progress["test_strat"]
+
+        # Auto-reset fired
+        assert progress["current_step_index"] == 0
+
+        # last_processed_record_index should be preserved (NOT -1)
+        # It should be the index of the last record in the history
+        last_idx = len(state.log_signal_normalize) - 1
+        assert progress["last_processed_record_index"] == last_idx
