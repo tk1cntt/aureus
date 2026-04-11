@@ -276,6 +276,12 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
     asyncio.create_task(listen_for_reload())
 
+    # --- Phase 39.1 Stage 3: Health Monitoring ---
+    last_trigger_time = time.time()
+    health_check_interval = 60  # Check every 60 seconds
+    last_health_check = time.time()
+    stall_threshold = 3600  # 1 hour without triggers = possible stall
+
     # --- Main Consumer Loop ---
     streams_subscription = {f"aureus:stream:{s}:signals": ">" for s in symbols_list}
 
@@ -293,6 +299,54 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
             if not messages:
                 if poll_count % 12 == 0:  # Log every ~60s (12 * 5s block)
                     logger.info(f"[EXECUTOR] ⏳ Waiting for signals... (poll #{poll_count}, no messages)")
+
+                # --- Health check (periodic, even when no messages) ---
+                now = time.time()
+                if now - last_health_check >= health_check_interval:
+                    time_since_last_trigger = now - last_trigger_time
+
+                    if time_since_last_trigger > stall_threshold:
+                        logger.warning(
+                            f"[EXECUTOR] [HEALTH] ⚠️ No strategy triggers in {int(time_since_last_trigger)}s. "
+                            f"Possible stall detected. Checking strategy_progress state..."
+                        )
+
+                        # Log diagnostic info for each strategy
+                        for symbol in symbols_list:
+                            if symbol in executor_strategy_progress:
+                                for strat_name, progress in executor_strategy_progress[symbol].items():
+                                    triggered_t = progress.get("triggered_t", 0)
+                                    current_step = progress.get("current_step_index", -1)
+                                    internal_counter = progress.get("internal_candle_counter", 0)
+
+                                    if triggered_t > 0:
+                                        logger.warning(
+                                            f"[EXECUTOR] [HEALTH] [{symbol}] {strat_name}: "
+                                            f"triggered_t={triggered_t}, current_step={current_step}, "
+                                            f"internal_counter={internal_counter}"
+                                        )
+
+                        # Self-healing: force clear triggered_t for all stuck strategies
+                        recovery_count = 0
+                        for symbol in symbols_list:
+                            if symbol in executor_strategy_progress:
+                                for strat_name in executor_strategy_progress[symbol]:
+                                    progress = executor_strategy_progress[symbol][strat_name]
+                                    if progress.get("triggered_t", 0) > 0:
+                                        logger.info(
+                                            f"[EXECUTOR] [HEALTH] [{symbol}] {strat_name}: "
+                                            f"Self-healing: clearing triggered_t"
+                                        )
+                                        progress["triggered_t"] = 0
+                                        progress["_trigger_candle_counter"] = progress.get("internal_candle_counter", 0)
+                                        recovery_count += 1
+
+                        if recovery_count > 0:
+                            logger.info(f"[EXECUTOR] [HEALTH] Recovered {recovery_count} stuck strategies")
+                            last_trigger_time = time.time()  # Reset timer after recovery
+
+                    last_health_check = now
+
                 continue
 
             logger.info(f"[EXECUTOR] 📥 Received {sum(len(e) for _, e in messages)} message(s) from {len(messages)} stream(s)")
@@ -459,6 +513,9 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
 
                                 for res in strategy_results:
                                     logger.info(f"[t={res['t']}] [{symbol}] STRATEGY TRIGGERED: {res['strategy']}")
+
+                                # Update health monitor: we got a trigger
+                                last_trigger_time = time.time()
                             except Exception as e:
                                 logger.error(f"[EXECUTOR][{symbol}] process_triggers failed: {e}", exc_info=True)
 
