@@ -149,6 +149,35 @@ class TemplateStrategy(BaseStrategy):
 
         internal_candle_counter += 1
 
+        # Get symbol early for logging (needed by trigger timeout below)
+        symbol = getattr(state_obj, "symbol", "UNKNOWN")
+
+        # --- Phase 39.1 Stage 1: Post-Trigger Stall Prevention ---
+        # After a strategy triggers, triggered_t is set and current_step_index resets to 0.
+        # The event filter (line ~254) skips all events with t <= triggered_t.
+        # Without this fix, the strategy enters a PERMANENT STALL state:
+        #   - current_step_index == 0 → auto-reset (Plan 01) never fires
+        #   - All events filtered out → SEQUENCE_NOT_MATCHED forever
+        # Fix: Clear triggered_t after N candles of inactivity to allow new sequences.
+        if triggered_t > 0 and current_step_index == 0:
+            trigger_counter = state.get("_trigger_candle_counter", 0)
+            candles_since_trigger = internal_candle_counter - trigger_counter
+            
+            # Read timeout from config (supports all timeframes via .env)
+            from engine.config import get_config
+            cfg = get_config()
+            TRIGGER_TIMEOUT_CANDLES = cfg.trigger_timeout_candles
+
+            if candles_since_trigger > TRIGGER_TIMEOUT_CANDLES:
+                logger.info(
+                    f"[{symbol}] [{self.name}] [trigger_timeout] "
+                    f"Clearing triggered_t={triggered_t} after {candles_since_trigger} candles "
+                    f"to prevent post-trigger stall"
+                )
+                triggered_t = 0
+                # Reset counter to prevent immediate re-fire
+                state_obj.strategy_progress[self.name]["_trigger_candle_counter"] = internal_candle_counter
+
         # 1. Global Timeout Check
         if 0 < current_step_index < len(self.sequence):
             step = self.sequence[current_step_index]
@@ -167,7 +196,6 @@ class TemplateStrategy(BaseStrategy):
         normalized_log = getattr(state_obj, "log_signal_normalize", [])
 
         # DEBUG LOGGING: Trace event processing
-        symbol = getattr(state_obj, "symbol", "UNKNOWN")
         logger.debug(
             f"[{symbol}] [{self.name}] [_evaluate_sequence] "
             f"Processing {len(normalized_log)} log entries, "
@@ -178,6 +206,67 @@ class TemplateStrategy(BaseStrategy):
 
         # We now STRICTLY rely on normalized signal events. No fallback to raw history.
         source_records = normalized_log if isinstance(normalized_log, list) else []
+
+        # --- Phase 39.1 Plan 01: Auto-reset for mid-sequence truncation stall (D-01) ---
+        # Only check if we've advanced past step 0 AND have a trigger (prevents false reset during normal matching)
+        # This handles the case where signal history was truncated and we don't have enough events to complete the sequence
+        if current_step_index > 0 and triggered_t > 0:
+            remaining_steps = len(self.sequence) - current_step_index
+            # Count usable events: those with t > triggered_t
+            events_after_trigger = sum(
+                1 for rec in source_records
+                if isinstance(rec, dict) and rec.get("t", 0) > triggered_t
+            )
+            if events_after_trigger < remaining_steps:
+                logger.warning(
+                    f"[{symbol}] [{self.name}] [auto_reset] "
+                    f"Truncation stall: only {events_after_trigger} usable events "
+                    f"(t > triggered_t={triggered_t}), need {remaining_steps} steps. "
+                    f"Resetting sequence to step 0."
+                )
+                self._reset_sequence_state(
+                    state_obj,
+                    triggered_t=0,
+                    last_processed_t=last_processed_t,
+                    internal_candle_counter=internal_candle_counter,
+                )
+                # Reset local variables to reflect the reset state
+                current_step_index = 0
+                origin_timestamp = None
+                matched_timestamps = []
+                last_matched_candle_idx = -1
+                for s in sequence_progress:
+                    s["status"] = "waiting" if s.get("required", False) else "missed"
+                    s["time"] = None
+                # Jump to compute results with reset state
+                total_score = 0.0
+                matched_steps = 0
+                missing_required = any(s.get("required", False) for s in self.sequence)
+                progress_data = {
+                    "strategy": self.name,
+                    "strategy_id": self.strategy_id,
+                    "progress_pct": 0,
+                    "origin_timestamp": None,
+                    "sequence": sequence_progress,
+                    "t": int(df.iloc[-1]["t"]) if df is not None and not df.empty else 0,
+                    "current_step_index": 0,
+                    "matched_timestamps": [],
+                    "last_matched_candle_idx": -1,
+                    "last_processed_t": last_processed_t,
+                    "last_processed_record_index": last_processed_record_index,
+                    "internal_candle_counter": internal_candle_counter,
+                    "triggered_t": 0,
+                    "sequence_completed_t": 0,
+                }
+                state_obj.strategy_progress[self.name] = progress_data
+                return {
+                    "missing_required": missing_required,
+                    "score": 0.0,
+                    "origin_timestamp": None,
+                    "details": [f"Auto-reset: {events_after_trigger} usable events < {remaining_steps} remaining steps"],
+                    "progress_data": progress_data,
+                    "matched_steps": 0,
+                }
 
         # 2. Process new signals/events
         # BUG FIX: Use BOTH record index AND timestamp to:
@@ -329,66 +418,6 @@ class TemplateStrategy(BaseStrategy):
                     f"last_processed_t={last_processed_t}, last_processed_record_index={last_processed_record_index}"
                 )
 
-        # --- Auto-reset: detect truncation stall (D-01) ---
-        # Only check if we've advanced past step 0 AND have a trigger (prevents false reset during normal matching)
-        if current_step_index > 0 and triggered_t > 0:
-            remaining_steps = len(self.sequence) - current_step_index
-            # Count usable events: those with t > triggered_t
-            events_after_trigger = sum(
-                1 for rec in source_records
-                if isinstance(rec, dict) and rec.get("t", 0) > triggered_t
-            )
-            if events_after_trigger < remaining_steps:
-                logger.warning(
-                    f"[{symbol}] [{self.name}] [auto_reset] "
-                    f"Truncation stall: only {events_after_trigger} usable events "
-                    f"(t > triggered_t={triggered_t}), need {remaining_steps} steps. "
-                    f"Resetting sequence to step 0."
-                )
-                self._reset_sequence_state(
-                    state_obj,
-                    triggered_t=0,
-                    last_processed_t=last_processed_t,
-                    internal_candle_counter=internal_candle_counter,
-                )
-                # Reset local variables to reflect the reset state
-                current_step_index = 0
-                origin_timestamp = None
-                matched_timestamps = []
-                last_matched_candle_idx = -1
-                for s in sequence_progress:
-                    s["status"] = "waiting" if s.get("required", False) else "missed"
-                    s["time"] = None
-                total_score = 0.0
-                matched_steps = 0
-                missing_required = any(s.get("required", False) for s in self.sequence)
-                # Jump to compute results with reset state
-                progress_data = {
-                    "strategy": self.name,
-                    "strategy_id": self.strategy_id,
-                    "progress_pct": 0,
-                    "origin_timestamp": None,
-                    "sequence": sequence_progress,
-                    "t": int(df.iloc[-1]["t"]) if df is not None and not df.empty else 0,
-                    "current_step_index": 0,
-                    "matched_timestamps": [],
-                    "last_matched_candle_idx": -1,
-                    "last_processed_t": last_processed_t,
-                    "last_processed_record_index": last_processed_record_index,
-                    "internal_candle_counter": internal_candle_counter,
-                    "triggered_t": 0,
-                    "sequence_completed_t": 0,
-                }
-                state_obj.strategy_progress[self.name] = progress_data
-                return {
-                    "missing_required": missing_required,
-                    "score": 0.0,
-                    "origin_timestamp": None,
-                    "details": [f"Auto-reset: {events_after_trigger} usable events < {remaining_steps} remaining steps"],
-                    "progress_data": progress_data,
-                    "matched_steps": 0,
-                }
-
         # Compute results
         matched_steps = 0
         missing_required = False
@@ -468,6 +497,7 @@ class TemplateStrategy(BaseStrategy):
             "last_processed_record_index": -1,  # ← Reset index tracking
             "internal_candle_counter": internal_candle_counter,
             "triggered_t": triggered_t,
+            "_trigger_candle_counter": internal_candle_counter if triggered_t > 0 else 0,  # ← Phase 39.1 Stage 1
         }
 
     def evaluate(self, df: pd.DataFrame, signals: Dict[str, Any], state_obj: Any) -> Optional[Dict[str, Any]]:

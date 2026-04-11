@@ -497,6 +497,10 @@ class TestAutoReset:
         append_normalized_events(state, 1000, "STEP1")
         strategy._evaluate_sequence(create_mock_df(1000), state)
 
+        # Verify initial state after matching step 0
+        initial_idx = state.strategy_progress["test_strat"]["last_processed_record_index"]
+        assert initial_idx == 0  # First record
+
         # Simulate trigger
         state.strategy_progress["test_strat"]["triggered_t"] = 1000
 
@@ -510,7 +514,142 @@ class TestAutoReset:
         # Auto-reset fired
         assert progress["current_step_index"] == 0
 
-        # last_processed_record_index should be preserved (NOT -1)
-        # It should be the index of the last record in the history
-        last_idx = len(state.log_signal_normalize) - 1
-        assert progress["last_processed_record_index"] == last_idx
+        # last_processed_record_index should be preserved (NOT reset to -1)
+        # It should remain at the value it had before auto-reset (which was 0)
+        assert progress["last_processed_record_index"] == initial_idx
+
+
+class TestTriggerTimeout:
+    """Tests for the post-trigger timeout mechanism that clears triggered_t after N candles.
+
+    After a strategy triggers, triggered_t is set to the trigger timestamp. On subsequent
+    candles, ALL events in history have t <= triggered_t, so they all get skipped. The
+    existing auto-reset logic only fires when current_step_index > 0, but after trigger,
+    current_step_index == 0, so auto-reset never fires — causing permanent SEQUENCE_NOT_MATCHED.
+
+    The fix: clear triggered_t after 120 candles of no matching events (timeout).
+    On M1: 120 candles = 2 hours (reasonable setup time)
+    """
+
+    TIMEOUT_CANDLES = 120  # Updated from 10 to support M1 timeframe
+
+    def test_trigger_timeout_clears_after_n_candles(self):
+        """Verify that triggered_t is cleared after 120 candles of no matching events."""
+        config = {
+            "name": "timeout_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Trigger the strategy with a matching event
+        append_normalized_events(state, 1000, "STEP1")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        # Verify it triggered
+        assert result is not None
+        assert result["strategy"] == "timeout_strat"
+        assert result["score"] == 1.0
+
+        progress = state.strategy_progress["timeout_strat"]
+        assert progress["triggered_t"] == 1000
+        assert "_trigger_candle_counter" in progress
+
+        # Evaluate 121 more times with NO matching events (just noise)
+        for i in range(1, 122):
+            append_normalized_events(state, 1000 + i * 60, "NOISE")
+            strategy.evaluate(create_mock_df(1000 + i * 60), {}, state)
+
+        progress = state.strategy_progress["timeout_strat"]
+
+        # After 121 candles, triggered_t should be cleared (timeout = 120)
+        assert progress["triggered_t"] == 0
+
+    def test_no_double_trigger_within_timeout_window(self):
+        """Verify that within the 120-candle timeout window, old events (t <= triggered_t) don't cause re-triggering."""
+        config = {
+            "name": "double_trigger_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Trigger the strategy at t=1000
+        append_normalized_events(state, 1000, "STEP1")
+        result1 = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result1 is not None
+        assert result1["strategy"] == "double_trigger_strat"
+
+        progress = state.strategy_progress["double_trigger_strat"]
+        assert progress["triggered_t"] == 1000
+
+        # Feed events with timestamps <= triggered_t (simulating old history after trigger)
+        # These should be skipped and not cause re-triggering
+        # Test a reasonable number of candles (less than timeout)
+        for i in range(1, 50):
+            # Use timestamps <= 1000 (the triggered_t)
+            append_normalized_events(state, 500 + i * 10, "STEP1")
+            result = strategy.evaluate(create_mock_df(1000 + i * 60), {}, state)
+
+            # All evaluations should return None (old events are skipped)
+            assert result is None, f"Unexpected trigger at candle {i} (t={1000 + i * 60})"
+
+        progress = state.strategy_progress["double_trigger_strat"]
+        # triggered_t should remain > 0 since no new valid events arrived
+        assert progress["triggered_t"] == 1000
+
+    def test_can_trigger_again_after_timeout_expires(self):
+        """Verify that after the timeout expires, the strategy can trigger again normally."""
+        config = {
+            "name": "retrigger_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {
+                "direction": "BUY"
+            }
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Trigger the strategy at t=1000
+        append_normalized_events(state, 1000, "STEP1")
+        result1 = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result1 is not None
+        assert result1["strategy"] == "retrigger_strat"
+
+        progress = state.strategy_progress["retrigger_strat"]
+        assert progress["triggered_t"] == 1000
+
+        # Evaluate 121 times with no matching events (timeout expires, triggered_t cleared)
+        for i in range(1, 122):
+            append_normalized_events(state, 1000 + i * 60, "NOISE")
+            strategy.evaluate(create_mock_df(1000 + i * 60), {}, state)
+
+        progress = state.strategy_progress["retrigger_strat"]
+        assert progress["triggered_t"] == 0
+
+        # Now feed a valid matching event — should trigger again
+        append_normalized_events(state, 1780, "STEP1")
+        result2 = strategy.evaluate(create_mock_df(1780), {}, state)
+
+        # Should return a valid trigger result
+        assert result2 is not None
+        assert result2["strategy"] == "retrigger_strat"
+        assert result2["score"] == 1.0
+        assert "exit_config" in result2

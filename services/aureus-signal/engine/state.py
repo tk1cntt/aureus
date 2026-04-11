@@ -225,7 +225,11 @@ class SymbolState:
             return
 
         self.log_signal_normalize.append(payload)
-        if len(self.log_signal_normalize) > 500:
+        # Phase 39.1 Stage 2: Configurable via .env (SIGNAL_HISTORY_MAX_SIZE)
+        # Default: 200 records (safe because Stage 1 trigger timeout prevents permanent stalls)
+        from engine.config import get_config
+        max_size = get_config().signal_history_max_size
+        if len(self.log_signal_normalize) > max_size:
             self.log_signal_normalize.pop(0)
 
     def _normalize_signal_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
