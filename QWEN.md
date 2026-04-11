@@ -8,6 +8,8 @@ Never guess. Verify first.
 Before making any assumption, check the actual state. Read the file. Run the command. Query the database. Test the output.
 If you cannot verify, ask the user. Do NOT fabricate, hallucinate, or assume any information.
 
+Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thống từ file RUN_SERVICES.md
+
 # GitNexus — Code Intelligence
 
 This project is indexed by GitNexus as **Aureus** (3633 symbols, 7794 relationships, 184 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
