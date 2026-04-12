@@ -4,12 +4,12 @@ milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
 status: executing
 last_updated: "2026-04-12T05:08:34.989Z"
-last_activity: 2026-04-12 -- Phase 40 planning complete
+last_activity: 2026-04-12 -- Phase 40 ✅ DONE
 progress:
   total_phases: 16
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 18
-  completed_plans: 20
+  completed_plans: 23
   percent: 100
 ---
 
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: 39 (fix-strategy-service-crash-from-unhandled-exceptions) — Planning in progress
-Plan: 3 of 3 — Not verified yet
-Status: Ready to execute
-Last activity: 2026-04-12 -- Phase 40 planning complete
+Phase: 40 (signal-classification-indicator-event-based) — ✅ COMPLETE
+Plans: 3 of 3 — Verified
+Status: Phase done, commit fdad426
+Last activity: 2026-04-12 -- Phase 40 ✅ DONE
 
 ## Architecture Decision
 

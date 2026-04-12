@@ -31,7 +31,7 @@
 | 36.1 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
 | 37 | Trade Execution Journal (INSERTED) | TBJ-01→05 | Not planned |
 | 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
-| 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | Planned |
+| 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
 
 ---
 
@@ -270,12 +270,22 @@ Plans:
 - **SIG-04:** Đảm bảo backward compatible với notification format hiện tại
 
 **Depends on:** Phase 26 (Signal Contract), Phase 27 (Telegram Notification)
-**Plans:** 3 plans
+**Status:** ✅ DONE 2026-04-12
+
+**Results:**
+- SignalType enum (INDICATOR/EVENT) on BaseSignal with get_signal_type() classmethod
+- 6 indicators classified: EMA, ATR, VolumeSMA, Trend, Session, Pivot
+- 9 events classified: Structure, Sweep, FVG, FVGUp, FVGDown, CHOCHUp, CHOCHDown, SweepBull, SweepBear
+- indicator_snapshot.py helper extracts EMA values, ATR, VolSMA, HTF Trend from state
+- live_engine.py hook attaches snapshot to pub/sub payload when AI triggers fire
+- Telegram formatter renders "📈 Indicator Snapshot:" section with EMA grouping
+- Safety truncation at 4095 chars, backward compatible with old payloads
+- 45 tests total (19 signal type + 12 snapshot + 14 formatter)
 
 Plans:
-- [ ] 40-01-PLAN.md — SignalType enum + classify all 15 signal classes (SIG-01)
-- [ ] 40-02-PLAN.md — indicator_snapshot.py helper + tests (SIG-02)
-- [ ] 40-03-PLAN.md — live_engine hook + Telegram formatter + tests (SIG-03, SIG-04)
+- [x] 40-01-PLAN.md — SignalType enum + classify all 15 signal classes (SIG-01)
+- [x] 40-02-PLAN.md — indicator_snapshot.py helper + tests (SIG-02)
+- [x] 40-03-PLAN.md — live_engine hook + Telegram formatter + tests (SIG-03, SIG-04)
 
 ---
 
