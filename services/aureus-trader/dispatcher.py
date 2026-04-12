@@ -153,8 +153,11 @@ class OrderDispatcher:
                     logger.info(
                         f"Order executed: {cmd_id} ticket={final.get('ticket')}"
                     )
-                    # Journal: record execution
+                    # Journal: record execution — inject trace_id from order
                     if self.journal:
+                        trace_id = order.get("trace_id", "")
+                        if trace_id:
+                            final["trace_id"] = trace_id
                         await self.journal.on_order_opened(final)
                     return
 

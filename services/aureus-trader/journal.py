@@ -63,7 +63,7 @@ class TradeJournalManager:
                 logger.error(f"on_strategy_match: invalid direction '{direction}'")
                 return False
 
-            symbol = data.get("symbol", match_data.get("symbol", ""))
+            symbol = data.get("symbol", match_data.get("symbol", event.get("symbol", "")))
             if not symbol:
                 logger.error("on_strategy_match: missing symbol")
                 return False

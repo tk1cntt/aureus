@@ -49,6 +49,7 @@ def build_order_command(match_event: dict) -> dict:
         "tp": tp,
         "magic": data.get("magic_number", 0),
         "comment": _build_comment(match_event, data),
+        "trace_id": data.get("trace_id", match_event.get("trace_id", "")),
     }
 
 

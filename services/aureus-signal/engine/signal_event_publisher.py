@@ -60,6 +60,7 @@ async def publish_strategy_match(
     trace_id = f"{symbol}:{strat_id}:{origin_ts}"
     data = {
         "trace_id": trace_id,
+        "symbol": symbol,
         "strategy": strategy_result.get("strategy"),
         "strategy_id": strategy_result.get("strategy_id"),
         "strategy_name": strategy_result.get("strategy"),
