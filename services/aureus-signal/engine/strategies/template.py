@@ -341,7 +341,17 @@ class TemplateStrategy(BaseStrategy):
                     signals_at_time.append(latest_signal)
 
                 if not signals_at_time:
+                    logger.info(
+                        f"[{symbol}] [{self.name}] [no_signals_to_process] "
+                        f"No new signals after filtering (last_processed_idx={last_processed_record_index})"
+                    )
                     continue
+
+                logger.info(
+                    f"[{symbol}] [{self.name}] [signals_batch] "
+                    f"Processing {len(signals_at_time)} signals: {[s.get('tag') for s in signals_at_time]} "
+                    f"at step {current_step_index}/{len(self.sequence)}"
+                )
 
                 # Step 2: Try to match sequence signals FIRST (priority over resets)
                 matched_any_signal = False
@@ -367,7 +377,7 @@ class TemplateStrategy(BaseStrategy):
                         required = step.get("required", False)
 
                         if sig_tag == tag:
-                            logger.debug(
+                            logger.info(
                                 f"[{symbol}] [{self.name}] [signal_matched] "
                                 f"Signal '{sig_tag}' matched step {current_step_index} '{tag}'"
                             )
@@ -416,7 +426,7 @@ class TemplateStrategy(BaseStrategy):
                 if not matched_any_signal and has_reset_signal and current_step_index < len(self.sequence):
                     step = self.sequence[current_step_index]
                     reset_tags = step.get("reset_signals", [])
-                    logger.debug(
+                    logger.info(
                         f"[{symbol}] [{self.name}] [reset_signal_applied] "
                         f"No signals matched, applying reset from {reset_tags}"
                     )
