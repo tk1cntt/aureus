@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
-status: verifying
-last_updated: "2026-04-09T20:30:00.000Z"
-last_activity: 2026-04-09
+status: executing
+last_updated: "2026-04-12T05:08:34.989Z"
+last_activity: 2026-04-12 -- Phase 40 planning complete
 progress:
-  total_phases: 21
-  completed_phases: 9
-  total_plans: 11
-  completed_plans: 12
+  total_phases: 16
+  completed_phases: 12
+  total_plans: 18
+  completed_plans: 20
+  percent: 100
 ---
 
 # STATE
@@ -18,8 +19,8 @@ progress:
 
 Phase: 39 (fix-strategy-service-crash-from-unhandled-exceptions) — Planning in progress
 Plan: 3 of 3 — Not verified yet
-Status: Phase planning in progress
-Last activity: 2026-04-09
+Status: Ready to execute
+Last activity: 2026-04-12 -- Phase 40 planning complete
 
 ## Architecture Decision
 
@@ -34,6 +35,7 @@ Last activity: 2026-04-09
 
 ### Roadmap Evolution
 
+- Phase 40 added: Signal Classification — Indicator vs Event-based with Telegram snapshot
 - Phase 39 added: Fix strategy service crash from unhandled exceptions
 - Phase 38 inserted after Phase 37: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (URGENT)
 - Phase 37 inserted after Phase 36: Trade Execution Journal — lưu nhật ký thực thi trade từ trigger đến close để phân tích (URGENT)

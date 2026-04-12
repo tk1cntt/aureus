@@ -1,7 +1,7 @@
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 from typing import Dict, Any, Optional
 
 logger = get_logger(__name__)
@@ -10,6 +10,7 @@ class TrendSignal(BaseSignal):
     Detects macro trend alignment (HTF Trend).
     Updates state_obj.htf_trend for Hybrid Judges.
     """
+    signal_type = SignalType.INDICATOR
     def __init__(self, ema_period: int = 200):
         super().__init__(f"HTF Trend ({ema_period})")
         self.ema_period = ema_period

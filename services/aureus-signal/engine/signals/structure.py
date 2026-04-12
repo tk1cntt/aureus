@@ -1,6 +1,6 @@
 import logging
 from engine.logging_common import get_logger
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
@@ -10,6 +10,7 @@ class StructureSignal(BaseSignal):
     Detects Market Structure Shifts (CHoCH) and creates Order Blocks (OB).
     Strict 1:1 port of MQL5 ProcessZigZag / ProcessCHOCH logic.
     """
+    signal_type = SignalType.EVENT
     TAG_CHOCH_UP = "choch_up"
     TAG_CHOCH_DN = "choch_down"
     

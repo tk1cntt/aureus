@@ -1,4 +1,4 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, cast
 logger = get_logger(__name__)
 class FVGSignal(BaseSignal):
     """Signal Calculator for Fair Value Gaps."""
+    signal_type = SignalType.EVENT
 
     def __init__(self):
         super().__init__("FVG")

@@ -1,7 +1,7 @@
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 from typing import Dict, Any, Optional
 
 logger = get_logger(__name__)
@@ -13,6 +13,7 @@ class SweepSignal(BaseSignal):
     Implements State Machine for OBs (PENDING, TOUCHED, SWEEP, BROKEN_PENDING, STOP_HUNT, CLEAN_BREAKOUT)
     and Regime-based filtering (Trend vs Sideways).
     """
+    signal_type = SignalType.EVENT
 
     TAG_BULL = "sweep_bull"  # Price swept BELOW a target (Bullish setup)
     TAG_BEAR = "sweep_bear"  # Price swept ABOVE a target (Bearish setup)

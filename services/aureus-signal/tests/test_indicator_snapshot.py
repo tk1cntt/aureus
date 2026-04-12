@@ -1,0 +1,135 @@
+"""Tests for indicator_snapshot.py — build_indicator_snapshot_for_telegram."""
+from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
+
+
+class MockState:
+    """Minimal mock of SymbolState for testing."""
+    symbol = 'XAUUSD'
+    emas = {}
+    atr = None
+    vol_sma_20 = None
+    htf_trend = None
+    transient_signals = {}
+
+
+def _make_state(**overrides):
+    """Factory for mock state with sensible defaults."""
+    state = MockState()
+    state.emas = overrides.pop('emas', {
+        21: {'current': 2341.20, 'prev': 2340.0, 'slope': 0.0005},
+        34: {'current': 2343.50, 'prev': 2342.0, 'slope': 0.0006},
+        55: {'current': 2346.80, 'prev': 2345.0, 'slope': 0.0008},
+        89: {'current': 2351.00, 'prev': 2350.0, 'slope': 0.0004},
+        100: {'current': 2355.40, 'prev': 2354.0, 'slope': 0.0006},
+        200: {'current': 2370.10, 'prev': 2369.0, 'slope': 0.0005},
+    })
+    state.atr = overrides.pop('atr', 12.34)
+    state.vol_sma_20 = overrides.pop('vol_sma_20', 1500.0)
+    state.htf_trend = overrides.pop('htf_trend', 'BULLISH')
+    state.transient_signals = overrides.pop('transient_signals', {})
+    return state
+
+
+def test_returns_expected_keys():
+    """Verify snapshot has all 4 top-level keys."""
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert set(snap.keys()) == {'emas', 'atr_14', 'vol_sma_20', 'htf_trend'}
+
+
+def test_ema_values_extracted():
+    """Verify EMA values are read from state.emas."""
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['emas']['periods'] == [21, 34, 55, 89, 100, 200]
+    assert snap['emas']['values'][0] == 2341.20
+    assert snap['emas']['values'][-1] == 2370.10
+
+
+def test_atr_value_extracted():
+    """Verify ATR is read from state.atr."""
+    state = _make_state(atr=15.67)
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['atr_14'] == 15.67
+
+
+def test_vol_sma_extracted():
+    """Verify Volume SMA is read from state.vol_sma_20."""
+    state = _make_state(vol_sma_20=2000.0)
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['vol_sma_20'] == 2000.0
+
+
+def test_htf_trend_extracted():
+    """Verify HTF Trend is read from state.htf_trend."""
+    state = _make_state(htf_trend='BEARISH')
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['htf_trend'] == 'BEARISH'
+
+
+def test_missing_values_are_none():
+    """Verify missing/None values remain None in snapshot."""
+    state = _make_state()
+    state.emas = {}
+    state.atr = None
+    state.vol_sma_20 = None
+    state.htf_trend = None
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['atr_14'] is None
+    assert snap['vol_sma_20'] is None
+    assert snap['htf_trend'] is None
+    assert all(v is None for v in snap['emas']['values'])
+
+
+def test_no_market_session_key():
+    """Verify market_session is NOT in snapshot (D-14)."""
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert 'market_session' not in snap
+    assert 'session' not in snap
+
+
+def test_ema_cross_up_marker():
+    """Verify cross_up transient signal produces 📈 emoji."""
+    state = _make_state()
+    state.transient_signals['ema_21_up'] = {
+        'value': 2341.20,
+        'data': {'cross': 'ema_21_cross_up'},
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['emas']['cross_markers'][0] == " \U0001F4C8"
+
+
+def test_ema_cross_down_marker():
+    """Verify cross_down transient signal produces 📉 emoji."""
+    state = _make_state()
+    state.transient_signals['ema_34_down'] = {
+        'value': 2343.50,
+        'data': {'cross': 'ema_34_cross_down'},
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['emas']['cross_markers'][1] == " \U0001F4C9"
+
+
+def test_no_cross_empty_marker():
+    """Verify no cross produces empty string marker."""
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert all(m == "" for m in snap['emas']['cross_markers'])
+
+
+def test_all_values_are_primitives():
+    """Verify snapshot contains only primitive types (JSON-serializable)."""
+    import json
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    # Should not raise — all values are JSON-serializable
+    json.dumps(snap)
+
+
+def test_handles_missing_emas_attribute():
+    """Verify function works when state has no emas attribute."""
+    state = _make_state()
+    del state.emas
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert all(v is None for v in snap['emas']['values'])

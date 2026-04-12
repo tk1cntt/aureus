@@ -1,4 +1,4 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import logging
 from engine.logging_common import get_logger
 import traceback
@@ -11,6 +11,7 @@ class EMASignal(BaseSignal):
     Exponential Moving Average signal.
     Emits tags like 'ema_{period}_up' (price > ema) or 'ema_{period}_cross_up'.
     """
+    signal_type = SignalType.INDICATOR
     
     def __init__(self, period: int):
         super().__init__(f"EMA {period}")

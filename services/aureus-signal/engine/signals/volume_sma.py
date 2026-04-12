@@ -1,7 +1,7 @@
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 from typing import Dict, Any, Optional
 
 logger = get_logger(__name__)
@@ -10,6 +10,8 @@ class VolumeSMASignal(BaseSignal):
     Calculates Simple Moving Average of Volume.
     Updates state_obj.vol_sma_20 for Hybrid Judges.
     """
+    signal_type = SignalType.INDICATOR
+
     def __init__(self, period: int = 20, spike_threshold: float = 1.5):
         super().__init__(f"Volume SMA ({period})")
         self.period = period

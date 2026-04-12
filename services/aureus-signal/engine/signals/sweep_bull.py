@@ -1,9 +1,10 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import pandas as pd
 from typing import Dict, Any, Optional
 
 class SweepBullSignal(BaseSignal):
     """Consumer signal for Bullish Stop Hunt (Price swept below target)."""
+    signal_type = SignalType.EVENT
     TAG = "sweep_bull"
     
     def __init__(self):

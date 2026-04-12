@@ -1,10 +1,11 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import pandas as pd
 from typing import Dict, Any, Optional, cast
 
 
 class FVGDownSignal(BaseSignal):
     """Bearish Fair Value Gap signal."""
+    signal_type = SignalType.EVENT
 
     TAG = "fvg_down"
 

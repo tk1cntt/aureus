@@ -1,4 +1,4 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
@@ -30,6 +30,7 @@ class PivotSignal(BaseSignal):
         digits:         _Digits — Decimal digits.
         timeframe:      Timeframe of the data.
     """
+    signal_type = SignalType.INDICATOR
     TAG = "pivots"
 
     def __init__(

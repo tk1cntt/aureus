@@ -739,12 +739,13 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
                             if getattr(state, "transient_signals", None):
                                 from engine.event_policy import evaluate_ai_trigger_events
-                                if evaluate_ai_trigger_events(state.transient_signals):
+                                triggers = evaluate_ai_trigger_events(state.transient_signals)
+                                if triggers:
                                     from engine.signal_event_publisher import publish_signal_event
-                                    await publish_signal_event(
-                                        r, symbol, "SIGNAL_EVENT", ts_unix,
-                                        {"signals": state.transient_signals}
-                                    )
+                                    from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
+                                    data = {"signals": state.transient_signals}
+                                    data["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
+                                    await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, data)
 
                             await r.xack(stream_key, group_name, entry_id)
 

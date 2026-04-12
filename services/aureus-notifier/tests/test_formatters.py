@@ -191,3 +191,156 @@ def test_format_functions_under_4096_chars():
     }
     result_strategy = format_strategy_match(event_strategy)
     assert len(result_strategy) < 4096
+
+
+def test_format_signal_event_with_indicator_snapshot():
+    """SIG-03: Verify indicator snapshot section rendered in message."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"choch_up": {"value": "choch_up"}},
+            "session": "NEW_YORK",
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", " \U0001F4C8", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "BULLISH",
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "\U0001F4C8 Indicator Snapshot" in result
+    assert "EMA(21/34/55/89/100/200)" in result
+    assert "2341.20" in result
+    assert "ATR(14)" in result
+    assert "12.34" in result
+    assert "Vol SMA(20)" in result
+    assert "HTF Trend" in result
+    assert "\U0001F7E2" in result  # green circle for BULLISH
+    assert "\U0001F4C8" in result  # cross up marker on EMA line
+    assert len(result) <= 4095
+
+
+def test_format_signal_event_no_indicator_snapshot():
+    """SIG-04: Backward compatible — old payloads without indicator_snapshot still format."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"choch_up": {"value": "choch_up"}},
+            "session": "LONDON",
+        },
+    }
+    result = format_signal_event(event)
+    assert "\U0001F4CA" in result  # 📊 SIGNAL ALERT emoji
+    assert "SIGNAL ALERT" in result
+    assert "Active Signals" in result
+    assert "Indicator Snapshot" not in result
+    assert len(result) <= 4095
+
+
+def test_format_signal_event_indicator_snapshot_none_values():
+    """D-13: Verify None values displayed as em dash (—)."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"sweep_bull": {"value": "sweep_bull"}},
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [None, None, None, None, None, None],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": None,
+                "vol_sma_20": None,
+                "htf_trend": None,
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "\u2014" in result  # em dash
+
+
+def test_format_signal_event_bearish_trend():
+    """Verify BEARISH trend shows red circle emoji."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"choch_down": {"value": "choch_down"}},
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2370.10, 2360.00, 2350.00, 2340.00, 2335.00, 2320.00],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 15.0,
+                "vol_sma_20": 2000.0,
+                "htf_trend": "BEARISH",
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "\U0001F534" in result  # red circle for BEARISH
+    assert "BEARISH" in result
+
+
+def test_format_signal_event_indicator_section_escapes_html():
+    """Verify indicator values are HTML-escaped (T-40-04)."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"sweep_bear": {"value": "sweep_bear"}},
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "<script>alert('xss')</script>",
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "<script>" not in result
+    assert "&lt;script&gt;" in result
+
+
+def test_format_signal_event_message_under_4095_with_snapshot():
+    """D-10: Verify message with indicator snapshot stays under 4095 chars."""
+    signals = {f"signal_{i}": f"value_{i}" for i in range(30)}
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": signals,
+            "session": "NEW_YORK",
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "BULLISH",
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert len(result) <= 4095

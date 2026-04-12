@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from engine.logging_common import get_logger
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 
 logger = get_logger(__name__)
 
@@ -56,6 +56,7 @@ class SessionSignal(BaseSignal):
     Winter: GMT+3 | Summer: GMT+4
     Updates state_obj.current_session for Hybrid Judges.
     """
+    signal_type = SignalType.INDICATOR
 
     def __init__(self, gmt_user: int = 4):
         super().__init__("Broker Session Monitor")

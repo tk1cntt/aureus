@@ -1,7 +1,7 @@
 import logging
 from engine.logging_common import get_logger
 import pandas as pd
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 from typing import Dict, Any, Optional
 
 logger = get_logger(__name__)
@@ -10,6 +10,7 @@ class ATRSignal(BaseSignal):
     Calculates Average True Range (ATR).
     Updates state_obj.atr for quantitative normalization in Judges.
     """
+    signal_type = SignalType.INDICATOR
 
     def __init__(self, period: int = 14):
         super().__init__(f"ATR ({period})")

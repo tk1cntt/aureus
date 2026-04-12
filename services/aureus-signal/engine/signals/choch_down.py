@@ -1,9 +1,10 @@
-from .base import BaseSignal
+from .base import BaseSignal, SignalType
 import pandas as pd
 from typing import Dict, Any, Optional
 
 class CHOCHDownSignal(BaseSignal):
     """Consumer signal for Market Structure Shift (Bearish)."""
+    signal_type = SignalType.EVENT
     TAG = "choch_down"
     
     def __init__(self):
