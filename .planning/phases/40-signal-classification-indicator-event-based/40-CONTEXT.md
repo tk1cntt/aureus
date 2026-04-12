@@ -17,32 +17,33 @@ Phase này KHÔNG thay đổi logic trigger notification — chỉ bổ sung ind
 ## Implementation Decisions
 
 ### Signal Classification
-- **D-01:** Thêm thuộc tính `signal_type` lên `BaseSignal` class với 2 giá trị: `"indicator"` (tính mỗi nến, có giá trị liên tục) và `"event"` (chỉ emit khi điều kiện trigger thỏa mãn)
-- **D-02:** Tất cả signal con phải khai báo `signal_type` — validator sẽ raise error nếu thiếu
+- **D-01:** Thêm `SignalType` enum (INDICATOR / EVENT) và thuộc tính class-level `signal_type` lên `BaseSignal`. Subclasses override bằng 1 dòng: `signal_type = SignalType.INDICATOR`
+- **D-02:** Auto-detect fallback: nếu subclass không khai báo `signal_type`, mặc định là `INDICATOR` (safe default). Factory log warning nhưng KHÔNG crash — cho phép migration gradual
 - **D-03:** Classification mapping:
-  - **Indicators:** EMASignal (tất cả periods), ATRSignal, VolumeSMASignal, TrendSignal, SessionSignal
-  - **Events:** StructureSignal/CHOCHSignals, SweepSignal/SweepBullBearSignals, FVGSignals
-- **D-04:** Giữ backward compatible — signal type là thuộc tính mới, không phá vỡ calculate() signature
+  - **Indicators:** EMASignal (tất cả periods), ATRSignal, VolumeSMASignal, TrendSignal, SessionSignal, PivotSignal
+  - **Events:** StructureSignal, CHOCHUpSignal, CHOCHDownSignal, SweepSignal, SweepBullSignal, SweepBearSignal, FVGSignal, FVGUpSignal, FVGDownSignal
+- **D-04:** Backward compatible — `signal_type` là optional class attribute, không phá vỡ `calculate()` signature
 
 ### Indicator Snapshot Collection
-- **D-05:** Khi event trigger và `evaluate_ai_trigger_events()` trả về non-empty, build indicator snapshot từ state object TRƯỚC KHI gọi `publish_signal_event()`
-- **D-06:** Snapshot thu thập từ state object trực tiếp (EMA values từ `state.emas`, ATR từ `state.atr`, v.v.) — reuse pattern từ `snapshot_utils.py` `build_snapshot()`
-- **D-07:** Snapshot đóng gói vào `data.indicator_snapshot` trong payload pub/sub — KHÔNG thay đổi keys hiện tại (`data.signals`)
+- **D-05:** Tạo helper function `build_indicator_snapshot_for_telegram(state)` — lightweight, chỉ lấy các values cần cho display. KHÔNG reuse trực tiếp `build_snapshot()` (function đó dành cho DB, nặng và có nhiều fields không cần cho Telegram)
+- **D-06:** Hook point: trong `live_engine.py`, SAU `evaluate_ai_trigger_events()` trả về non-empty, TRƯỚC KHI gọi `publish_signal_event()` — build snapshot và attach vào `data["indicator_snapshot"]`
+- **D-07:** Snapshot đóng gói vào `data.indicator_snapshot` trong payload pub/sub — backward compatible, consumer cũ ignore key mới
 
 ### Telegram Message Format
 - **D-08:** Thêm section "📈 Indicator Snapshot" riêng biệt vào message, đặt SAU "Active Signals" và TRƯỚC hashtag
-- **D-09:** Format mỗi indicator: `• EMA55: 2345.67 | EMA200: 2340.00` (nhóm cùng loại) hoặc `• ATR(14): 12.34` (standalone)
-- **D-10:** Message vẫn dưới 4095 chars (Telegram limit) — nếu indicator snapshot làm vượt giới hạn, truncate snapshot trước
+- **D-09:** Format nhóm EMA thành 1 line: `• EMA(21/34/55/89/100/200): 2341.20/2343.50/2346.80/2351.00/2355.40/2370.10`. Các indicators khác mỗi cái 1 line: `• ATR(14): 12.34`
+- **D-10:** Safety truncate: nếu message >4095 chars, truncate indicator section TRƯỚC — giữ nguyên Active Signals section (event info quan trọng hơn)
+- **D-14:** Bỏ `market_session` khỏi indicator snapshot — đã hiển thị ở header message rồi, không cần lặp lại
 
 ### Indicator Selection for Snapshot
-- **D-11:** Bao gồm TẤT CẢ indicator values đang có trong state:
-  - EMAs: 21, 34, 55, 89, 100, 200 (giá trị current + cross status nếu có)
+- **D-11:** Bao gồm các indicator values từ state:
+  - EMAs: 21, 34, 55, 89, 100, 200 (giá trị current)
   - ATR(14)
   - Volume SMA(20)
   - HTF Trend
-  - Market Session
-- **D-12:** Format nhóm: EMA nhóm chung thành 1 line "EMA(21/34/55/89/100/200): val/val/val/val/val/val", indicators khác mỗi cái 1 line
-- **D-13:** Cross events (ema cross up/down) hiển thị với emoji marker: 📈 cross up, 📉 cross down
+  - KHÔNG include Market Session (đã có ở header)
+- **D-12:** Cross detection: nếu EMA có cross event trong candle hiện tại, thêm emoji marker 📈 (cross up) hoặc 📉 (cross down) vào cuối line EMA
+- **D-13:** Giá trị `None` hoặc missing hiển thị là `—` (em dash) để user biết indicator chưa có data
 
 ### Claude's Discretion
 - Helper function placement (new file vs existing `snapshot_utils.py`)
