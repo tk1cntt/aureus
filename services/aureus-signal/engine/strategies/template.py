@@ -152,6 +152,18 @@ class TemplateStrategy(BaseStrategy):
         # Get symbol early for logging (needed by trigger timeout below)
         symbol = getattr(state_obj, "symbol", "UNKNOWN")
 
+        # --- Phase 39.1 Fix: Clear triggered_t on fresh restart ---
+        # When service restarts, state is restored from DB with triggered_t > 0.
+        # But internal_candle_counter starts at 0, so we can detect fresh restart.
+        # Clear triggered_t immediately to allow processing historical events.
+        if triggered_t > 0 and current_step_index == 0 and internal_candle_counter == 0:
+            logger.info(
+                f"[{symbol}] [{self.name}] [clear_triggered_on_restart] "
+                f"Clearing triggered_t={triggered_t} on fresh restart (counter=0)"
+            )
+            triggered_t = 0
+            state_obj.strategy_progress[self.name]["triggered_t"] = 0
+
         # --- Phase 39.1 Stage 1: Post-Trigger Stall Prevention ---
         # After a strategy triggers, triggered_t is set and current_step_index resets to 0.
         # The event filter (line ~254) skips all events with t <= triggered_t.
@@ -253,7 +265,7 @@ class TemplateStrategy(BaseStrategy):
                     "matched_timestamps": [],
                     "last_matched_candle_idx": -1,
                     "last_processed_t": last_processed_t,
-                    "last_processed_record_index": last_processed_record_index,
+                    "last_processed_record_index": -1,  # ← Reset index tracking
                     "internal_candle_counter": internal_candle_counter,
                     "triggered_t": 0,
                     "sequence_completed_t": 0,
@@ -269,17 +281,20 @@ class TemplateStrategy(BaseStrategy):
                 }
 
         # 2. Process new signals/events
-        # BUG FIX: Use BOTH record index AND timestamp to:
-        #   - Avoid skipping records with same timestamp (use index)
-        #   - Only process RECENT events (use timestamp for max_wait checks)
-        # Old logic: `rec_t > last_processed_t` would skip records with same timestamp
-        # New logic: Process all records after last_processed_record_index
+        # Phase 39.1 Fix: Use timestamp-based tracking instead of index-based
+        # PROBLEM: When log_signal_normalize reaches 200 records, it truncates (pop(0))
+        #   → Records shift indices → last_processed_record_index becomes invalid
+        #   → All new records appear "already processed" → SEQUENCE_NOT_MATCHED
+        # SOLUTION: Track by timestamp instead of array index
         pending_records = []
         for idx, rec in enumerate(source_records):
             if not isinstance(rec, dict):
                 continue
-            if idx > last_processed_record_index:
-                pending_records.append((idx, rec))  # ← Store index with record
+            rec_t = rec.get("t", 0)
+            # Process records that are NEWER than or equal to last processed timestamp
+            # Using >= to handle same-timestamp events (multiple events per candle)
+            if rec_t >= last_processed_t:
+                pending_records.append((idx, rec))
 
         if pending_records:
             # Sort by timestamp while preserving index
