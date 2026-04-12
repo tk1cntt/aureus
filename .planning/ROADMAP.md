@@ -30,6 +30,8 @@
 | 35 | MT5 Order Status Reporter | PERF-09 | ✅ DONE 2026-04-07 |
 | 36.1 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
 | 37 | Trade Execution Journal (INSERTED) | TBJ-01→05 | Not planned |
+| 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
+| 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | Planned |
 
 ---
 
@@ -257,6 +259,24 @@ Plans:
 Plans:
 - [ ] TBD (run /gsd-plan-phase 39 to break down)
 
+### Phase 40: Signal Classification — Indicator vs Event-based với Telegram Snapshot
+
+**Goal:** Phân loại signal thành 2 loại: (1) indicator-based signal (EMA, RSI, v.v.) có giá trị liên tục theo từng nến, (2) event-based signal cần trigger/event mới xảy ra. Khi có event trigger, bổ sung snapshot giá trị của các indicator signal vào thông báo Telegram.
+
+**Requirements:**
+- **SIG-01:** Phân loại signal thành indicator vs event-based trong hệ thống
+- **SIG-02:** Khi có event trigger, thu thập giá trị hiện tại của tất cả indicator signals
+- **SIG-03:** Tích hợp snapshot giá trị indicator vào message Telegram notification
+- **SIG-04:** Đảm bảo backward compatible với notification format hiện tại
+
+**Depends on:** Phase 26 (Signal Contract), Phase 27 (Telegram Notification)
+**Plans:** 3 plans
+
+Plans:
+- [ ] 40-01-PLAN.md — SignalType enum + classify all 15 signal classes (SIG-01)
+- [ ] 40-02-PLAN.md — indicator_snapshot.py helper + tests (SIG-02)
+- [ ] 40-03-PLAN.md — live_engine hook + Telegram formatter + tests (SIG-03, SIG-04)
+
 ---
 
 ## Next Up
@@ -296,8 +316,6 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 38 to break down)
-
----
 
 ### Phase 999.1: Sync MT5 Symbol Metadata Digits (BACKLOG)
 
