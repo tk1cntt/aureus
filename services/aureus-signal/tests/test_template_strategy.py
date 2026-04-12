@@ -821,3 +821,198 @@ class TestLogTruncation:
         # This test verifies the system is stable (no crashes) even after many truncations
         assert result2 is not None or state.strategy_progress["test_strat"]["current_step_index"] >= 0
 
+
+class TestTriggerValidation:
+    """Tests for signal freshness validation in evaluate() method.
+
+    Ensures strategy ONLY triggers when:
+    1. Signal timestamp matches current candle (no stale signals)
+    2. Strategy hasn't already triggered (no double-trigger)
+    3. Sequence was actually completed (not partial match)
+    """
+
+    def test_trigger_success_on_current_candle(self):
+        """Verify successful trigger when all conditions are met."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 2.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Match both steps on same candle
+        append_normalized_events(state, 1000, "STEP1")
+        append_normalized_events(state, 1000, "STEP2")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result is not None
+        assert result["strategy"] == "test_strat"
+        assert result["score"] == 2.0
+        assert "exit_config" in result
+        assert result["t"] == 1000
+
+    def test_reject_already_triggered(self):
+        """Reject trigger if strategy already triggered (triggered_t > 0)."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 2.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # First trigger should succeed
+        append_normalized_events(state, 1000, "STEP1")
+        append_normalized_events(state, 1000, "STEP2")
+        result1 = strategy.evaluate(create_mock_df(1000), {}, state)
+        assert result1 is not None
+
+        # Manually set triggered_t to simulate already-triggered state
+        state.strategy_progress["test_strat"]["triggered_t"] = 1000
+
+        # Reset sequence but keep triggered_t (simulating re-evaluation)
+        state.strategy_progress["test_strat"]["current_step_index"] = 0
+        state.strategy_progress["test_strat"]["sequence_completed_t"] = 1000
+
+        # Try to trigger again on same candle
+        result2 = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        # Should reject because already triggered
+        assert result2 is None
+
+    def test_reject_stale_signal(self):
+        """Reject trigger if signal timestamp != current candle timestamp."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 2.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Match steps on candle t=1000
+        append_normalized_events(state, 1000, "STEP1")
+        append_normalized_events(state, 1000, "STEP2")
+
+        # But evaluate on DIFFERENT candle (t=2000)
+        result = strategy.evaluate(create_mock_df(2000), {}, state)
+
+        # Should reject because sequence_completed_t (1000) != bar_t (2000)
+        assert result is None
+
+    def test_reject_no_completion(self):
+        """Reject trigger if sequence was never completed (sequence_completed_t = 0)."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 2.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Only match first step - sequence not completed
+        append_normalized_events(state, 1000, "STEP1")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        # Should reject because score < min_score (only 1.0 < 2.0)
+        assert result is None
+
+    def test_reject_below_min_score(self):
+        """Reject trigger if score below min_score_threshold."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 5.0,  # High threshold
+            "sequence": [
+                {"tag": "STEP1", "weight": 2.0, "required": True},
+                {"tag": "STEP2", "weight": 2.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Match both steps but score = 4.0 < 5.0
+        append_normalized_events(state, 1000, "STEP1")
+        append_normalized_events(state, 1000, "STEP2")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result is None
+
+    def test_reject_missing_required(self):
+        """Reject trigger if required steps are missing."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+                {"tag": "STEP2", "weight": 1.0, "required": True},
+            ],
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        # Only match STEP1 - STEP2 is required but missing
+        append_normalized_events(state, 1000, "STEP1")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result is None
+
+    def test_trigger_after_context_filter_pass(self):
+        """Verify trigger works when context filters pass."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+            ],
+            "context_filters": [],  # No filters
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        append_normalized_events(state, 1000, "STEP1")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result is not None
+
+    def test_trigger_includes_exit_config(self):
+        """Verify trigger result includes exit_config from strategy."""
+        config = {
+            "name": "test_strat",
+            "min_score_threshold": 1.0,
+            "sequence": [
+                {"tag": "STEP1", "weight": 1.0, "required": True},
+            ],
+            "exit_config": {"tp": 100, "sl": 50},
+            "trade_execution": {"direction": "BUY"}
+        }
+        strategy = TemplateStrategy(config)
+        state = MockState()
+
+        append_normalized_events(state, 1000, "STEP1")
+        result = strategy.evaluate(create_mock_df(1000), {}, state)
+
+        assert result is not None
+        assert "exit_config" in result
+        assert result["exit_config"]["tp"] == 100
+        assert result["exit_config"]["sl"] == 50
+

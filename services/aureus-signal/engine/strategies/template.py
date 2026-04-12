@@ -580,6 +580,8 @@ class TemplateStrategy(BaseStrategy):
 
         Now both paths enforce context filters identically.
         """
+        symbol = getattr(state_obj, "symbol", "UNKNOWN")
+
         # Pillar 1: Evaluate context pre-conditions (BUG FIX - was missing)
         ctx = self._evaluate_context(state_obj)
         if not ctx["passed"]:
