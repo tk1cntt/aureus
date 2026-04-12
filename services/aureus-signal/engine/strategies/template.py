@@ -599,7 +599,28 @@ class TemplateStrategy(BaseStrategy):
 
             # Only trigger at the EXACT candle where last event matched
             sequence_completed_t = progress_data.get("sequence_completed_t", 0)
-            if progress_data.get("triggered_t", 0) > 0 or bar_t != sequence_completed_t:
+
+            # Phase 39.1 Fix: Validate signal freshness - must match current candle
+            # Prevents triggering on stale events from previous cycles or truncated history
+            if progress_data.get("triggered_t", 0) > 0:
+                logger.debug(
+                    f"[{symbol}] [{self.name}] [reject_already_triggered] "
+                    f"Strategy already triggered at t={progress_data['triggered_t']}"
+                )
+                return None
+
+            if bar_t != sequence_completed_t:
+                logger.debug(
+                    f"[{symbol}] [{self.name}] [reject_stale_signal] "
+                    f"Signal from t={sequence_completed_t} != current candle t={bar_t}"
+                )
+                return None
+
+            if sequence_completed_t == 0:
+                logger.debug(
+                    f"[{symbol}] [{self.name}] [reject_no_completion] "
+                    f"Sequence not completed (sequence_completed_t=0)"
+                )
                 return None
 
             # Mark as triggered and auto-reset for next cycle
