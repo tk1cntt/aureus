@@ -46,13 +46,17 @@ class CISDSignal(BaseSignal):
         c_t = self._as_int(current.get("t"))
         c_c = self._as_float(current.get("c"))
         c_o = self._as_float(current.get("o"))
+        c_h = self._as_float(current.get("h"))
+        c_l = self._as_float(current.get("l"))
 
-        if any(v is None for v in (c_t, c_c, c_o)):
+        if any(v is None for v in (c_t, c_c, c_o, c_h, c_l)):
             return None
 
         c_t = cast(int, c_t)
         c_c = cast(float, c_c)
         c_o = cast(float, c_o)
+        c_h = cast(float, c_h)
+        c_l = cast(float, c_l)
 
         # Determine current candle direction
         is_bull = c_c > c_o
@@ -100,7 +104,7 @@ class CISDSignal(BaseSignal):
                         "start_bar": start_bar,
                         "span": span,
                         "category": "cisd",
-                        "value": c_c - track_price,
+                        "value": round((c_c - c_l) / (c_h - c_l) * 100, 2) if c_h != c_l else None,
                         "explain": f"Bullish CISD (span={span}, min={self.min_length}, max={self.max_length})",
                         "inputs": {
                             "track_price": track_price,
@@ -139,7 +143,7 @@ class CISDSignal(BaseSignal):
                         "start_bar": start_bar,
                         "span": span,
                         "category": "cisd",
-                        "value": track_price - c_c,
+                        "value": round((c_h - c_c) / (c_h - c_l) * 100, 2) if c_h != c_l else None,
                         "explain": f"Bearish CISD (span={span}, min={self.min_length}, max={self.max_length})",
                         "inputs": {
                             "track_price": track_price,

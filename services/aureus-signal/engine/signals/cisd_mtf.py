@@ -107,9 +107,12 @@ class CISDMultiTFSignal(BaseSignal):
 
         closes = completed["c"].values
         opens = completed["o"].values
-        limit = min(max_bars, n - 1)
 
-        for i_mql in range(1, limit + 1):
+        # match: for(i = 1; i < MathMin(bars - 1, 24); i++)
+        upper_exclusive = min(n - 1, max_bars)
+        for i_mql in range(1, upper_exclusive):
+        # limit = min(max_bars, n - 1)
+        # for i_mql in range(1, limit + 1):
             arr_i = n - i_mql          # flip candidate candle
             arr_prev = n - i_mql - 1   # older candle (i+1 in MQL4)
 

@@ -21,6 +21,10 @@ _AI_TAG_TO_TRIGGER = {
     "fvg_bull_mitigated": "FAIR_VALUE_GAP_BULLISH_MITIGATED",
     "fvg_bear_mitigated": "FAIR_VALUE_GAP_BEARISH_MITIGATED",
 
+    # CISD
+    "cisd_bull": "CISD_BULLISH",
+    "cisd_bear": "CISD_BEARISH",
+
     # Sweep States (Bull)
     "sweep_bull": "LIQUIDITY_SWEEP_BULLISH",
     "sweep_touched_bull": "LIQUIDITY_SWEEP_TOUCHED_BULLISH",
@@ -62,6 +66,8 @@ _TRIGGER_PRIORITY = (
     "FAIR_VALUE_GAP_BEARISH",
     "CLEAN_BREAKOUT_BULLISH",
     "CLEAN_BREAKOUT_BEARISH",
+    "CISD_BULLISH",
+    "CISD_BEARISH",
 )
 
 
