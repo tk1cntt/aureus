@@ -367,7 +367,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 state.reset()
                 snap = StateSnapshot.from_db_row(latest_snap_row)
                 snap.restore_to_state(state)
-                
+                state._signal_suppressed = True  # Suppress signals during startup warmup
+
                 logger.info(f"[{symbol}] State Hydrated. Processing {len(new_rows)} delta candles...")
                 
                 # 3. Process new candles individually to catch up to real-time
@@ -402,8 +403,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                 pass
 
                         state.log_signal_normalize_add(record)
+
+                state.transient_signals = {}  # Clear stale transient signals before going live
             else:
                 logger.info(f"[{symbol}] No snapshot found. Performing full initial warm-up...")
+                state._signal_suppressed = True  # Suppress signals during first-ever startup warmup
                 logger.debug(f"Starting initial DB fetch for {symbol}...")
                 rows = await db_pool.fetch("""
                     SELECT time, open, high, low, close, volume
@@ -471,7 +475,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 state.tracking_vars['last_db_pivot_time'] = history_to_db[-1]['t']
 
             # Evaluate strategies on initial seed to populate Active Monitoring immediately
-            symbol_strategies[symbol].evaluate_all(df, signals, state)
+            if not getattr(state, "_signal_suppressed", False):
+                symbol_strategies[symbol].evaluate_all(df, signals, state)
 
             state_key = f"aureus:state:{symbol}"
             await r.set(state_key, json.dumps(state.to_dict()))
@@ -696,7 +701,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             
                             df, state = window_manager.update(symbol, data)
                             state.transient_signals = {} # Clear for new candle (Producer-Consumer pattern)
-                            
+
+                            # Clear suppress flag on first real-time candle from gateway
+                            if getattr(state, "_signal_suppressed", False):
+                                state._signal_suppressed = False
+                                logger.info(f"[{symbol}] Signal suppression cleared — first real-time candle received")
+
                             # Update Today's News Events in State
                             current_dt = datetime.fromtimestamp(ts_unix, tz=timezone(timedelta(hours=7)))
                             state.news_events = NewsProvider.get_todays_events(current_dt)
@@ -737,7 +747,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             )
 
                             # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
-                            if getattr(state, "transient_signals", None):
+                            if not getattr(state, "_signal_suppressed", False) and getattr(state, "transient_signals", None):
                                 from engine.event_policy import evaluate_ai_trigger_events
                                 triggers = evaluate_ai_trigger_events(state.transient_signals)
                                 if triggers:
