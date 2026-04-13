@@ -1,0 +1,13 @@
+# =========================
+# Line endings — LF everywhere
+# =========================
+# All text files use LF (Linux/Unix standard for cross-platform repos)
+* text=auto eol=lf
+
+# Windows batch files must stay CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Windows shortcuts / binary stay untouched
+*.ico binary
+*.exe binary
