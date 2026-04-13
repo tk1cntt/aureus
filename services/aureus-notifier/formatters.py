@@ -54,6 +54,22 @@ def _format_indicator_section(snapshot: dict) -> str:
     else:
         lines.append(f"\u2022 <b>HTF Trend</b>: {htf_display}")
 
+    # CISD Multi-TF — always show all 4 TFs
+    cisd_mtf = snapshot.get("cisd_mtf") or {}
+    status_emoji = {
+        "bullish": "\U0001F7E2",  # 🟢
+        "bearish": "\U0001F534",  # 🔴
+    }
+    cisd_parts = []
+    for tf in ("M5", "M15", "M30", "H1"):
+        status = cisd_mtf.get(tf)
+        if status:
+            emoji = status_emoji.get(status, "")
+            cisd_parts.append(f"{tf}: {emoji} {status.capitalize()}")
+        else:
+            cisd_parts.append(f"{tf}: \u2014")  # — no tracking
+    lines.append(f"\u2022 <b>CISD MTF</b>: {' | '.join(cisd_parts)}")
+
     return "\n".join(lines)
 
 
@@ -102,6 +118,11 @@ def format_signal_event(event: dict) -> str:
             inner_keys = ", ".join(str(k) for k in val.keys())
             return html.escape(f"[Detail: {inner_keys}]")
         return html.escape(str(val))
+
+    # Filter out CISD MTF tags from Active Signals — they're shown in Indicator Snapshot
+    import re
+    _CISD_MTF_RE = re.compile(r"^cisd_(m5|m15|m30|h1|h4)_(bullish|bearish)$", re.IGNORECASE)
+    signals = {k: v for k, v in signals.items() if not _CISD_MTF_RE.match(str(k))}
 
     signals_lines = "\n".join(
         f"• <b>{html.escape(str(k))}</b>: {format_signal_value(str(k), v)}"

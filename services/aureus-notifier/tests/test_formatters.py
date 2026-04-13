@@ -344,3 +344,144 @@ def test_format_signal_event_message_under_4095_with_snapshot():
     }
     result = format_signal_event(event)
     assert len(result) <= 4095
+
+
+def test_format_signal_event_cisd_mtf_display():
+    """Verify CISD MTF status is rendered in indicator snapshot."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"choch_up": {"value": "choch_up"}},
+            "session": "NEW_YORK",
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "BULLISH",
+                "cisd_mtf": {
+                    "M5": "bullish",
+                    "M15": "bearish",
+                },
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "CISD MTF" in result
+    assert "M5:" in result
+    assert "M15:" in result
+    assert "\U0001F7E2" in result  # green for bullish
+    assert "\U0001F534" in result  # red for bearish
+    assert "Bullish" in result
+    assert "Bearish" in result
+
+
+def test_format_signal_event_cisd_mtf_four_timeframes():
+    """Verify all 4 TFs (M5/M15/M30/H1) rendered."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"sweep_bull": {"value": "sweep_bull"}},
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "NEUTRAL",
+                "cisd_mtf": {
+                    "M5": "bullish",
+                    "M15": "bullish",
+                    "M30": "bearish",
+                    "H1": "bearish",
+                },
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "CISD MTF" in result
+    assert "M5:" in result
+    assert "M15:" in result
+    assert "M30:" in result
+    assert "H1:" in result
+
+
+def test_format_signal_event_cisd_mtf_all_dashes_when_no_tracking():
+    """Verify CISD MTF still shown with em dashes when no TFs are tracking."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {"cisd": {"value": "bullish"}},
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "BULLISH",
+                "cisd_mtf": None,
+            },
+        },
+    }
+    result = format_signal_event(event)
+    assert "CISD MTF" in result
+    assert "M5:" in result
+    assert "H1:" in result
+    assert "\u2014" in result  # em dash for no tracking
+
+
+def test_format_signal_event_cisd_mtf_filtered_from_active_signals():
+    """Verify CISD MTF tags are hidden from Active Signals (shown in Indicator Snapshot)."""
+    event = {
+        "type": "SIGNAL_EVENT",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "signals": {
+                "choch_up": {"value": "choch_up"},
+                "cisd_m5_bullish": {"tf": "M5", "status": "bullish"},
+                "cisd_m15_bearish": {"tf": "M15", "status": "bearish"},
+                "cisd_m30_bullish": {"tf": "M30", "status": "bullish"},
+                "cisd_h1_bearish": {"tf": "H1", "status": "bearish"},
+            },
+            "session": "NEW_YORK",
+            "indicator_snapshot": {
+                "emas": {
+                    "periods": [21, 34, 55, 89, 100, 200],
+                    "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
+                    "cross_markers": ["", "", "", "", "", ""],
+                },
+                "atr_14": 12.34,
+                "vol_sma_20": 1500.0,
+                "htf_trend": "BULLISH",
+                "cisd_mtf": {
+                    "M5": "bullish",
+                    "M15": "bearish",
+                    "M30": "bullish",
+                    "H1": "bearish",
+                },
+            },
+        },
+    }
+    result = format_signal_event(event)
+    # Active Signals section should NOT contain cisd_mtf tags
+    active_signals_section = result.split("\U0001F4C8 Indicator Snapshot:")[0]
+    assert "cisd_m5" not in active_signals_section
+    assert "cisd_m15" not in active_signals_section
+    assert "cisd_m30" not in active_signals_section
+    assert "cisd_h1" not in active_signals_section
+    # But other signals should still be there
+    assert "choch_up" in active_signals_section

@@ -48,6 +48,15 @@ def build_indicator_snapshot_for_telegram(state) -> Dict[str, Any]:
     ema_values = [_get_ema_val(p) for p in ema_periods]
     ema_markers = [_ema_cross_marker(p) for p in ema_periods]
 
+    # CISD Multi-TF status — extract current status per TF from transient_signals
+    cisd_mtf = {}
+    for tf_lower in ("m5", "m15", "m30", "h1", "h4"):
+        for status in ("bullish", "bearish"):
+            tag = f"cisd_{tf_lower}_{status}"
+            if tag in transient:
+                cisd_mtf[tf_lower.upper()] = status
+                break
+
     return {
         "emas": {
             "periods": ema_periods,
@@ -57,4 +66,5 @@ def build_indicator_snapshot_for_telegram(state) -> Dict[str, Any]:
         "atr_14": getattr(state, "atr", None),
         "vol_sma_20": getattr(state, "vol_sma_20", None),
         "htf_trend": getattr(state, "htf_trend", None),
+        "cisd_mtf": cisd_mtf if cisd_mtf else None,
     }
