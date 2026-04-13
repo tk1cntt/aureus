@@ -492,7 +492,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 res['sl_absolute'] = abs_sl
                                 res['tp_absolute'] = abs_tp
                                 res['entry_price'] = str(payload.get("close", 0))
-                                await publish_strategy_match(r, symbol, res)
+                                await publish_strategy_match(r, symbol, res, active_signals=signals_snapshot)
 
                         if execution_mode == "simulated":
                             candle_data = {

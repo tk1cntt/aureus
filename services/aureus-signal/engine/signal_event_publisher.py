@@ -7,7 +7,7 @@ Publishes signal events and strategy match events to:
 Consumers: aureus-notifier (Phase 27), dashboard websocket, etc.
 """
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from engine.logging_common import get_logger
 
 logger = get_logger(__name__)
@@ -52,6 +52,7 @@ async def publish_strategy_match(
     redis_client: Any,
     symbol: str,
     strategy_result: Dict[str, Any],
+    active_signals: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Publish a strategy match event to Redis pub/sub."""
     t = int(strategy_result.get("t", 0))
@@ -77,6 +78,7 @@ async def publish_strategy_match(
         "origin_timestamp": strategy_result.get("origin_timestamp"),
         "entry_price": strategy_result.get("entry_price"),
         "direction": strategy_result.get("side"),
+        "active_signals": active_signals or {},
     }
     return await publish_signal_event(
         redis_client, symbol, "STRATEGY_MATCH", t, data
