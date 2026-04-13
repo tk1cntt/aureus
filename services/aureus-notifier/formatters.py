@@ -106,6 +106,13 @@ def format_signal_event(event: dict) -> str:
                     return html.escape(f"{status} (Last: {val['last_pivot'].get('type', '?')})")
                 return html.escape(status)
 
+            if key in ("cisd_bull", "cisd_bear") and "value" in val:
+                pct = val["value"]
+                close = val.get("close")
+                if close is not None:
+                    return f"{pct}% (Close: {close})"
+                return f"{pct}%"
+
             if "value" in val:
                 return html.escape(str(val["value"]))
 
