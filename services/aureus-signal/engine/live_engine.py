@@ -367,7 +367,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 state.reset()
                 snap = StateSnapshot.from_db_row(latest_snap_row)
                 snap.restore_to_state(state)
-                state._signal_suppressed = True  # Suppress signals during startup warmup
+                state._warmup_candles_remaining = 3  # Skip strategy for first 3 real-time candles
 
                 logger.info(f"[{symbol}] State Hydrated. Processing {len(new_rows)} delta candles...")
                 
@@ -407,7 +407,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 state.transient_signals = {}  # Clear stale transient signals before going live
             else:
                 logger.info(f"[{symbol}] No snapshot found. Performing full initial warm-up...")
-                state._signal_suppressed = True  # Suppress signals during first-ever startup warmup
+                state._warmup_candles_remaining = 3  # Skip strategy for first 3 real-time candles
                 logger.debug(f"Starting initial DB fetch for {symbol}...")
                 rows = await db_pool.fetch("""
                     SELECT time, open, high, low, close, volume
@@ -475,7 +475,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 state.tracking_vars['last_db_pivot_time'] = history_to_db[-1]['t']
 
             # Evaluate strategies on initial seed to populate Active Monitoring immediately
-            if not getattr(state, "_signal_suppressed", False):
+            if getattr(state, "_warmup_candles_remaining", 0) <= 0:
                 symbol_strategies[symbol].evaluate_all(df, signals, state)
 
             state_key = f"aureus:state:{symbol}"
@@ -702,11 +702,11 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             df, state = window_manager.update(symbol, data)
                             state.transient_signals = {} # Clear for new candle (Producer-Consumer pattern)
 
-                            # Clear suppress flag on first real-time candle from gateway
-                            if getattr(state, "_signal_suppressed", False):
-                                state._signal_suppressed = False
-                                logger.info(f"[{symbol}] Signal suppression cleared — first real-time candle received")
-
+                            # Decrement warmup counter; skip strategy for first 3 real-time candles
+                            remaining = getattr(state, "_warmup_candles_remaining", 0)
+                            if remaining > 0:
+                                state._warmup_candles_remaining = remaining - 1
+                                logger.info(f"[{symbol}] Warmup candle {4 - remaining}/3 — strategy skipped, signals only")
                             # Update Today's News Events in State
                             current_dt = datetime.fromtimestamp(ts_unix, tz=timezone(timedelta(hours=7)))
                             state.news_events = NewsProvider.get_todays_events(current_dt)
@@ -720,42 +720,44 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             )
 
                             signals_snapshot = build_normalized_signal_snapshot(signals, state)
-                            # --- Emit signal payload to per-symbol stream for Strategy Executor ---
-                            signal_payload = {
-                                "t": ts_unix,
-                                "open": float(data.get("o", 0)),
-                                "high": float(data.get("h", 0)),
-                                "low": float(data.get("l", 0)),
-                                "close": float(data.get("c", 0)),
-                                "volume": int(float(data.get("v", data.get("vol", 0)))),
-                                "log_signal_normalize": [
-                                    rec if isinstance(rec, dict) else rec.to_dict()
-                                    for rec in (state.log_signal_normalize or [])
-                                ],
-                                "current_signal": state.current_signal or {},
-                                "transient_signals": state.transient_signals or {},
-                                "swing_points": state.swing_points or [],
-                                "signals_snapshot": signals_snapshot,
-                            }
-                            await r.xadd(
-                                f"aureus:stream:{symbol}:signals",
-                                {"payload": json.dumps(signal_payload, default=str)},
-                                maxlen=1000,
-                            )
-                            logger.debug(
-                                f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
-                            )
+                            remaining = getattr(state, "_warmup_candles_remaining", 0)
+                            if remaining <= 0:
+                                # --- Emit signal payload to per-symbol stream for Strategy Executor ---
+                                signal_payload = {
+                                    "t": ts_unix,
+                                    "open": float(data.get("o", 0)),
+                                    "high": float(data.get("h", 0)),
+                                    "low": float(data.get("l", 0)),
+                                    "close": float(data.get("c", 0)),
+                                    "volume": int(float(data.get("v", data.get("vol", 0)))),
+                                    "log_signal_normalize": [
+                                        rec if isinstance(rec, dict) else rec.to_dict()
+                                        for rec in (state.log_signal_normalize or [])
+                                    ],
+                                    "current_signal": state.current_signal or {},
+                                    "transient_signals": state.transient_signals or {},
+                                    "swing_points": state.swing_points or [],
+                                    "signals_snapshot": signals_snapshot,
+                                }
+                                await r.xadd(
+                                    f"aureus:stream:{symbol}:signals",
+                                    {"payload": json.dumps(signal_payload, default=str)},
+                                    maxlen=1000,
+                                )
+                                logger.debug(
+                                    f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
+                                )
 
-                            # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
-                            if not getattr(state, "_signal_suppressed", False) and getattr(state, "transient_signals", None):
-                                from engine.event_policy import evaluate_ai_trigger_events
-                                triggers = evaluate_ai_trigger_events(state.transient_signals)
-                                if triggers:
-                                    from engine.signal_event_publisher import publish_signal_event
-                                    from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
-                                    data = {"signals": state.transient_signals}
-                                    data["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
-                                    await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, data)
+                                # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
+                                if getattr(state, "transient_signals", None):
+                                    from engine.event_policy import evaluate_ai_trigger_events
+                                    triggers = evaluate_ai_trigger_events(state.transient_signals)
+                                    if triggers:
+                                        from engine.signal_event_publisher import publish_signal_event
+                                        from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
+                                        data = {"signals": state.transient_signals}
+                                        data["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
+                                        await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, data)
 
                             await r.xack(stream_key, group_name, entry_id)
 
