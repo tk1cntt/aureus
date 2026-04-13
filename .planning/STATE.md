@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
 status: executing
-last_updated: "2026-04-12T05:08:34.989Z"
-last_activity: 2026-04-12 -- Phase 40 ✅ DONE
+last_updated: "2026-04-13T16:30:00.000Z"
+last_activity: 2026-04-13 -- Phase 40.3 executed (47ad1de)
 progress:
-  total_phases: 16
+  total_phases: 19
   completed_phases: 13
-  total_plans: 18
-  completed_plans: 23
+  total_plans: 19
+  completed_plans: 24
   percent: 100
 ---
 
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: 40 (signal-classification-indicator-event-based) — ✅ COMPLETE
-Plans: 3 of 3 — Verified
-Status: Phase done, commit fdad426
-Last activity: 2026-04-12 -- Phase 40 ✅ DONE
+Phase: 40.3 (fix-stale-signal-trigger-on-service-restart-with-suppress-fl) — ✅ COMPLETE
+Plans: 1 of 1 — Verified
+Status: Executed — Commit 47ad1de
+Last activity: 2026-04-13 -- Phase 40.3 executed
 
 ## Architecture Decision
 
@@ -35,6 +35,7 @@ Last activity: 2026-04-12 -- Phase 40 ✅ DONE
 
 ### Roadmap Evolution
 
+- Phase 40.3 inserted after Phase 40: Fix stale signal trigger on service restart with suppress flag (URGENT)
 - Phase 40.2 inserted after Phase 40: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (URGENT)
 - Phase 40.1 inserted after Phase 40: Tạo signal CISD dựa theo mẫu code sẽ cung cấp (URGENT)
 - Phase 40 added: Signal Classification — Indicator vs Event-based with Telegram snapshot

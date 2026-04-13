@@ -32,6 +32,7 @@
 | 37 | Trade Execution Journal (INSERTED) | TBJ-01→05 | Not planned |
 | 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
 | 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
+| 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
 
 ---
 
@@ -296,6 +297,36 @@ Plans:
 <sub>`/clear` first → fresh context window</sub>
 
 ## Backlog
+
+### Phase 40.3: Fix stale signal trigger on service restart with suppress flag (INSERTED)
+
+**Goal:** Thêm `_signal_suppressed` flag vào live_engine.py để chặn signals và strategies trigger trên stale data khi service restart. Flag set True sau snapshot restore hoặc full warmup, reset False khi nhận candle real-time đầu tiên từ gateway.
+**Requirements**: SIG-SAFETY-01, SIG-SAFETY-02, SIG-SAFETY-03, SIG-SAFETY-04
+**Depends on:** Phase 40
+**Status:** ✅ DONE 2026-04-13 (Commit: 47ad1de)
+
+Plans:
+- [x] 40.3-01-PLAN.md — Executed: suppress flag set in both warmup paths, guards added, reset on first gateway candle
+
+### Phase 40.2: Fix stale signal trigger on service restart with suppress flag (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 40
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 40.2 to break down)
+
+### Phase 40.1: Fix stale signal trigger on service restart with suppress flag (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 40
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 40.1 to break down)
 
 ### Phase 40.2: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (INSERTED)
 
