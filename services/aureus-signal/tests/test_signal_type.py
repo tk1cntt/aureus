@@ -15,6 +15,7 @@ from engine.signals.choch_up import CHOCHUpSignal
 from engine.signals.choch_down import CHOCHDownSignal
 from engine.signals.sweep_bull import SweepBullSignal
 from engine.signals.sweep_bear import SweepBearSignal
+from engine.signals.cisd import CISDSignal
 import pytest
 
 
@@ -45,22 +46,23 @@ def test_indicator_signals(cls):
     StructureSignal, SweepSignal, FVGSignal,
     FVGUpSignal, FVGDownSignal, CHOCHUpSignal,
     CHOCHDownSignal, SweepBullSignal, SweepBearSignal,
+    CISDSignal,
 ])
 def test_event_signals(cls):
     """Verify event signals return EVENT."""
     assert cls.get_signal_type() == SignalType.EVENT, f"{cls.__name__} should be EVENT"
 
 
-def test_all_15_signal_classes_classified():
-    """Verify total count: 6 indicators + 9 events = 15 signal classes."""
+def test_all_16_signal_classes_classified():
+    """Verify total count: 6 indicators + 10 events = 16 signal classes."""
     indicator_classes = [EMASignal, ATRSignal, VolumeSMASignal, TrendSignal, SessionSignal, PivotSignal]
-    event_classes = [StructureSignal, SweepSignal, FVGSignal, FVGUpSignal, FVGDownSignal, CHOCHUpSignal, CHOCHDownSignal, SweepBullSignal, SweepBearSignal]
+    event_classes = [StructureSignal, SweepSignal, FVGSignal, FVGUpSignal, FVGDownSignal, CHOCHUpSignal, CHOCHDownSignal, SweepBullSignal, SweepBearSignal, CISDSignal]
     for cls in indicator_classes:
         assert cls.get_signal_type() == SignalType.INDICATOR
     for cls in event_classes:
         assert cls.get_signal_type() == SignalType.EVENT
     assert len(indicator_classes) == 6
-    assert len(event_classes) == 9
+    assert len(event_classes) == 10
 
 
 def test_signal_type_not_breaking_calculate_signature():

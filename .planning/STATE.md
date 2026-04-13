@@ -35,6 +35,8 @@ Last activity: 2026-04-12 -- Phase 40 ✅ DONE
 
 ### Roadmap Evolution
 
+- Phase 40.2 inserted after Phase 40: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (URGENT)
+- Phase 40.1 inserted after Phase 40: Tạo signal CISD dựa theo mẫu code sẽ cung cấp (URGENT)
 - Phase 40 added: Signal Classification — Indicator vs Event-based with Telegram snapshot
 - Phase 39 added: Fix strategy service crash from unhandled exceptions
 - Phase 38 inserted after Phase 37: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (URGENT)

@@ -1,8 +1,6 @@
 <!-- gitnexus:start -->
 Mọi trao đổi phải dùng tiếng Việt.
 
-Giới hạn token gửi lên LLM là 65536 token. Nếu vượt quá thì hãy tóm tắt lại nội dung.
-
 Never guess. Verify first.
 
 Before making any assumption, check the actual state. Read the file. Run the command. Query the database. Test the output.

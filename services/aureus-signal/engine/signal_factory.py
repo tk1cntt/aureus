@@ -19,6 +19,8 @@ from engine.signals.ema import EMASignal
 from engine.signals.atr import ATRSignal
 from engine.signals.fvg_up import FVGUpSignal
 from engine.signals.fvg_down import FVGDownSignal
+from engine.signals.cisd import CISDSignal
+from engine.signals.cisd_mtf import CISDMultiTFSignal
 
 logger = get_logger(__name__)
 def _missing_state(reason: str = "NOT_AVAILABLE") -> Dict[str, Any]:
@@ -147,7 +149,16 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "ema_100": EMASignal(100),
         "ema_200": EMASignal(200),
         "atr_14": ATRSignal(14),
+        "cisd": CISDSignal(
+            min_length=cfg.get("cisd_min_length", 0),
+            max_length=cfg.get("cisd_max_length", 100),
+        ),
     }
+
+    # Multi-timeframe CISD (optional, per-symbol config)
+    cisd_mtf_cfg = cfg.get("cisd_htf")
+    if cisd_mtf_cfg:
+        signal_set["cisd_mtf"] = CISDMultiTFSignal(tf_configs=cisd_mtf_cfg)
 
     if _is_fvg_enabled():
         signal_set["fvg_up"] = FVGUpSignal()

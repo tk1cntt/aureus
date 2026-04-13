@@ -31,10 +31,10 @@ def _make_state(**overrides):
 
 
 def test_returns_expected_keys():
-    """Verify snapshot has all 4 top-level keys."""
+    """Verify snapshot has all 5 top-level keys."""
     state = _make_state()
     snap = build_indicator_snapshot_for_telegram(state)
-    assert set(snap.keys()) == {'emas', 'atr_14', 'vol_sma_20', 'htf_trend'}
+    assert set(snap.keys()) == {'emas', 'atr_14', 'vol_sma_20', 'htf_trend', 'cisd_mtf'}
 
 
 def test_ema_values_extracted():
@@ -133,3 +133,33 @@ def test_handles_missing_emas_attribute():
     del state.emas
     snap = build_indicator_snapshot_for_telegram(state)
     assert all(v is None for v in snap['emas']['values'])
+
+
+def test_cisd_mtf_extracted_from_transient_signals():
+    """Verify CISD MTF status is extracted from transient_signals (only bullish/bearish, no idle)."""
+    state = _make_state()
+    state.transient_signals = {
+        'cisd_m5_bullish': {'tf': 'M5', 'status': 'bullish'},
+        'cisd_m15_bearish': {'tf': 'M15', 'status': 'bearish'},
+        'cisd_m30_idle': {'tf': 'M30', 'status': 'idle'},  # should be ignored
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['cisd_mtf'] == {'M5': 'bullish', 'M15': 'bearish'}
+
+
+def test_cisd_mtf_none_when_no_tags():
+    """Verify CISD MTF is None when no CISD tags present."""
+    state = _make_state()
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['cisd_mtf'] is None
+
+
+def test_all_values_primitives_with_cisd_mtf():
+    """Verify snapshot with CISD MTF is still JSON-serializable."""
+    import json
+    state = _make_state()
+    state.transient_signals = {
+        'cisd_m5_bullish': {'tf': 'M5', 'status': 'bullish'},
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    json.dumps(snap)  # Should not raise

@@ -297,6 +297,26 @@ Plans:
 
 ## Backlog
 
+### Phase 40.2: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 40
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 40.2 to break down)
+
+### Phase 40.1: Tạo signal CISD dựa theo mẫu code sẽ cung cấp (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 40
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 40.1 to break down)
+
 ### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
 
 **Goal:** [Urgent work - to be planned]
