@@ -486,6 +486,7 @@ class StrategyRegistry:
                         "size": order_plan.get("size"),
                         "size_value": order_plan.get("size_value", order_plan.get("size")),
                         "size_mode": order_plan.get("size_mode", "FIXED_UNITS"),
+                        "risk_amount": order_plan.get("risk_amount"),
                         "magic_number": order_plan.get("magic_number", 0),
                         "sl": order_plan.get("sl"),
                         "tp": order_plan.get("tp"),

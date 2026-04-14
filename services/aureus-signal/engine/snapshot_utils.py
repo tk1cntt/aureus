@@ -55,6 +55,7 @@ REQUIRED_FLOW_INTEGRITY_KEYS = (
 
 REQUIRED_ORDER_PLAN_KEYS = (
     "entry_type",
+    "entry_method",
     "entry_policy",
     "sl_mode",
     "sl_value",
@@ -68,7 +69,8 @@ REQUIRED_ORDER_PLAN_KEYS = (
 )
 
 VALID_ENTRY_TYPES = ("MARKET", "LIMIT", "STOP")
-VALID_SIZE_MODES = ("FIXED_UNITS", "FIXED_LOT", "RISK_PERCENT")
+VALID_SIZE_MODES = ("FIXED_UNITS", "FIXED_LOT", "RISK_PERCENT", "RISK_FIXED_AMOUNT")
+VALID_ENTRY_METHODS = ("CURRENT", "PULLBACK_50", "OB_EDGE", "EMA_TOUCH", "FIXED_OFFSET")
 
 
 class DecisionTraceValidationError(ValueError):

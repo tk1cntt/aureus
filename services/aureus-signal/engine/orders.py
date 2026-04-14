@@ -4,7 +4,7 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 
-from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, VALID_SIZE_MODES
+from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, VALID_SIZE_MODES, VALID_ENTRY_METHODS
 
 # Load symbol metadata from symbols.json — single source of truth for symbol parameters.
 # When you change values in symbols.json, all calculations automatically use the new values.
@@ -65,6 +65,73 @@ def get_default_sl_pips(symbol: str) -> int:
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
+
+# Contract sizes for lot calculation (standard forex/CFD contracts)
+_SYMBOL_CONTRACT_SIZES: Dict[str, float] = {}
+_SYMBOL_CONTRACT_SIZES_PATH = os.path.join(os.path.dirname(__file__), '..', 'symbol_contracts.json')
+try:
+    with open(_SYMBOL_CONTRACT_SIZES_PATH, 'r') as f:
+        _SYMBOL_CONTRACT_SIZES = json.load(f)
+except Exception:
+    pass  # Use defaults below
+
+def get_contract_size(symbol: str) -> float:
+    """Return contract size (units per lot) for lot calculation.
+
+    Default contract sizes (standard CFD/forex):
+    - Forex pairs (XXX/YYY): 100,000 units per lot
+    - XAUUSD: 100 oz per lot
+    - XAGUSD: 5,000 oz per lot
+    - Indices (USTEC, US30, etc.): 1 unit per lot
+    - Crypto (BTCUSD, ETHUSD): 1 unit per lot
+    """
+    cfg = _get_symbol_config(symbol)
+    if cfg and 'contract_size' in cfg:
+        return float(cfg['contract_size'])
+
+    sym = symbol.upper()
+    if sym in _SYMBOL_CONTRACT_SIZES:
+        return float(_SYMBOL_CONTRACT_SIZES[sym])
+
+    if sym in ('XAUUSD', 'GOLD'):
+        return 100.0
+    if sym in ('XAGUSD', 'SILVER'):
+        return 5000.0
+    if sym in ('USTEC', 'US30', 'US500', 'SPX500', 'NAS100', 'DJ30'):
+        return 1.0
+    if sym in ('BTCUSD', 'ETHUSD', 'BNBUSD', 'SOLUSD'):
+        return 1.0
+    return 100000.0  # Default: standard forex
+
+def calculate_lot_size(symbol: str, entry_price: float, sl_price: float, risk_amount: float) -> float:
+    """Tính lot size dựa trên số tiền rủi ro cố định và SL distance.
+
+    Formula: lot = risk_amount / (sl_distance_in_price * contract_size)
+
+    Args:
+        symbol: Trading symbol
+        entry_price: Entry price
+        sl_price: Stop loss price
+        risk_amount: Fixed dollar amount to risk (e.g., $50)
+
+    Returns:
+        Lot size rounded down to 2 decimal places (MT5 precision)
+    """
+    contract_size = get_contract_size(symbol)
+    sl_distance = abs(entry_price - sl_price)
+
+    if sl_distance <= 0 or contract_size <= 0:
+        logger.warning(f"[lot_calc] Cannot calculate lot: sl_distance={sl_distance}, contract={contract_size}")
+        return 0.01
+
+    risk_per_lot = sl_distance * contract_size
+    lot = risk_amount / risk_per_lot if risk_per_lot > 0 else 0.01
+    lot = max(0.01, round(lot, 2))  # Floor at 0.01 lot
+
+    logger.debug(f"[lot_calc] {symbol}: budget=${risk_amount}, entry={entry_price}, sl={sl_price}, "
+                f"sl_dist={sl_distance:.5f}, contract={contract_size}, risk_per_lot=${risk_per_lot:.2f}, lot={lot}")
+    return lot
+
 class SimulatedTradeManager:
     """Manages creation, monitoring and closure of simulated trades."""
     
@@ -128,9 +195,22 @@ class SimulatedTradeManager:
 
             order_plan_snapshot = self._build_order_plan_snapshot(t)
 
-            # 1. Calculate SL/TP first so completeness validation can use computed levels.
+            # 1. Determine Side (before SL/TP and entry_price)
+            side = t.get('side')
+            if not side:
+                name = t['strategy'].lower()
+                if 'up' in name or 'bull' in name: side = 'BUY'
+                elif 'down' in name or 'bear' in name: side = 'SELL'
+                else: side = 'BUY'
+
+            # 2. Compute entry_price from entry_method
+            entry_method = order_plan_snapshot.get("entry_method", "CURRENT")
+            entry_value = order_plan_snapshot.get("entry_value")
+            computed_entry = self._calculate_entry_price(side, state_obj, entry_method, entry_value)
+
+            # 3. Calculate SL/TP using computed entry_price
             # config is pulled directly from t because registry.py flattens sl/tp configs onto the root of the map
-            sl, tp = self._calculate_sl_tp(t, state_obj, t)
+            sl, tp = self._calculate_sl_tp(t, state_obj, t, entry_price_override=computed_entry)
 
             if sl is None or tp is None:
                 logger.debug(
@@ -138,8 +218,12 @@ class SimulatedTradeManager:
                     f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id} "
                     f"reason_code=SL_TP_CALC_FAILED sl={sl} tp={tp}"
                 )
-                logger.warning(f"[{symbol}] [process_triggers] Error: Failed to calculate SL/TP for {trace_id}, skipping.")
-                continue
+                # When SL/TP cannot be calculated, treat as order plan incomplete
+                # Enrich whatever we got and let missing_keys check handle the rejection
+                if order_plan_snapshot.get("sl_value") in (None, "") and sl is not None:
+                    order_plan_snapshot["sl_value"] = sl
+                if order_plan_snapshot.get("tp_value") in (None, "") and tp is not None:
+                    order_plan_snapshot["tp_value"] = tp
 
             # Enrich order-plan snapshot with concrete computed levels when missing.
             if order_plan_snapshot.get("sl_value") in (None, ""):
@@ -147,6 +231,7 @@ class SimulatedTradeManager:
             if order_plan_snapshot.get("tp_value") in (None, ""):
                 order_plan_snapshot["tp_value"] = tp
 
+            # 4. Validate order_plan structure (after SL/TP enrichment)
             missing_order_plan_keys = self._missing_order_plan_keys(order_plan_snapshot)
             if missing_order_plan_keys:
                 reason_payload = {
@@ -186,31 +271,33 @@ class SimulatedTradeManager:
                 f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trace_id={trace_id}"
             )
             logger.info(f"[{symbol}] [process_triggers] NEW Simulated Trade Triggered: {trace_id}")
-                
-            # 2. Determine Side
-            side = t.get('side')
-            if not side:
-                name = t['strategy'].lower()
-                if 'up' in name or 'bull' in name: side = 'BUY'
-                elif 'down' in name or 'bear' in name: side = 'SELL'
-                else: side = 'BUY'
 
-            # 3. Check if AI Validation is required
-            # If ai_validator is provided and the strategy/system settings require it
+            # 5. Handle RISK_FIXED_AMOUNT mode — LOT will be calculated on MT5 side
+            # using real-time Ask/Bid price for accurate SL distance
+            size_mode = order_plan_snapshot.get("size_mode", "FIXED_UNITS")
+            size_value = order_plan_snapshot.get("size_value")
+            if size_mode == "RISK_FIXED_AMOUNT":
+                risk_amount = size_value if isinstance(size_value, (int, float)) and size_value > 0 else 50.0
+                order_plan_snapshot["risk_amount"] = risk_amount
+                order_plan_snapshot["size_value"] = 0  # Placeholder — MT5 calculates real lot
+                logger.info(f"[{symbol}] RISK_FIXED_AMOUNT: budget=${risk_amount} — lot will be calculated on MT5")
+
+            # 6. Check if AI Validation is required
             use_ai = t.get('ai_validation', False)
             status = "PENDING_AI" if use_ai and ai_validator else "ACTIVE"
 
-            # 4. Create Order Object
+            # 7. Create Order Object
             order = {
                 "trace_id": trace_id,
                 "symbol": symbol,
                 "strategy_id": strat_id,
                 "strategy_name": t['strategy'],
                 "side": side,
-                "type": "MARKET",
-                "entry_price": float(state_obj.last_candle['c']),
+                "type": order_plan_snapshot.get("entry_type", "MARKET"),
+                "entry_price": float(computed_entry),
                 "sl": float(sl),
                 "tp": float(tp),
+                "volume": order_plan_snapshot.get("size_value", 0.01),
                 "status": status,
                 "open_time": int(state_obj.last_candle['t']),
                 "close_time": None,
@@ -221,11 +308,11 @@ class SimulatedTradeManager:
                 "ai_audit": None # Place for ACI and Debate Log
             }
             
-            # 5. Save to Redis / State
+            # 7. Save to Redis / State
             state_obj.simulated_orders.append(order)
             await self.r.sadd(history_key, trace_id)
             
-            # 5b. Track event for sparse storage
+            # 7b. Track event for sparse storage
             if status == "ACTIVE":
                 self.last_tick_events.append("ORDER_OPENED")
             
@@ -369,6 +456,13 @@ class SimulatedTradeManager:
             logger.warning(f"[orders] Invalid entry_type '{entry_type}', defaulting to MARKET")
             entry_type = "MARKET"
 
+        # Validate entry_method
+        entry_method = order_plan.get("entry_method", "CURRENT")
+        if entry_method not in VALID_ENTRY_METHODS:
+            logger.warning(f"[orders] Invalid entry_method '{entry_method}', defaulting to CURRENT")
+            entry_method = "CURRENT"
+        entry_value = order_plan.get("entry_value")
+
         # Validate size_mode
         if size_mode not in VALID_SIZE_MODES:
             logger.warning(f"[orders] Invalid size_mode '{size_mode}', defaulting to FIXED_UNITS")
@@ -381,6 +475,8 @@ class SimulatedTradeManager:
 
         snapshot = {
             "entry_type": entry_type,
+            "entry_method": entry_method,
+            "entry_value": entry_value,
             "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),
             "sl_mode": sl_cfg.get("mode", "PRICE"),
             "sl_value": sl_cfg.get("value"),
@@ -434,7 +530,7 @@ class SimulatedTradeManager:
 
         return None
 
-    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
+    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any], entry_price_override: float = None):
         """Calculates prices for SL and TP based on strategy config.
 
         SL value priority:
@@ -444,8 +540,12 @@ class SimulatedTradeManager:
 
         Config keys: both 'type' and 'mode' are accepted for backward compatibility.
         Point size is loaded from symbols.json (single source of truth).
+
+        Args:
+            entry_price_override: Pre-computed entry price (for LIMIT/STOP).
+                                  If None, uses current candle close.
         """
-        entry = float(state_obj.last_candle['c'])
+        entry = entry_price_override if entry_price_override is not None else float(state_obj.last_candle['c'])
         sl = None
         tp = None
 
@@ -553,3 +653,81 @@ class SimulatedTradeManager:
                          f"point={point_size}, delta={price_delta}, tp={tp}, side={side}")
 
         return sl, tp
+
+    def _calculate_entry_price(
+        self, side: str, state_obj: Any,
+        entry_method: str = "CURRENT",
+        entry_value: Any = None,
+    ) -> float:
+        """Tính entry price theo phương án được config.
+
+        Fallback về current candle close nếu phương án không tính được.
+        """
+        current_price = float(state_obj.last_candle['c'])
+        method = str(entry_method or "CURRENT").upper()
+
+        if method == "PULLBACK_50":
+            return self._entry_pullback_50(side, state_obj, current_price)
+        elif method == "OB_EDGE":
+            return self._entry_ob_edge(side, state_obj, current_price)
+        elif method == "EMA_TOUCH":
+            return self._entry_ema_touch(side, state_obj, entry_value, current_price)
+        elif method == "FIXED_OFFSET":
+            return self._entry_fixed_offset(side, state_obj, entry_value, current_price)
+
+        return current_price  # CURRENT hoặc unknown
+
+    def _entry_pullback_50(self, side: str, state_obj: Any, fallback: float) -> float:
+        """50% retracement của candle trigger (midpoint high-low)."""
+        candle = state_obj.last_candle
+        h, l = float(candle['h']), float(candle['l'])
+        return l + (h - l) * 0.5
+
+    def _entry_ob_edge(self, side: str, state_obj: Any, fallback: float) -> float:
+        """Cạnh của OB chưa mitigate gần nhất. BUY → bottom, SELL → top."""
+        obs = getattr(state_obj, 'obs', [])
+        if not obs:
+            return fallback
+        for ob in reversed(obs):
+            if ob.get('mitigated') or ob.get('broken'):
+                continue
+            ob_type = str(ob.get('ob_type', '')).upper()
+            if side == 'BUY' and ob_type == 'BULLISH':
+                return float(ob.get('bottom', fallback))
+            elif side == 'SELL' and ob_type == 'BEARISH':
+                return float(ob.get('top', fallback))
+        return fallback
+
+    def _entry_ema_touch(self, side: str, state_obj: Any, period_value: Any, fallback: float) -> float:
+        """Giá EMA tại period được chỉ định."""
+        period = 21  # default
+        if isinstance(period_value, (int, float)):
+            period = int(period_value)
+        elif isinstance(period_value, str):
+            try:
+                period = int(float(period_value))
+            except (ValueError, TypeError):
+                pass
+        emas = getattr(state_obj, 'emas', {})
+        ema_data = emas.get(period)
+        if ema_data is None:
+            return fallback
+        # ema_data có thể là dict {'value': ..., 'slope': ...} hoặc direct float
+        ema_val = ema_data.get('value') if isinstance(ema_data, dict) else ema_data
+        return float(ema_val) if ema_val is not None else fallback
+
+    def _entry_fixed_offset(self, side: str, state_obj: Any, pips_value: Any, fallback: float) -> float:
+        """Current price +/- N pips. BUY trừ xuống, SELL cộng lên."""
+        pips = None
+        if isinstance(pips_value, (int, float)):
+            pips = float(pips_value)
+        elif isinstance(pips_value, str):
+            try:
+                pips = float(pips_value)
+            except (ValueError, TypeError):
+                pass
+        if pips is None or pips <= 0:
+            return fallback
+        point_size = get_point_size(state_obj.symbol)
+        offset = pips * point_size
+        return fallback - offset if side == 'BUY' else fallback + offset
