@@ -594,22 +594,23 @@ class SimulatedTradeManager:
 
             pivot_price = self._find_pivot_for_sl(side, state_obj)
             if pivot_price is None:
+                fallback_pips = offset_pips if offset_pips > 0 else get_default_sl_pips(symbol)
+                fallback_dist = fallback_pips * point_size
+                sl = (entry - fallback_dist) if 'BUY' in side else (entry + fallback_dist)
                 logger.warning(
-                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid swing point found "
-                    f"(side={side}, swing_points={len(getattr(state_obj, 'swing_points', []))})"
+                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid swing point found, "
+                    f"fallback to FIXED_PIPS (distance={fallback_pips} pips, sl={sl})"
                 )
-                return None, None
-
-            if 'BUY' in side:
-                sl = pivot_price - offset_distance
             else:
-                sl = pivot_price + offset_distance
-
-            logger.debug(
-                f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=PIVOT_POINT, "
-                f"pivot_price={pivot_price}, offset_pips={offset_pips}, offset_distance={offset_distance}, "
-                f"sl={sl}, side={side}"
-            )
+                if 'BUY' in side:
+                    sl = pivot_price - offset_distance
+                else:
+                    sl = pivot_price + offset_distance
+                logger.info(
+                    f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=PIVOT_POINT, "
+                    f"pivot_price={pivot_price}, offset_pips={offset_pips}, offset_distance={offset_distance}, "
+                    f"sl={sl}, side={side}"
+                )
 
         elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
             target_tag = sl_cfg.get('tag')
