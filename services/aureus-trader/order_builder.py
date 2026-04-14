@@ -37,7 +37,10 @@ def build_order_command(match_event: dict) -> dict:
     sl = data.get("sl_absolute") or data.get("sl")
     tp = data.get("tp_absolute") or data.get("tp")
 
-    return {
+    size_mode = data.get("size_mode", "FIXED_UNITS")
+    risk_amount = data.get("risk_amount")
+
+    command = {
         "type": "OPEN_ORDER",
         "symbol": match_event.get("symbol", ""),
         "cmd_id": cmd_id,
@@ -51,6 +54,16 @@ def build_order_command(match_event: dict) -> dict:
         "comment": _build_comment(match_event, data),
         "trace_id": data.get("trace_id", match_event.get("trace_id", "")),
     }
+
+    # Forward size_mode and risk_amount when using RISK_FIXED_AMOUNT
+    # MT5 will calculate actual lot size from real entry price and SL distance
+    if size_mode == "RISK_FIXED_AMOUNT":
+        command["size_mode"] = size_mode
+        command["risk_amount"] = risk_amount if risk_amount else 50.0
+        # Set volume=0 as placeholder — MT5 will calculate real lot
+        command["volume"] = 0
+
+    return command
 
 
 def _build_comment(match_event: dict, data: dict) -> str:
