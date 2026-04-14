@@ -140,6 +140,50 @@ async def seed_system_strategies(pool):
                     "early_exits": ["choch_up"]
                 }
             }
+        },
+        {
+            "name": "CHOCH_CISD_BULL",
+            "description": "ChoCH lên xác nhận đảo chiều bullish, sau đó CISD bullish xác nhận break và entry. Sequence: choch_up → cisd_bull.",
+            "min_score": 8.0,
+            "config": {
+                "min_score_threshold": 8.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+                    {"tag": "cisd_bull", "weight": 4.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size": 0.01,
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "CHOCH_CISD_BEAR",
+            "description": "ChoCH xuống xác nhận đảo chiều bearish, sau đó CISD bearish xác nhận break và entry. Sequence: choch_down → cisd_bear.",
+            "min_score": 8.0,
+            "config": {
+                "min_score_threshold": 8.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
+                    {"tag": "cisd_bear", "weight": 4.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "size": 0.01,
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
         }
     ]
 
