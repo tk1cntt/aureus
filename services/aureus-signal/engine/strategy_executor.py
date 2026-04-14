@@ -496,6 +496,10 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, res, entry_price_override=computed_ep)
                                 res['sl_absolute'] = abs_sl
                                 res['tp_absolute'] = abs_tp
+                                # MT5 will recalculate TP from real entry using this ratio
+                                tp_ratio = order_plan.get('tp_rr_ratio') or trade_manager._get_tp_rr_ratio(res)
+                                if tp_ratio is not None:
+                                    res['tp_rr_ratio'] = tp_ratio
                                 res['entry_price'] = str(computed_ep)
                                 await publish_strategy_match(r, symbol, res, active_signals=signals_snapshot)
 

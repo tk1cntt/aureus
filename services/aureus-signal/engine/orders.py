@@ -487,6 +487,8 @@ class SimulatedTradeManager:
             expiry = order_plan.get("expiry", exit_config.get("expiry"))
             expiry_policy = str(expiry if expiry is not None else "BAR_CLOSE")
 
+        tp_rr_ratio = self._get_tp_rr_ratio(order_plan)
+
         snapshot = {
             "entry_type": entry_type,
             "entry_method": entry_method,
@@ -496,6 +498,7 @@ class SimulatedTradeManager:
             "sl_value": sl_cfg.get("value"),
             "tp_mode": tp_cfg.get("mode", "PRICE"),
             "tp_value": tp_cfg.get("value"),
+            "tp_rr_ratio": tp_rr_ratio,
             "trailing_mode": trailing_cfg.get("mode", "NONE"),
             "trailing_value": trailing_cfg.get("value", 0.0),
             "size_mode": size_mode,
@@ -668,6 +671,23 @@ class SimulatedTradeManager:
                          f"point={point_size}, delta={price_delta}, tp={tp}, side={side}")
 
         return sl, tp
+
+    @staticmethod
+    def _get_tp_rr_ratio(config: Dict[str, Any]) -> Optional[float]:
+        """Lấy RR ratio từ TP config để MT5 tính lại TP từ entry thực tế.
+
+        Returns ratio (ví dụ 1.5) hoặc None nếu TP không phải RR_RATIO.
+        """
+        tp_cfg = config.get('tp', {})
+        tp_mode = tp_cfg.get('mode') or tp_cfg.get('type', 'RR')
+        if tp_mode in ('RR', 'RR_RATIO'):
+            ratio = tp_cfg.get('value')
+            if ratio is not None:
+                try:
+                    return float(ratio)
+                except (ValueError, TypeError):
+                    pass
+        return None
 
     def _calculate_entry_price(
         self, side: str, state_obj: Any,

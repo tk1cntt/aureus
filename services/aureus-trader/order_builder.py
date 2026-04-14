@@ -54,6 +54,7 @@ def build_order_command(match_event: dict) -> dict:
 
     size_mode = data.get("size_mode", "FIXED_UNITS")
     risk_amount = data.get("risk_amount")
+    tp_rr_ratio = data.get("tp_rr_ratio")
 
     command = {
         "type": "OPEN_ORDER",
@@ -69,6 +70,13 @@ def build_order_command(match_event: dict) -> dict:
         "comment": _build_comment(match_event, data),
         "trace_id": data.get("trace_id", match_event.get("trace_id", "")),
     }
+
+    # Forward tp_rr_ratio so MT5 can recalculate TP from actual entry price
+    if tp_rr_ratio is not None:
+        try:
+            command["tp_rr_ratio"] = float(tp_rr_ratio)
+        except (ValueError, TypeError):
+            pass
 
     # Forward size_mode and risk_amount when using RISK_FIXED_AMOUNT
     # MT5 will calculate actual lot size from real entry price and SL distance
