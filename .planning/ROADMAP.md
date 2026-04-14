@@ -372,10 +372,11 @@ Plans:
 **Goal:** Bổ sung cơ chế SL PIVOT_POINT (dựa trên swing point HH/LL gần nhất) bên cạnh FIXED_PIPS. Áp dụng cho các strategy đã có và mới.
 **Requirements**: SL-01, SL-02
 **Depends on:** Phase 40
-**Plans:** 0 plans
+**Plans:** 1 plan
+**Status:** ✅ DONE 2026-04-14
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 41 to break down)
+- [x] 41-01-PLAN.md — PIVOT_POINT SL: method, branch, seed, tests
 
 ---
 
