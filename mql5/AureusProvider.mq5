@@ -863,6 +863,103 @@ void PushOrderClosed(string symbol, long ticket, string direction, double volume
 }
 
 //+------------------------------------------------------------------+
+//| Calculate lot size from fixed risk budget on MT5 side              |
+//| Uses REAL current Ask/Bid price for accurate SL distance           |
+//+------------------------------------------------------------------+
+double CalculateLotFromBudget(string symbol, string direction,
+                               double entryPriceRequested, double slRequested,
+                               double riskAmount)
+{
+   // Get actual entry price from market
+   double actualEntry = (direction == "BUY")
+                        ? SymbolInfoDouble(symbol, SYMBOL_ASK)
+                        : SymbolInfoDouble(symbol, SYMBOL_BID);
+
+   // SL distance in price units
+   double slDistance = MathAbs(actualEntry - slRequested);
+   if(slDistance <= 0)
+   {
+      PrintFormat("[lot_calc] [%s] Zero SL distance — entry=%.5f sl=%.5f", symbol, actualEntry, slRequested);
+      return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   }
+
+   // Contract size: units per lot (from symbol info or hardcoded defaults)
+   double contractSize = 100000.0; // Default: forex standard lot
+   string symUpper = StringToUpper(symbol);
+
+   if(StringFind(symUpper, "XAU") >= 0 || StringFind(symUpper, "GOLD") >= 0)
+      contractSize = 100.0;        // 100 oz per lot
+   else if(StringFind(symUpper, "XAG") >= 0 || StringFind(symUpper, "SILVER") >= 0)
+      contractSize = 5000.0;       // 5000 oz per lot
+   else if(StringFind(symUpper, "USTEC") >= 0 || StringFind(symUpper, "NAS100") >= 0)
+      contractSize = 1.0;
+   else if(StringFind(symUpper, "US30") >= 0 || StringFind(symUpper, "DJ30") >= 0)
+      contractSize = 1.0;
+   else if(StringFind(symUpper, "US500") >= 0 || StringFind(symUpper, "SPX") >= 0)
+      contractSize = 1.0;
+   else if(StringFind(symUpper, "BTC") >= 0)
+      contractSize = 1.0;
+   else if(StringFind(symUpper, "ETH") >= 0)
+      contractSize = 1.0;
+
+   // Risk per lot = SL distance * contract size (dollar value if SL is hit for 1 lot)
+   double riskPerLot = slDistance * contractSize;
+   if(riskPerLot <= 0)
+      return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+
+   double lot = riskAmount / riskPerLot;
+   double originalBudget = riskAmount;
+
+   // D-18: If lot < min volume → auto-increase budget until lot >= min
+   double minVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   if(lot < minVol)
+   {
+      double adjustedBudget = riskAmount;
+      for(int i = 0; i < 20; i++)
+      {
+         adjustedBudget *= 2;
+         lot = adjustedBudget / riskPerLot;
+         if(lot >= minVol) break;
+      }
+      PrintFormat("[lot_calc] [%s] Budget adjusted: $%.2f → $%.2f (lot %.2f < min %.2f)",
+                  symbol, originalBudget, adjustedBudget, lot, minVol);
+      riskAmount = adjustedBudget;
+   }
+
+   // D-19: If lot > max volume → auto-decrease budget until lot <= max
+   double maxVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   if(lot > maxVol)
+   {
+      double adjustedBudget = riskAmount;
+      for(int i = 0; i < 20; i++)
+      {
+         adjustedBudget /= 2;
+         lot = adjustedBudget / riskPerLot;
+         if(lot <= maxVol) break;
+      }
+      PrintFormat("[lot_calc] [%s] Budget adjusted: $%.2f → $%.2f (lot %.2f > max %.2f)",
+                  symbol, originalBudget, adjustedBudget, lot, maxVol);
+      riskAmount = adjustedBudget;
+   }
+
+   // Normalize to symbol step
+   double stepVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   if(stepVol > 0)
+      lot = MathFloor(lot / stepVol) * stepVol;
+
+   // Final clamp as safety net
+   if(lot < minVol) lot = minVol;
+   if(lot > maxVol) lot = maxVol;
+
+   PrintFormat("[lot_calc] [%s] %s | budget=$%.2f → $%.2f | actual_entry=%.5f | sl=%.5f | "
+              "dist=%.5f | contract=%.0f | risk_per_lot=$%.2f | lot=%.2f",
+              symbol, direction, originalBudget, riskAmount, actualEntry, slRequested,
+              slDistance, contractSize, riskPerLot, lot);
+
+   return lot;
+}
+
+//+------------------------------------------------------------------+
 //| Execute OPEN_ORDER command                                         |
 //+------------------------------------------------------------------+
 void ExecuteOpenOrder(const string &raw)
@@ -878,9 +975,14 @@ void ExecuteOpenOrder(const string &raw)
    double tp        = ParseJSONDouble(raw, "tp");
    long   magic     = ParseJSONLong(raw, "magic");
    string comment   = ParseJSONString(raw, "comment");
+   string sizeMode  = ParseJSONString(raw, "size_mode");
+   double riskAmount = ParseJSONDouble(raw, "risk_amount");
 
-   // Validate required fields
-   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || volume <= 0)
+   // When RISK_FIXED_AMOUNT, volume will be calculated on MT5 side
+   bool calcVolumeOnMT5 = (StringFind(StringToUpper(sizeMode), "RISK_FIXED_AMOUNT") >= 0 && riskAmount > 0);
+
+   // Validate required fields (volume check skipped if MT5 will calculate)
+   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || (!calcVolumeOnMT5 && volume <= 0))
    {
       SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
       return;
@@ -918,7 +1020,14 @@ void ExecuteOpenOrder(const string &raw)
    ZeroMemory(result);
 
    request.symbol   = symbol;
-   
+
+   // Calculate volume on MT5 side if RISK_FIXED_AMOUNT mode
+   if(calcVolumeOnMT5 && sl > 0)
+   {
+      volume = CalculateLotFromBudget(symbol, direction, price, sl, riskAmount);
+      PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f budget → %.2f lots", symbol, riskAmount, volume);
+   }
+
    // Normalize volume
    double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
