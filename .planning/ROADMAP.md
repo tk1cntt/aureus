@@ -33,7 +33,7 @@
 | 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
 | 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
 | 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
-| 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | Not planned |
+| 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | ✅ DONE 2026-04-14 |
 
 ---
 
@@ -378,6 +378,19 @@ Plans:
 Plans:
 - [x] 41-01-PLAN.md — PIVOT_POINT SL: method, branch, seed, tests
 
+### Phase 42: Giảm RR ratio xuống 1.5 và bổ sung FIXED_BUDGET entry (50$)
+
+**Goal:** Chuyển TP RR ratio mặc định của tất cả strategy xuống 1.5. Bổ sung cơ chế FIXED_BUDGET ($50) tự tính lot size dựa trên SL distance và entry price khi gửi lệnh sang MT5.
+**Requirements**: RR-01, ORDER-02, ORDER-03, ORDER-04, STRAT-03
+**Depends on:** Phase 41
+**Plans:** 4 plans
+
+Plans:
+- [x] 42-01-PLAN.md — Backtest RR ratio fix: simulated_orders.py default 2.0 → 1.5
+- [x] 42-02-PLAN.md — RISK_FIXED_AMOUNT propagation: snapshot_utils, registry, signal_event_publisher
+- [x] 42-03-PLAN.md — RISK_FIXED_AMOUNT handling: orders.py + order_builder.py volume=0 + risk_amount forwarding
+- [x] 42-04-PLAN.md — MT5 lot calculation: CalculateLotFromBudget with auto-adjust and guards
+
 ---
 
 ### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
@@ -393,7 +406,7 @@ Plans:
 ### Phase 999.1: Sync MT5 Symbol Metadata Digits (BACKLOG)
 
 **Goal:** Fetch real `SymbolInfoInteger(SYMBOL_DIGITS)` and `SYMBOL_POINT` dynamically from the MT5 broker when initializing the connection, sending it to the backend so the signal engine uses 100% accurate point-size multipliers instead of hardcoded Python fallbacks per symbol.
-**Requirements:** TBD
+**Requirements**: TBD
 **Plans:** 0 plans
 
 Plans:
