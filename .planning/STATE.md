@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Signal Delivery & Trade Management
 status: executing
-last_updated: "2026-04-13T16:30:00.000Z"
-last_activity: 2026-04-13 -- Phase 40.3 executed (47ad1de)
+last_updated: "2026-04-14T02:20:56.728Z"
+last_activity: 2026-04-14 -- Phase 41 execution started
 progress:
-  total_phases: 19
-  completed_phases: 13
-  total_plans: 19
+  total_phases: 20
+  completed_phases: 14
+  total_plans: 20
   completed_plans: 24
   percent: 100
 ---
@@ -17,10 +17,11 @@ progress:
 
 ## Current Position
 
-Phase: 40.3 (fix-stale-signal-trigger-on-service-restart-with-suppress-fl) — ✅ COMPLETE
+Phase: 41 (Bổ sung cơ chế SL theo điểm pivot point HH/LL gần nhất cho strategy) — EXECUTING
+Plan: 1 of 1
 Plans: 1 of 1 — Verified
-Status: Executed — Commit 47ad1de
-Last activity: 2026-04-13 -- Phase 40.3 executed
+Status: Executing Phase 41
+Last activity: 2026-04-14 -- Phase 41 execution started
 
 ## Architecture Decision
 

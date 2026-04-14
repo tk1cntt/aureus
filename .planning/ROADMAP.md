@@ -33,6 +33,7 @@
 | 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
 | 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
 | 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
+| 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | Not planned |
 
 ---
 
@@ -365,6 +366,16 @@ Plans:
 
 **Plans:**
 - [ ] 34-01-PLAN.md — Fix SL/TP decimal precision and MT5 comment strategy name
+
+### Phase 41: Bổ sung cơ chế SL theo điểm pivot point HH/LL gần nhất cho strategy
+
+**Goal:** Bổ sung cơ chế SL PIVOT_POINT (dựa trên swing point HH/LL gần nhất) bên cạnh FIXED_PIPS. Áp dụng cho các strategy đã có và mới.
+**Requirements**: SL-01, SL-02
+**Depends on:** Phase 40
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 41 to break down)
 
 ---
 
