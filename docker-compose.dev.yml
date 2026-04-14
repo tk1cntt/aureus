@@ -312,6 +312,11 @@ services:
       - REDIS_PORT=6379
       - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
       - TELEGRAM_ORDER_BOT_TOKEN=${TELEGRAM_ORDER_BOT_TOKEN}
+      - DB_HOST=timescaledb-dev
+      - DB_PORT=5432
+      - DB_NAME=aureus
+      - DB_USER=aureus
+      - DB_PASSWORD=${DB_PASSWORD}
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
     networks:

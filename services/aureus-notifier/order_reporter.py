@@ -1,24 +1,43 @@
 """
-Order Status Reporter — listens for ORDER_CLOSED events from MT5 via Gateway
-and sends individual Telegram notifications when trades close.
+Order Status Reporter — listens for ORDER_OPENED and ORDER_CLOSED events from MT5
+via Gateway and sends individual Telegram notifications when trades open or close.
 
-Event-driven: no polling, no interval. Each closed trade triggers an immediate notification.
+Event-driven: no polling, no interval. Each trade lifecycle event triggers an immediate notification.
+
+ORDER_OPENED notification includes:
+- Strategy name, score, symbol, direction
+- Entry price, SL, TP, volume, ticket
+- Budget mode (RISK_FIXED_AMOUNT or fixed units)
 """
 import asyncio
 import json
 import html
 import logging
+import os
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
+import asyncpg
 
 from telegram_bot import TelegramSender
 
 logger = logging.getLogger(__name__)
 
+# PIP values per symbol
+PIP_VALUES = {
+    "XAUUSD": 0.01, "XAUEUR": 0.01, "XAUGBP": 0.01,
+    "EURUSD": 0.0001, "EURGBP": 0.0001, "EURJPY": 0.01,
+    "GBPUSD": 0.0001, "GBPJPY": 0.01, "USDJPY": 0.01,
+    "AUDUSD": 0.0001, "NZDUSD": 0.0001,
+    "USDCAD": 0.0001, "AUDCAD": 0.0001,
+    "BTCUSD": 0.01, "ETHUSD": 0.01,
+    "USTEC": 0.01, "US30": 0.01, "US500": 0.01,
+    "DEFAULT": 0.0001
+}
+
 
 class OrderStatusReporter:
-    """Listens for ORDER_CLOSED events on aureus:mt5:events and sends Telegram alerts."""
+    """Listens for ORDER_OPENED/CLOSED events on aureus:mt5:events and sends Telegram alerts."""
 
     def __init__(
         self,
@@ -29,12 +48,49 @@ class OrderStatusReporter:
         self.redis = redis_client
         self.sender = sender
         self.chat_id = chat_id
+        self._db_pool = None
+
+    async def _get_db_pool(self) -> asyncpg.Pool:
+        """Lazy-init DB connection pool."""
+        if self._db_pool is None:
+            # Construct DSN from individual env vars (container) or use DATABASE_URL (local)
+            dsn = os.environ.get("DATABASE_URL")
+            if not dsn:
+                db_host = os.environ.get("DB_HOST", "localhost")
+                db_port = os.environ.get("DB_PORT", "5432")
+                db_name = os.environ.get("DB_NAME", "aureus")
+                db_user = os.environ.get("DB_USER", "aureus")
+                db_pass = os.environ.get("DB_PASSWORD", "aureus_password")
+                dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            self._db_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=2)
+        return self._db_pool
+
+    async def _lookup_journal(self, trace_id: str) -> dict | None:
+        """Lookup trade journal by trace_id to get strategy info and execution details."""
+        try:
+            pool = await self._get_db_pool()
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT strategy_name, score, symbol, direction, status,
+                           active_signals, entry_price, sl_initial, tp_initial, lot_size,
+                           ticket, entry_time
+                    FROM aureus_trade_journal
+                    WHERE trace_id = $1
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    trace_id
+                )
+                return dict(row) if row else None
+        except Exception as e:
+            logger.warning(f"DB lookup failed for trace_id={trace_id}: {e}")
+            return None
 
     async def run(self):
-        """Main loop: subscribe to mt5 events and forward ORDER_CLOSED to Telegram."""
+        """Main loop: subscribe to mt5 events and forward ORDER_OPENED/CLOSED to Telegram."""
         pubsub = self.redis.pubsub()
         await pubsub.subscribe("aureus:mt5:events")
-        logger.info("OrderStatusReporter started — listening for ORDER_CLOSED events")
+        logger.info("OrderStatusReporter started — listening for ORDER_OPENED and ORDER_CLOSED events")
 
         try:
             async for message in pubsub.listen():
@@ -42,7 +98,12 @@ class OrderStatusReporter:
                     continue
                 try:
                     event = json.loads(message["data"])
-                    if event.get("type") == "ORDER_CLOSED":
+                    evt_type = event.get("type")
+
+                    if evt_type == "ORDER_OPENED":
+                        # Fire-and-forget: lookup DB for strategy info then send
+                        asyncio.create_task(self._handle_order_opened(event))
+                    elif evt_type == "ORDER_CLOSED":
                         msg = self._format_close(event)
                         if msg:
                             success = await self.sender.send_message(self.chat_id, msg)
@@ -63,6 +124,119 @@ class OrderStatusReporter:
         finally:
             await pubsub.unsubscribe("aureus:mt5:events")
             await pubsub.close()
+            if self._db_pool:
+                await self._db_pool.close()
+
+    async def _handle_order_opened(self, event: dict):
+        """Handle ORDER_OPENED: lookup journal for strategy info and send Telegram notification."""
+        try:
+            trace_id = event.get("trace_id", "")
+            journal = None
+
+            # Try DB lookup for full context
+            if trace_id:
+                journal = await self._lookup_journal(trace_id)
+
+            msg = self._format_opened(event, journal)
+            if msg:
+                success = await self.sender.send_message(self.chat_id, msg)
+                if success:
+                    logger.info(
+                        f"Order opened notification sent: {event.get('symbol')} "
+                        f"ticket={event.get('ticket')}"
+                    )
+                else:
+                    logger.warning("Failed to send order opened notification to Telegram")
+        except Exception as e:
+            logger.error(f"Error handling ORDER_OPENED: {e}", exc_info=True)
+
+    def _format_opened(self, event: dict, journal: dict | None) -> str:
+        """Format single order opened notification in HTML."""
+        symbol = html.escape(str(event.get("symbol", journal.get("symbol") if journal else "?")))
+        direction = event.get("direction", journal.get("direction") if journal else "?")
+        volume = event.get("volume", journal.get("lot_size") if journal else 0.0)
+        ticket = event.get("ticket", journal.get("ticket") if journal else 0)
+        entry = event.get("open_price", journal.get("entry_price") if journal else 0.0)
+        sl = event.get("sl", journal.get("sl_initial") if journal else None)
+        tp = event.get("tp", journal.get("tp_initial") if journal else None)
+        magic = event.get("magic", 0)
+        open_time_ms = event.get("t", 0)
+
+        # Strategy info from journal
+        strategy_name = journal.get("strategy_name", "") if journal else ""
+        score = journal.get("score") if journal else None
+
+        # Active signals summary from journal
+        active_signals_raw = journal.get("active_signals", "") if journal else ""
+        signal_tags = []
+        if active_signals_raw:
+            try:
+                signals_list = json.loads(active_signals_raw)
+                signal_tags = [str(s.get("tag", "")) for s in signals_list if isinstance(s, dict)]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # SL distance in pips
+        sl_pips = None
+        if entry and sl:
+            pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
+            sl_pips = round(abs(entry - sl) / pip, 1)
+
+        # TP distance in pips
+        tp_pips = None
+        if entry and tp:
+            pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
+            tp_pips = round(abs(tp - entry) / pip, 1)
+
+        dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
+
+        # Time formatting
+        if open_time_ms:
+            dt = datetime.fromtimestamp(open_time_ms / 1000, tz=timezone.utc)
+            time_str = dt.strftime("%H:%M:%S UTC")
+        else:
+            time_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+
+        parts = [
+            f"{dir_emoji} <b>Order Opened</b>",
+            "\u2501" * 19,
+        ]
+
+        # Strategy line (if available)
+        if strategy_name:
+            score_str = f" (score: {score:.1f})" if score else ""
+            parts.append(f"\U0001f3af Strategy: <b>{html.escape(strategy_name)}</b>{score_str}")
+
+        # Signal tags
+        if signal_tags:
+            parts.append(f"\U0001f4e1 Signals: {', '.join(html.escape(t) for t in signal_tags)}")
+
+        # Symbol and direction
+        parts.append(f"{dir_emoji} {symbol} {direction}")
+
+        # Execution details
+        parts.append(f"\U0001f4ca Vol: {volume:.2f} | Ticket: {ticket}")
+        parts.append(f"\U0001f4b5 Entry: {entry}")
+
+        # SL
+        if sl:
+            sl_str = f"SL: {sl}"
+            if sl_pips is not None:
+                sl_str += f" ({sl_pips} pips)"
+            parts.append(f"\U0001f6e1\ufe0f {sl_str}")
+
+        # TP
+        if tp:
+            tp_str = f"TP: {tp}"
+            if tp_pips is not None:
+                tp_str += f" ({tp_pips} pips)"
+            parts.append(f"\U0001f3af {tp_str}")
+
+        # Timestamp
+        parts.append("")
+        parts.append(f"<i>\U0001f550 {time_str}</i>")
+
+        return "\n".join(parts)[:4095]  # Telegram limit
 
     def _format_close(self, event: dict) -> str:
         """Format single order close notification in HTML."""
