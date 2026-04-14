@@ -26,7 +26,7 @@ async def seed_system_strategies(pool):
                 "trade_execution": {
                     "direction": "BUY",
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 5},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
@@ -47,7 +47,7 @@ async def seed_system_strategies(pool):
                 "trade_execution": {
                     "direction": "SELL",
                     "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 5},
                     "tp": {"type": "RR_RATIO", "value": 2.0},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.0,

@@ -406,6 +406,34 @@ class SimulatedTradeManager:
         if len(state_obj.order_rejections) > 500:
             state_obj.order_rejections = state_obj.order_rejections[-500:]
 
+    def _find_pivot_for_sl(self, side: str, state_obj: Any) -> Optional[float]:
+        """Tìm swing point hợp lệ cho PIVOT_POINT SL.
+
+        BUY → LL (Lower Low) gần nhất chưa broken.
+        SELL → HH (Higher High) gần nhất chưa broken.
+
+        Returns pivot price hoặc None nếu không tìm thấy.
+        """
+        swing_points = getattr(state_obj, 'swing_points', [])
+        if not swing_points:
+            return None
+
+        is_high = ('SELL' in side)  # SELL cần HH, BUY cần LL
+
+        for sp in reversed(swing_points):
+            if sp.get('is_high') != is_high:
+                continue
+            if sp.get('broken') is True:
+                continue
+            sp_type = sp.get('type', '').upper()
+            if is_high and sp_type != 'HH':
+                continue
+            if not is_high and sp_type != 'LL':
+                continue
+            return float(sp['price'])
+
+        return None
+
     def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
         """Calculates prices for SL and TP based on strategy config.
 
@@ -445,6 +473,29 @@ class SimulatedTradeManager:
             sl = (entry - price_delta) if 'BUY' in side else (entry + price_delta)
             logger.debug(f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=FIXED_PIPS, value={raw_value}, "
                         f"point={point_size}, delta={price_delta}, sl={sl}, side={side}")
+
+        elif sl_mode == 'PIVOT_POINT':
+            offset_pips = sl_cfg.get('offset_pips', 0)
+            offset_distance = offset_pips * point_size
+
+            pivot_price = self._find_pivot_for_sl(side, state_obj)
+            if pivot_price is None:
+                logger.warning(
+                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid swing point found "
+                    f"(side={side}, swing_points={len(getattr(state_obj, 'swing_points', []))})"
+                )
+                return None, None
+
+            if 'BUY' in side:
+                sl = pivot_price - offset_distance
+            else:
+                sl = pivot_price + offset_distance
+
+            logger.debug(
+                f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=PIVOT_POINT, "
+                f"pivot_price={pivot_price}, offset_pips={offset_pips}, offset_distance={offset_distance}, "
+                f"sl={sl}, side={side}"
+            )
 
         elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
             target_tag = sl_cfg.get('tag')
