@@ -1,187 +1,172 @@
-"""Tests for order_reporter module — format output and message generation."""
+"""Tests for order_reporter module — event-driven ORDER_CLOSED notification formatting."""
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from order_reporter import OrderStatusReporter
 
 
-class TestFormatReport:
-    """Test _format_report message generation."""
+class TestFormatClose:
+    """Test _format_close message generation for ORDER_CLOSED events."""
 
     def _make_reporter(self):
-        """Create reporter with mock dependencies (only _format_report is pure)."""
         return OrderStatusReporter(
             redis_client=None,
             sender=None,
             chat_id="test_chat",
         )
 
-    def test_empty_positions_and_trades_returns_empty(self):
+    def test_buy_order_profit(self):
         reporter = self._make_reporter()
-        result = reporter._format_report([], [])
-        assert result == ""
-
-    def test_single_open_position_buy(self):
-        reporter = self._make_reporter()
-        positions = [{
-            "ticket": 12345,
+        event = {
+            "type": "ORDER_CLOSED",
             "symbol": "XAUUSD",
-            "magic": 100,
+            "ticket": 12345,
             "direction": "BUY",
             "volume": 0.01,
             "open_price": 2300.0,
-            "current_price": 2302.5,
-            "profit": 2.5,
+            "close_price": 2305.0,
+            "profit": 5.0,
+            "commission": -0.5,
             "swap": 0.0,
-            "sl": 2295.0,
-            "tp": 2310.0,
-            "pips": 25.0,
-            "open_time": 1712500000000,
-        }]
-        result = reporter._format_report(positions, [])
+            "digits": 5,
+            "t": 1712500000000,
+        }
+        result = reporter._format_close(event)
+        assert "Order Closed" in result
         assert "XAUUSD" in result
-        assert "+2.50$" in result
-        assert "+25.0 pips" in result
-        assert "0.01" in result
-        assert "Total P/L: +2.50$" in result
-        assert "📊" in result
+        assert "BUY" in result
+        assert "4.50$" in result  # 5.0 - 0.5 = 4.5
+        assert "2300.0" in result  # entry
+        assert "2305.0" in result  # exit
+        assert "0.01" in result  # volume
+        assert "12345" in result  # ticket
 
-    def test_single_open_position_sell_negative(self):
+    def test_sell_order_loss(self):
         reporter = self._make_reporter()
-        positions = [{
-            "ticket": 99999,
+        event = {
+            "type": "ORDER_CLOSED",
             "symbol": "EURUSD",
-            "magic": 200,
+            "ticket": 99999,
             "direction": "SELL",
             "volume": 0.05,
             "open_price": 1.08500,
-            "current_price": 1.08700,
+            "close_price": 1.08700,
             "profit": -10.0,
-            "swap": -0.5,
-            "sl": 1.09000,
-            "tp": 1.08000,
-            "pips": -20.0,
-            "open_time": 1712500000000,
-        }]
-        result = reporter._format_report(positions, [])
-        assert "EURUSD" in result
-        assert "-10.50$" in result
-        assert "-20.0 pips" in result
-        assert "0.05" in result
-        assert "Total P/L: -10.50$" in result
-
-    def test_multiple_positions_total_profit(self):
-        reporter = self._make_reporter()
-        positions = [
-            {"symbol": "XAUUSD", "direction": "BUY", "volume": 0.01,
-             "profit": 5.0, "swap": 0.0, "pips": 10.0},
-            {"symbol": "BTCUSD", "direction": "SELL", "volume": 0.02,
-             "profit": -3.0, "swap": -0.5, "pips": -15.0},
-        ]
-        result = reporter._format_report(positions, [])
-        # Total should be 5.0 + (-3.0 + -0.5) = 1.5
-        assert "Total P/L: +1.50$" in result
-
-    def test_closed_trades_section(self):
-        reporter = self._make_reporter()
-        closed = [{
-            "ticket": 55555,
-            "symbol": "GBPUSD",
-            "direction": "BUY",
-            "volume": 0.02,
-            "entry_price": 1.26500,
-            "exit_price": 1.26700,
-            "profit": 4.0,
             "commission": -0.5,
             "swap": 0.0,
-            "pips": 25.5, # Explicit pips from MT5
-        }]
-        result = reporter._format_report([], closed)
-        assert "Closed (1m)" in result
-        assert "GBPUSD" in result
-        assert "+3.50$" in result
-        assert "25.5 pips" in result
-
-    def test_combined_positions_and_closed_trades(self):
-        reporter = self._make_reporter()
-        positions = [{
-            "symbol": "XAUUSD", "direction": "BUY", "volume": 0.01,
-            "profit": 2.0, "swap": 0.0, "pips": 5.0,
-        }]
-        closed = [{
-            "symbol": "EURUSD", "direction": "SELL", "volume": 0.05,
-            "entry_price": 1.08500, "exit_price": 1.08300,
-            "profit": 10.0, "commission": -1.0, "swap": 0.0,
-        }]
-        result = reporter._format_report(positions, closed)
-        assert "Open Positions" in result
-        assert "Closed (1m)" in result
-        assert "XAUUSD" in result
+            "digits": 5,
+            "t": 1712500000000,
+        }
+        result = reporter._format_close(event)
         assert "EURUSD" in result
+        assert "SELL" in result
+        assert "-10.50$" in result  # -10.0 - 0.5
+        assert "0.05" in result
 
-    def test_no_positions_shows_no_open_message(self):
+    def test_pips_calculation_buy_5digits(self):
+        """BUY 5-digit: (exit - entry) * 10000."""
         reporter = self._make_reporter()
-        closed = [{
-            "symbol": "USDJPY", "direction": "BUY", "volume": 0.1,
-            "entry_price": 150.500, "exit_price": 151.000,
-            "profit": 33.0, "commission": -2.0, "swap": 0.0,
-        }]
-        result = reporter._format_report([], closed)
-        assert "No open positions" in result
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "EURUSD",
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 1.08500,
+            "close_price": 1.08700,
+            "profit": 20.0,
+            "commission": 0,
+            "swap": 0,
+            "digits": 5,
+        }
+        result = reporter._format_close(event)
+        # (1.08700 - 1.08500) * 10000 = 20.0 pips
+        assert "20.0 pips" in result
+
+    def test_pips_calculation_sell_5digits(self):
+        """SELL 5-digit: (entry - exit) * 10000."""
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "EURUSD",
+            "direction": "SELL",
+            "volume": 0.01,
+            "open_price": 1.08700,
+            "close_price": 1.08500,
+            "profit": 20.0,
+            "commission": 0,
+            "swap": 0,
+            "digits": 5,
+        }
+        result = reporter._format_close(event)
+        # (1.08700 - 1.08500) * 10000 = 20.0 pips
+        assert "20.0 pips" in result
+
+    def test_pips_calculation_3digits(self):
+        """3-digit (JPY): (close - open) * 100 for BUY."""
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "USDJPY",
+            "direction": "BUY",
+            "volume": 0.1,
+            "open_price": 150.500,
+            "close_price": 151.000,
+            "profit": 33.0,
+            "commission": 0,
+            "swap": 0,
+            "digits": 3,
+        }
+        result = reporter._format_close(event)
+        # (151.000 - 150.500) * 100 = 50.0 pips
+        assert "50.0 pips" in result
+
+    def test_net_profit_includes_commission_swap(self):
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "XAUUSD",
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 2300.0,
+            "close_price": 2302.0,
+            "profit": 2.0,
+            "commission": -0.5,
+            "swap": -0.3,
+            "digits": 5,
+        }
+        result = reporter._format_close(event)
+        # net = 2.0 - 0.5 - 0.3 = 1.2
+        assert "1.20$" in result
 
     def test_message_under_telegram_limit(self):
         reporter = self._make_reporter()
-        # Create many positions
-        positions = [
-            {"symbol": f"SYM{i}", "direction": "BUY", "volume": 0.01,
-             "profit": float(i), "swap": 0.0, "pips": float(i)}
-            for i in range(50)
-        ]
-        result = reporter._format_report(positions, [])
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "X" * 100,  # very long symbol
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 100.0,
+            "close_price": 100.0,
+            "profit": 0.0,
+            "commission": 0.0,
+            "swap": 0.0,
+            "digits": 5,
+        }
+        result = reporter._format_close(event)
         assert len(result) <= 4095
 
-class TestWaitForResponse:
-    """Test _wait_for_response handles pubsub message retrieval and timeout correctly."""
-
-    @pytest.mark.asyncio
-    async def test_wait_for_response_timeout_returns_empty(self):
-        reporter = OrderStatusReporter(
-            redis_client=None,
-            sender=None,
-            chat_id="test_chat",
-            response_timeout=0.1
-        )
-        
-        import time
-        from unittest.mock import AsyncMock
-        
-        mock_pubsub = AsyncMock()
-        mock_pubsub.get_message.return_value = None
-        
-        start_time = time.time()
-        result = await reporter._wait_for_response(mock_pubsub, "POSITION_REPORT", "positions")
-        duration = time.time() - start_time
-        
-        assert result == []
-        assert duration >= 0.1
-        assert duration < 0.5  # Ensure it doesn't hang indefinitely
-
-    @pytest.mark.asyncio
-    async def test_wait_for_response_gets_message(self):
-        reporter = OrderStatusReporter(
-            redis_client=None,
-            sender=None,
-            chat_id="test_chat",
-            response_timeout=1.0
-        )
-        
-        from unittest.mock import AsyncMock
-        import json
-        
-        mock_pubsub = AsyncMock()
-        mock_pubsub.get_message.return_value = {
-            "type": "message",
-            "data": json.dumps({"type": "POSITION_REPORT", "positions": ["test_pos"]})
+    def test_html_escape_in_symbol(self):
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "EUR<TEST>",  # should be escaped
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 1.0,
+            "close_price": 1.0,
+            "profit": 0.0,
+            "commission": 0.0,
+            "swap": 0.0,
+            "digits": 5,
         }
-        
-        result = await reporter._wait_for_response(mock_pubsub, "POSITION_REPORT", "positions")
-        
-        assert result == ["test_pos"]
+        result = reporter._format_close(event)
+        assert "&lt;TEST&gt;" in result

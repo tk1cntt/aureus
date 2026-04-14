@@ -79,10 +79,9 @@ async def run_notifier():
             redis_client=r,
             sender=order_sender,
             chat_id=default_chat_id,
-            interval=60,
         )
         reporter_task = asyncio.create_task(reporter.run())
-        logger.info("Order Status Reporter started (60s interval, separate bot)")
+        logger.info("Order Status Reporter started (event-driven, separate bot)")
     else:
         if not order_bot_token:
             logger.info("TELEGRAM_ORDER_BOT_TOKEN not set — Order Status Reporter disabled")

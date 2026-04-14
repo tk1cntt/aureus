@@ -1,18 +1,13 @@
 """
-Order Status Reporter — polls MT5 positions and trade history,
-sends consolidated Telegram reports every 60 seconds.
+Order Status Reporter — listens for ORDER_CLOSED events from MT5 via Gateway
+and sends individual Telegram notifications when trades close.
 
-Sends two commands to EA via Gateway:
-1. REQUEST_POSITIONS → receives POSITION_REPORT (open positions)
-2. REQUEST_TRADE_HISTORY → receives TRADE_HISTORY (recently closed orders)
-
-Then formats a single message and sends to Telegram.
+Event-driven: no polling, no interval. Each closed trade triggers an immediate notification.
 """
 import asyncio
 import json
 import html
 import logging
-import time
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
@@ -23,190 +18,95 @@ logger = logging.getLogger(__name__)
 
 
 class OrderStatusReporter:
-    """Periodically polls MT5 order status and sends Telegram reports."""
+    """Listens for ORDER_CLOSED events on aureus:mt5:events and sends Telegram alerts."""
 
     def __init__(
         self,
         redis_client: redis.Redis,
         sender: TelegramSender,
         chat_id: str,
-        interval: int = 60,
-        response_timeout: float = 10.0,
     ):
         self.redis = redis_client
         self.sender = sender
         self.chat_id = chat_id
-        self.interval = interval
-        self.response_timeout = response_timeout
 
     async def run(self):
-        """Main loop: report every {interval} seconds."""
-        logger.info(f"OrderStatusReporter started — interval={self.interval}s, chat={self.chat_id}")
-        while True:
-            try:
-                await self._report_cycle()
-            except Exception as e:
-                logger.error(f"Report cycle error: {e}", exc_info=True)
-            await asyncio.sleep(self.interval)
-
-    async def _report_cycle(self):
-        """Single report cycle: request data, format, send."""
-        # Subscribe to mt5 events BEFORE sending commands
+        """Main loop: subscribe to mt5 events and forward ORDER_CLOSED to Telegram."""
         pubsub = self.redis.pubsub()
         await pubsub.subscribe("aureus:mt5:events")
+        logger.info("OrderStatusReporter started — listening for ORDER_CLOSED events")
 
         try:
-            # 1. Request open positions
-            positions = await self._request_positions(pubsub)
-
-            # 2. Request recently closed trades (last 60 seconds)
-            closed_trades = await self._request_trade_history(pubsub)
-
-            # 3. Format message
-            message = self._format_report(positions, closed_trades)
-
-            # 4. Send to Telegram (skip if nothing to report)
-            if message:
-                success = await self.sender.send_message(self.chat_id, message)
-                if success:
-                    logger.info(f"Order report sent: {len(positions)} positions, {len(closed_trades)} closed")
-                else:
-                    logger.warning("Failed to send order report to Telegram")
+            async for message in pubsub.listen():
+                if message["type"] != "message":
+                    continue
+                try:
+                    event = json.loads(message["data"])
+                    if event.get("type") == "ORDER_CLOSED":
+                        msg = self._format_close(event)
+                        if msg:
+                            success = await self.sender.send_message(self.chat_id, msg)
+                            if success:
+                                logger.info(
+                                    f"Order close notification sent: {event.get('symbol')} "
+                                    f"ticket={event.get('ticket')} profit={event.get('profit')}"
+                                )
+                            else:
+                                logger.warning("Failed to send order close notification to Telegram")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in mt5 event: {e}")
+                except Exception as e:
+                    logger.error(f"Error processing mt5 event: {e}", exc_info=True)
+        except asyncio.CancelledError:
+            logger.info("OrderStatusReporter cancelled")
+            raise
         finally:
             await pubsub.unsubscribe("aureus:mt5:events")
             await pubsub.close()
 
-    async def _request_positions(self, pubsub) -> list:
-        """Send REQUEST_POSITIONS command and wait for POSITION_REPORT response."""
-        cmd = json.dumps({"type": "REQUEST_POSITIONS", "symbol": ""})
-        await self.redis.publish("aureus:mt5:commands", cmd)
-        logger.debug("Sent REQUEST_POSITIONS command")
+    def _format_close(self, event: dict) -> str:
+        """Format single order close notification in HTML."""
+        symbol = html.escape(str(event.get("symbol", "?")))
+        direction = event.get("direction", "?")
+        volume = event.get("volume", 0.0)
+        profit = event.get("profit", 0.0)
+        commission = event.get("commission", 0.0)
+        swap = event.get("swap", 0.0)
+        net = profit + commission + swap
+        entry = event.get("open_price", 0.0)
+        exit_p = event.get("close_price", 0.0)
+        ticket = event.get("ticket", 0)
+        close_time_ms = event.get("t", 0)
 
-        return await self._wait_for_response(pubsub, "POSITION_REPORT", "positions")
+        # Pips calculation
+        digits = event.get("digits", 5)
+        if digits >= 4:
+            # Standard pairs (5 digits → 0.00001 per pip)
+            pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
+        else:
+            # JPY pairs / indices (3 digits → 0.01 per pip, or integer for indices)
+            pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
 
-    async def _request_trade_history(self, pubsub) -> list:
-        """Send REQUEST_TRADE_HISTORY for last 60 seconds and wait for response."""
-        now_ms = int(time.time() * 1000)
-        from_ms = now_ms - (self.interval * 1000)
+        dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
+        result_emoji = "\u2705" if net >= 0 else "\u274c"
+        net_sign = "+" if net >= 0 else ""
+        pips_sign = "+" if pips >= 0 else ""
 
-        cmd = json.dumps({
-            "type": "REQUEST_TRADE_HISTORY",
-            "from_time": from_ms,
-            "to_time": now_ms,
-            "magic_number": 0,
-            "symbol": "",
-        })
-        await self.redis.publish("aureus:mt5:commands", cmd)
-        logger.debug("Sent REQUEST_TRADE_HISTORY command")
-
-        return await self._wait_for_response(pubsub, "TRADE_HISTORY", "trades")
-
-    async def _wait_for_response(self, pubsub, expected_type: str, data_key: str) -> list:
-        """Wait for a specific event type on pubsub, with timeout."""
-        deadline = time.time() + self.response_timeout
-
-        while time.time() < deadline:
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message and message["type"] == "message":
-                try:
-                    event = json.loads(message["data"])
-                    if event.get("type") == expected_type:
-                        return event.get(data_key, [])
-                except (json.JSONDecodeError, KeyError):
-                    continue
-
-        logger.warning(f"Timeout waiting for {expected_type} response")
-        return []
-
-    def _format_report(self, positions: list, closed_trades: list) -> str:
-        """Format consolidated report message in HTML."""
-        if not positions and not closed_trades:
-            return ""
+        # Time formatting
+        if close_time_ms:
+            dt = datetime.fromtimestamp(close_time_ms / 1000, tz=timezone.utc)
+            time_str = dt.strftime("%H:%M:%S UTC")
+        else:
+            time_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
         parts = [
-            "📊 <b>MT5 Order Report</b>",
-            "━━━━━━━━━━━━━━━━━━━",
+            f"{result_emoji} <b>Order Closed</b>",
+            "\u2501" * 19,
+            f"{dir_emoji} {symbol} {direction}",
+            f"\U0001f4b0 {net_sign}{net:.2f}$ ({pips_sign}{pips:.1f} pips)",
+            f"\U0001f4ca Vol: {volume:.2f} | Ticket: {ticket}",
+            f"\U0001f4c8 Entry: {entry} \u2192 Exit: {exit_p}",
+            "",
+            f"<i>\U0001f550 {time_str}</i>",
         ]
-
-        # Open positions section
-        if positions:
-            parts.append("")
-            parts.append("🟢 <b>Open Positions:</b>")
-
-            total_profit = 0.0
-            for pos in positions:
-                symbol = html.escape(str(pos.get("symbol", "?")))
-                profit = pos.get("profit", 0.0)
-                swap = pos.get("swap", 0.0)
-                net_profit = profit + swap
-                pips = pos.get("pips", 0.0)
-                volume = pos.get("volume", 0.0)
-                direction = pos.get("direction", "?")
-
-                total_profit += net_profit
-
-                # Direction emoji
-                dir_emoji = "🟢" if direction == "BUY" else "🔴"
-
-                # Profit sign
-                profit_sign = "+" if net_profit >= 0 else ""
-                pips_sign = "+" if pips >= 0 else ""
-
-                parts.append(
-                    f"{dir_emoji} {symbol}: {profit_sign}{net_profit:.2f}$ "
-                    f"({pips_sign}{pips:.1f} pips) - {volume:.2f}"
-                )
-
-            # Total P/L
-            parts.append("")
-            total_sign = "+" if total_profit >= 0 else ""
-            total_emoji = "💰" if total_profit >= 0 else "📉"
-            parts.append(f"{total_emoji} <b>Total P/L: {total_sign}{total_profit:.2f}$</b>")
-        else:
-            parts.append("")
-            parts.append("📭 <i>No open positions</i>")
-
-        # Recently closed section
-        if closed_trades:
-            parts.append("")
-            parts.append("❌ <b>Closed (1m):</b>")
-
-            for trade in closed_trades:
-                symbol = html.escape(str(trade.get("symbol", "?")))
-                profit = trade.get("profit", 0.0)
-                commission = trade.get("commission", 0.0)
-                swap = trade.get("swap", 0.0)
-                net = profit + commission + swap
-                volume = trade.get("volume", 0.0)
-                direction = trade.get("direction", "?")
-
-                # Calculate pips from entry/exit
-                entry = trade.get("entry_price", 0.0)
-                exit_p = trade.get("exit_price", 0.0)
-                pips = 0.0
-                
-                if "pips" in trade and trade["pips"] is not None:
-                    pips = trade["pips"]
-                elif entry > 0 and exit_p > 0:
-                    # Rough pip calc backwards compatibility
-                    if entry > 50:  # JPY pairs, indices
-                        pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
-                    else:
-                        pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
-
-                net_sign = "+" if net >= 0 else ""
-                pips_sign = "+" if pips >= 0 else ""
-                result_emoji = "✅" if net >= 0 else "❌"
-
-                parts.append(
-                    f"{result_emoji} {symbol}: {net_sign}{net:.2f}$ "
-                    f"({pips_sign}{pips:.1f} pips) - {volume:.2f}"
-                )
-
-        # Timestamp
-        now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
-        parts.append("")
-        parts.append(f"<i>🕐 {now_str} UTC</i>")
-
-        message = "\n".join(parts)
-        return message[:4095]  # Telegram limit
+        return "\n".join(parts)[:4095]  # Telegram limit
