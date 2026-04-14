@@ -1006,10 +1006,8 @@ void ExecuteOpenOrder(const string &raw)
    string comment   = ParseJSONString(raw, "comment");
    string sizeMode  = ParseJSONString(raw, "size_mode");
    double riskAmount = ParseJSONDouble(raw, "risk_amount");
-   
-   // PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, TP %.5f → SL %.5f",
-   //                      sizeMode, riskAmount, volume, tp, sl);
-   
+   double tpRRRatio  = ParseJSONDouble(raw, "tp_rr_ratio");
+
    price = NormalizeDouble(price, _Digits);
    sl = NormalizeDouble(sl, _Digits);
    tp = NormalizeDouble(tp, _Digits);
@@ -1129,7 +1127,18 @@ void ExecuteOpenOrder(const string &raw)
            if (direction == "BUY" && (ask - sl) < minDistance) sl = ask - minDistance;
            else if (direction == "SELL" && (sl - bid) < minDistance) sl = bid + minDistance;
        }
-       if (tp > 0.0)
+
+       // Recalculate TP from actual entry price when tp_rr_ratio is provided
+       // This ensures correct RR ratio even when market moves between trigger and execution
+       if (tpRRRatio > 0.0 && sl > 0.0)
+       {
+           double actualEntry = (direction == "BUY") ? ask : bid;
+           double slDistance = MathAbs(actualEntry - sl);
+           tp = (direction == "BUY") ? (actualEntry + slDistance * tpRRRatio) : (actualEntry - slDistance * tpRRRatio);
+           PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
+                       symbol, tpRRRatio, slDistance, tp);
+       }
+       else if (tp > 0.0)
        {
            if (direction == "BUY" && (tp - ask) < minDistance) tp = ask + minDistance;
            else if (direction == "SELL" && (bid - tp) < minDistance) tp = bid - minDistance;
