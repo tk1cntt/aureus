@@ -25,11 +25,11 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
-                    "sl": {"type": "PIVOT_POINT", "offset_pips": 5},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
-                    "capital_risk_pct": 1.0,
                     "early_exits": ["choch_down"]
                 }
             }
@@ -46,11 +46,11 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
-                    "size": 0.01,
-                    "sl": {"type": "PIVOT_POINT", "offset_pips": 5},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
-                    "capital_risk_pct": 1.0,
                     "early_exits": ["choch_up"]
                 }
             }
@@ -68,9 +68,10 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_down"]
@@ -90,9 +91,10 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_up"]
@@ -111,9 +113,10 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.5,
                     "early_exits": ["choch_down"]
@@ -132,9 +135,10 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 4.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.5,
                     "early_exits": ["choch_up"]
@@ -154,9 +158,10 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_down"]
@@ -176,11 +181,204 @@ async def seed_system_strategies(pool):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
-                    "size": 0.01,
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 2.0},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
+            "name": "CISD_CONSENSUS_BULL",
+            "description": "CISD M30 + M15 + M5 đồng thuận bullish, trigger entry khi CISD M1 bullish fire. Multi-frame consensus strategy.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [
+                    {
+                        "type": "cisd_consensus",
+                        "required_direction": "bullish",
+                        "required_tfs": ["m30", "m15", "m5"]
+                    }
+                ],
+                "sequence": [
+                    {"tag": "cisd_bull", "weight": 4.0, "required": True, "max_wait": 20, "reset_signals": ["cisd_bear", "choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "CISD_CONSENSUS_BEAR",
+            "description": "CISD M30 + M15 + M5 đồng thuận bearish, trigger entry khi CISD M1 bearish fire. Multi-frame consensus strategy.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [
+                    {
+                        "type": "cisd_consensus",
+                        "required_direction": "bearish",
+                        "required_tfs": ["m30", "m15", "m5"]
+                    }
+                ],
+                "sequence": [
+                    {"tag": "cisd_bear", "weight": 4.0, "required": True, "max_wait": 20, "reset_signals": ["cisd_bull", "choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_PULLBACK_BULL",
+            "description": "Vào lệnh BUY tại 50% retracement của candle trigger. Entry type LIMIT, entry_method PULLBACK_50.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "PULLBACK_50",
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_OB_EDGE_BULL",
+            "description": "Vào lệnh BUY tại cạnh OB (bottom). Entry type LIMIT, entry_method OB_EDGE.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "OB_EDGE",
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_EMA_TOUCH_BULL",
+            "description": "Vào lệnh BUY khi giá chạm EMA 21. Entry type LIMIT, entry_method EMA_TOUCH period 21.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "EMA_TOUCH",
+                    "entry_value": 21,
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_FIXED_OFFSET_BULL",
+            "description": "Vào lệnh BUY dưới giá hiện tại 15 pips. Entry type LIMIT, entry_method FIXED_OFFSET.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "FIXED_OFFSET",
+                    "entry_value": 15,
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "FIXED_BUDGET_BULL",
+            "description": "Vào lệnh BUY với budget cố định $50. SL dựa trên pivot point, MT5 tự tính lot size.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "FIXED_BUDGET_BEAR",
+            "description": "Vào lệnh SELL với budget cố định $50. SL dựa trên pivot point, MT5 tự tính lot size.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "early_exits": ["choch_up"]
                 }
             }
