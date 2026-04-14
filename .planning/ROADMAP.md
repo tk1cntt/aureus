@@ -383,7 +383,7 @@ Plans:
 **Goal:** Chuyển TP RR ratio mặc định của tất cả strategy xuống 1.5. Bổ sung cơ chế FIXED_BUDGET ($50) tự tính lot size dựa trên SL distance và entry price khi gửi lệnh sang MT5.
 **Requirements**: RR-01, ORDER-02, ORDER-03, ORDER-04, STRAT-03
 **Depends on:** Phase 41
-**Plans:** 4 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 42-01-PLAN.md — Backtest RR ratio fix: simulated_orders.py default 2.0 → 1.5
