@@ -188,6 +188,11 @@ class OrderStatusReporter:
             pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
             tp_pips = round(abs(tp - entry) / pip, 1)
 
+        # Actual RR ratio from real entry
+        rr_ratio = None
+        if sl_pips and sl_pips > 0 and tp_pips:
+            rr_ratio = round(tp_pips / sl_pips, 2)
+
         dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
 
         # Time formatting
@@ -231,6 +236,10 @@ class OrderStatusReporter:
             if tp_pips is not None:
                 tp_str += f" ({tp_pips} pips)"
             parts.append(f"\U0001f3af {tp_str}")
+
+        # Actual RR ratio
+        if rr_ratio is not None:
+            parts.append(f"\U0001f4c8 RR: 1:{rr_ratio}")
 
         # Timestamp
         parts.append("")
