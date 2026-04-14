@@ -37,6 +37,10 @@ class CISDMultiTFSignal(BaseSignal):
 
     Exact MQL4 port: scan newest→oldest for flip with break.
     Returns immediately on first match (most recent flip that got broken).
+
+    Persistent state: remembers last known status per TF so that
+    when no new flip is detected, the previous status is carried forward
+    instead of disappearing from the snapshot.
     """
     signal_type = SignalType.INDICATOR
 
@@ -47,6 +51,9 @@ class CISDMultiTFSignal(BaseSignal):
             tf_configs = [{"tf": tf, "max_bars": 24} for tf in DEFAULT_TFS]
 
         self.tf_configs = []
+        # Persistent status cache: {"m5": "bullish", "m15": "bearish", ...}
+        self._last_status: Dict[str, str] = {}
+
         for cfg in tf_configs:
             tf = str(cfg.get("tf", "")).upper()
             if tf in TF_LOWER:
@@ -54,6 +61,7 @@ class CISDMultiTFSignal(BaseSignal):
                     "tf": tf,
                     "max_bars": int(cfg.get("max_bars", 24)),
                 })
+                self._last_status[TF_LOWER[tf]] = None
 
     def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
         if df is None or len(df) < 2:
@@ -66,7 +74,7 @@ class CISDMultiTFSignal(BaseSignal):
         return None
 
     def _process_tf(self, df, state_obj, tf, cfg):
-        """Process a single timeframe — scan and emit status."""
+        """Process a single timeframe — scan and always emit current status."""
         tf_lower = TF_LOWER.get(tf, tf.lower())
         ht_df = resample_to_tf(df, tf)
 
@@ -80,8 +88,13 @@ class CISDMultiTFSignal(BaseSignal):
         signal = self._scan_cisd(completed, max_bars)
 
         if signal != 0:
+            # New flip detected — update persistent cache
             direction = "bullish" if signal > 0 else "bearish"
+            self._last_status[tf_lower] = direction
             self._emit_status(state_obj, tf, tf_lower, direction)
+        elif self._last_status.get(tf_lower):
+            # No new flip — carry forward last known status
+            self._emit_status(state_obj, tf, tf_lower, self._last_status[tf_lower])
 
     @staticmethod
     def _scan_cisd(completed: pd.DataFrame, max_bars: int = 24) -> int:
