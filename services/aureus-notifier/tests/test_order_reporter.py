@@ -170,3 +170,43 @@ class TestFormatClose:
         }
         result = reporter._format_close(event)
         assert "&lt;TEST&gt;" in result
+
+    def test_pips_na_when_entry_zero(self):
+        """EA gửi open_price=0 khi không query được position → pips = N/A."""
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "BTCUSD",
+            "ticket": 1589935582,
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 0.0,
+            "close_price": 74285.22,
+            "profit": -1.8,
+            "commission": 0.0,
+            "swap": 0.0,
+            "digits": 5,
+        }
+        result = reporter._format_close(event)
+        assert "N/A" in result
+        assert "-1.80$" in result
+        # pips text should be exactly "N/A" — no numeric value
+        assert "(N/A)" in result
+
+    def test_pips_from_explicit_field(self):
+        """Khi EA gửi sẵn pips trong event → dùng giá trị đó."""
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "XAUUSD",
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 0.0,  # entry bị 0
+            "close_price": 2305.0,
+            "profit": 5.0,
+            "commission": 0,
+            "swap": 0,
+            "pips": 50.0,  # EA đã tính sẵn
+        }
+        result = reporter._format_close(event)
+        assert "+50.0 pips" in result

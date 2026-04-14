@@ -80,17 +80,22 @@ class OrderStatusReporter:
 
         # Pips calculation
         digits = event.get("digits", 5)
-        if digits >= 4:
-            # Standard pairs (5 digits → 0.00001 per pip)
-            pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
-        else:
-            # JPY pairs / indices (3 digits → 0.01 per pip, or integer for indices)
-            pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
+        pips = None
+
+        # Check for explicit pips from gateway/EA (TRADE_HISTORY includes it)
+        if "pips" in event and event["pips"] is not None:
+            pips = float(event["pips"])
+        elif entry > 0 and exit_p > 0:
+            # Calculate from price difference
+            if digits >= 4:
+                pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
+            else:
+                pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
 
         dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
         result_emoji = "\u2705" if net >= 0 else "\u274c"
         net_sign = "+" if net >= 0 else ""
-        pips_sign = "+" if pips >= 0 else ""
+        pips_text = f"{pips:+.1f} pips" if pips is not None else "N/A"
 
         # Time formatting
         if close_time_ms:
@@ -103,7 +108,7 @@ class OrderStatusReporter:
             f"{result_emoji} <b>Order Closed</b>",
             "\u2501" * 19,
             f"{dir_emoji} {symbol} {direction}",
-            f"\U0001f4b0 {net_sign}{net:.2f}$ ({pips_sign}{pips:.1f} pips)",
+            f"\U0001f4b0 {net_sign}{net:.2f}$ ({pips_text})",
             f"\U0001f4ca Vol: {volume:.2f} | Ticket: {ticket}",
             f"\U0001f4c8 Entry: {entry} \u2192 Exit: {exit_p}",
             "",
