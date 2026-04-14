@@ -96,6 +96,7 @@ class TestDecisionTraceSchema(unittest.TestCase):
         context["decision_status"] = "ACCEPTED"
         context["order_plan_snapshot"] = {
             "entry_type": "MARKET",
+            "entry_method": "CURRENT",
             "entry_policy": "IMMEDIATE",
             "sl_mode": "PRICE",
             "sl_value": 2298.5,
@@ -157,7 +158,8 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
             {
                 "strategy": "S1_CHOCH_OB_RETEST_TREND",
                 "strategy_id": "S1",
-                "origin_timestamp": 1710000000,
+                # origin_timestamp must be within 5s of current candle to pass stale check
+                "origin_timestamp": 1710000058,
                 "order_plan": {
                     "entry_type": "MARKET",
                     "entry_policy": "IMMEDIATE",
@@ -173,8 +175,9 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
         rejection = state.order_rejections[0]
         self.assertEqual(rejection["reason_code"], "ORDER_PLAN_INCOMPLETE")
         self.assertIn("size_value", rejection["missing_order_plan_keys"])
+        # Trigger lacks sl/tp config → tp_value stays missing; sl_value gets enriched from default FIXED_PIPS
         self.assertNotIn("sl_value", rejection["missing_order_plan_keys"])
-        self.assertNotIn("tp_value", rejection["missing_order_plan_keys"])
+        self.assertIn("tp_value", rejection["missing_order_plan_keys"])
         self.assertEqual(len(state.simulated_orders), 0)
         self.assertEqual(len(fake_redis.stream_events), 1)
         self.assertEqual(fake_redis.stream_events[0][1]["type"], "ORDER_REJECTED")

@@ -27,7 +27,7 @@ input int      InpTimerMs            = 100;                      // Timer interv
 input int      InpMaxSlippage        = 20;                       // Max slippage for market orders (points)
 input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
-
+int LOG_LEVEL = 2; //1:Info - 2:Debug
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
 //+------------------------------------------------------------------+
@@ -872,6 +872,8 @@ double CalculateLotFromBudget(string symbol, string direction,
                                double entryPriceRequested, double &slRequested,
                                double riskAmount)
 {
+   // PrintFormat("[AureusProvider] [%s] CalculateLotFromBudget: %.2f → %.2f → %.2f",
+   //                      symbol, entryPriceRequested, slRequested, riskAmount);
    if(riskAmount <= 0)
       return 0.0;
 
@@ -1004,17 +1006,41 @@ void ExecuteOpenOrder(const string &raw)
    string comment   = ParseJSONString(raw, "comment");
    string sizeMode  = ParseJSONString(raw, "size_mode");
    double riskAmount = ParseJSONDouble(raw, "risk_amount");
+   
+   // PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, TP %.5f → SL %.5f",
+   //                      sizeMode, riskAmount, volume, tp, sl);
+   
+   price = NormalizeDouble(price, _Digits);
+   sl = NormalizeDouble(sl, _Digits);
+   tp = NormalizeDouble(tp, _Digits);
 
    // When RISK_FIXED_AMOUNT, volume will be calculated on MT5 side
-   // Fallback to InpRiskFixedAmountBudget if risk_amount missing/zero
-   if(StringFind(StringToUpper(sizeMode), "RISK_FIXED_AMOUNT") >= 0)
+   riskAmount = InpRiskFixedAmountBudget;
+   
+   // Calculate volume on MT5 side if RISK_FIXED_AMOUNT mode
+   // Note: sl is passed by reference — may be widened if lot > maxVol
+   if(StringFind(sizeMode, "RISK_FIXED_AMOUNT") >= 0 && sl > 0)
    {
-      if(riskAmount <= 0) riskAmount = InpRiskFixedAmountBudget;
+      double slBefore = sl;
+      volume = CalculateLotFromBudget(symbol, direction, price, sl, riskAmount);
+      if(volume > 0)
+      {
+         if(sl != slBefore)
+            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL widened %.5f → %.5f",
+                        symbol, riskAmount, volume, slBefore, sl);
+         else
+            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL=%.5f",
+                        symbol, riskAmount, volume, sl);
+      }
+      else
+      {
+         PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: cannot calculate lot (SL too wide for budget $%.2f)",
+                     symbol, riskAmount);
+      }
    }
-   bool calcVolumeOnMT5 = (StringFind(StringToUpper(sizeMode), "RISK_FIXED_AMOUNT") >= 0 && riskAmount > 0);
 
    // Validate required fields (volume check skipped if MT5 will calculate)
-   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || (!calcVolumeOnMT5 && volume <= 0))
+   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || volume <= 0)
    {
       SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
       return;
@@ -1053,40 +1079,11 @@ void ExecuteOpenOrder(const string &raw)
 
    request.symbol   = symbol;
 
-   // Calculate volume on MT5 side if RISK_FIXED_AMOUNT mode
-   // Note: sl is passed by reference — may be widened if lot > maxVol
-   if(calcVolumeOnMT5 && sl > 0)
-   {
-      double slBefore = sl;
-      volume = CalculateLotFromBudget(symbol, direction, price, sl, riskAmount);
-      if(volume > 0)
-      {
-         if(sl != slBefore)
-            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL widened %.5f → %.5f",
-                        symbol, riskAmount, volume, slBefore, sl);
-         else
-            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL=%.5f",
-                        symbol, riskAmount, volume, sl);
-      }
-      else
-      {
-         PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: cannot calculate lot (SL too wide for budget $%.2f)",
-                     symbol, riskAmount);
-      }
-   }
-
    // Normalize volume
    double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
    double step_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
    if(step_vol > 0) volume = MathRound(volume / step_vol) * step_vol;
-
-   // Reject trade if volume calculation failed (SL too wide for budget)
-   if(calcVolumeOnMT5 && volume <= 0)
-   {
-      PrintFormat("[AureusProvider] [%s] Trade rejected: cannot fit lot within volume limits", symbol);
-      return;
-   }
 
    if(volume < min_vol) volume = min_vol;
    if(volume > max_vol) volume = max_vol;
@@ -1198,14 +1195,15 @@ void ExecuteOpenOrder(const string &raw)
    else if(fillType == ORDER_FILLING_IOC) fillingStr = "IOC";
    else if(fillType == ORDER_FILLING_RETURN) fillingStr = "RETURN";
 
-   PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
-      symbol, direction, orderType,
-      request.volume, minVol, maxVol,
-      askPrice, bidPrice,
-      request.sl, request.tp,
-      stopLevel, symDigits, fillingStr);
+   if (LOG_LEVEL == 2)
+      PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
+         symbol, direction, orderType,
+         request.volume, minVol, maxVol,
+         askPrice, bidPrice,
+         request.sl, request.tp,
+         stopLevel, symDigits, fillingStr);
 
-   if(orderType == "MARKET")
+   if(orderType == "MARKET" && LOG_LEVEL == 2)
    {
       if(direction == "BUY")
          PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
