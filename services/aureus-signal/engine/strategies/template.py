@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from engine.logging_common import get_logger
-from engine.snapshot_utils import VALID_ENTRY_TYPES, VALID_SIZE_MODES
+from engine.snapshot_utils import VALID_ENTRY_TYPES, VALID_SIZE_MODES, VALID_ENTRY_METHODS
 
 from .base import BaseStrategy
 
@@ -113,6 +113,29 @@ class TemplateStrategy(BaseStrategy):
                     details.append(f"EMA({period}) slope mismatch: need {required_slope}, slope={slope_val}")
                 else:
                     details.append(f"EMA({period}) slope OK: {slope_val}")
+
+            elif f_type == "cisd_consensus":
+                required_direction = f.get("required_direction", "bullish").lower()
+                required_tfs = f.get("required_tfs", ["m30", "m15", "m5"])
+
+                # Read CISD status from transient_signals (emitted by CISDMultiTFSignal)
+                # Tags: cisd_m5_bullish, cisd_m15_bearish, cisd_m30_bullish, etc.
+                transient = getattr(state_obj, "transient_signals", {}) or {}
+                missing_tfs = []
+                for tf in required_tfs:
+                    tag = f"cisd_{tf}_{required_direction}"
+                    if tag not in transient:
+                        missing_tfs.append(tf)
+
+                if missing_tfs:
+                    present_tags = [k for k in transient if k.startswith("cisd_")]
+                    failed.append(f"cisd_consensus:{required_direction}")
+                    details.append(
+                        f"CISD consensus failed: need {required_direction} on {required_tfs}, "
+                        f"missing {missing_tfs}. Present CISD tags: {present_tags}"
+                    )
+                else:
+                    details.append(f"CISD consensus OK: {required_direction} on {required_tfs}")
 
         return {
             "passed": len(failed) == 0,
@@ -948,6 +971,12 @@ class TemplateStrategy(BaseStrategy):
         if entry_type not in VALID_ENTRY_TYPES:
             entry_type = "MARKET"
 
+        # Entry method
+        entry_method = te.get("entry_method", exit_config.get("entry_method", "CURRENT"))
+        if entry_method not in VALID_ENTRY_METHODS:
+            entry_method = "CURRENT"
+        entry_value = te.get("entry_value", exit_config.get("entry_value"))
+
         # SL: trade_execution > exit_config
         sl = te.get("sl") or exit_config.get("sl")
 
@@ -966,6 +995,8 @@ class TemplateStrategy(BaseStrategy):
         return {
             "intent_id": intent.get("intent_id"),
             "entry_type": entry_type,
+            "entry_method": entry_method,
+            "entry_value": entry_value,
             "entry_policy": te.get("entry_policy", exit_config.get("entry_policy", "IMMEDIATE")),
             "direction": intent.get("direction", self.direction),
             "size": size_value,

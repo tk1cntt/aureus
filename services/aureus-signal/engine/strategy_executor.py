@@ -488,10 +488,15 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             from engine.signal_event_publisher import publish_strategy_match
                             for res in strategy_results:
                                 # SL/TP configs are propagated to the root of res by registry.py
-                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, res)
+                                order_plan = res.get('order_plan', {})
+                                entry_method = order_plan.get('entry_method', 'CURRENT')
+                                entry_value = order_plan.get('entry_value')
+                                _side = res.get('side', 'BUY')
+                                computed_ep = trade_manager._calculate_entry_price(_side, executor_state, entry_method, entry_value)
+                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, res, entry_price_override=computed_ep)
                                 res['sl_absolute'] = abs_sl
                                 res['tp_absolute'] = abs_tp
-                                res['entry_price'] = str(payload.get("close", 0))
+                                res['entry_price'] = str(computed_ep)
                                 await publish_strategy_match(r, symbol, res, active_signals=signals_snapshot)
 
                         if execution_mode == "simulated":
