@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from engine.orders import get_point_size, get_default_sl_pips
+from engine.snapshot_utils import VALID_ENTRY_METHODS
 
 logger = get_logger(__name__)
 class SimulatedTradeManager:
@@ -67,15 +68,7 @@ class SimulatedTradeManager:
 
             logger.info(f"🚀 NEW Simulated Trade Setup Detected: {trace_id}")
             
-            # 3. Advanced SL/TP Logic
-            exit_config = t.get('exit_config', {})
-            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config)
-            
-            if sl is None or tp is None:
-                logger.warning(f"Failed to calculate SL/TP for {trace_id}, skipping.")
-                continue
-                
-            # 4. Determine Side
+            # 3. Determine Side (before SL/TP and entry_price)
             side = t.get('side')
             if not side:
                 name = t['strategy'].lower()
@@ -83,14 +76,28 @@ class SimulatedTradeManager:
                 elif 'down' in name or 'bear' in name: side = 'SELL'
                 else: side = 'BUY'
 
-            # 5. Create Order Object
+            # 4. Compute entry_price from order_plan entry_method
+            order_plan = t.get('order_plan', {})
+            entry_method = order_plan.get('entry_method', 'CURRENT')
+            entry_value = order_plan.get('entry_value')
+            entry_price = self._calculate_entry_price(side, state_obj, entry_method, entry_value)
+
+            # 5. Advanced SL/TP Logic
+            exit_config = t.get('exit_config', {})
+            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config, entry_price_override=entry_price)
+            
+            if sl is None or tp is None:
+                logger.warning(f"Failed to calculate SL/TP for {trace_id}, skipping.")
+                continue
+
+            # 6. Create Order Object
             order = {
                 "trace_id": trace_id,
                 "symbol": symbol,
                 "strategy_id": strat_id,
                 "strategy_name": t['strategy'],
                 "side": side.upper(),
-                "entry_price": float(state_obj.last_candle['c']),
+                "entry_price": float(entry_price),
                 "sl": float(sl),
                 "tp": float(tp),
                 "volume": 0.01, # Default fixed volume for backtest
@@ -113,7 +120,7 @@ class SimulatedTradeManager:
 
         return new_orders_count
 
-    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any]):
+    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any], entry_price_override: float = None):
         """
         Calculates prices for SL and TP based on strategy config (Ported from Live Engine).
 
@@ -124,13 +131,17 @@ class SimulatedTradeManager:
 
         TP value priority:
         1. Strategy config tp.value (if specified)
-        2. RR mode: default ratio 2.0 (if tp.value not specified)
+        2. RR mode: default ratio 1.5 (if tp.value not specified)
         3. FIXED_PIPS mode: REJECTED if tp.value not specified
 
         Config keys: both 'type' and 'mode' are accepted for backward compatibility.
         Point size is loaded from symbols.json (single source of truth).
+
+        Args:
+            entry_price_override: Pre-computed entry price (for LIMIT/STOP).
+                                  If None, uses current candle close.
         """
-        entry = float(state_obj.last_candle['c'])
+        entry = entry_price_override if entry_price_override is not None else float(state_obj.last_candle['c'])
         sl = None
         tp = None
 
@@ -194,7 +205,7 @@ class SimulatedTradeManager:
         # 2. Take Profit Logic
         tp_mode = tp_cfg.get('mode', 'RR')
         if tp_mode == 'RR':
-            ratio = tp_cfg.get('value', 2.0)
+            ratio = tp_cfg.get('value', 1.5)  # default RR 1.5 per D-01, D-03
             if sl is None:
                 logger.warning(
                     f"[_calculate_sl_tp] TP mode=RR but sl is None — "
@@ -216,6 +227,76 @@ class SimulatedTradeManager:
             tp = (entry + price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry - price_delta)
 
         return sl, tp
+
+    def _calculate_entry_price(
+        self, side: str, state_obj: Any,
+        entry_method: str = "CURRENT",
+        entry_value: Any = None,
+    ) -> float:
+        """Tính entry price theo phương án được config."""
+        current_price = float(state_obj.last_candle['c'])
+        method = str(entry_method or "CURRENT").upper()
+
+        if method == "PULLBACK_50":
+            return self._entry_pullback_50(side, state_obj, current_price)
+        elif method == "OB_EDGE":
+            return self._entry_ob_edge(side, state_obj, current_price)
+        elif method == "EMA_TOUCH":
+            return self._entry_ema_touch(side, state_obj, entry_value, current_price)
+        elif method == "FIXED_OFFSET":
+            return self._entry_fixed_offset(side, state_obj, entry_value, current_price)
+
+        return current_price
+
+    def _entry_pullback_50(self, side: str, state_obj: Any, fallback: float) -> float:
+        candle = state_obj.last_candle
+        h, l = float(candle['h']), float(candle['l'])
+        return l + (h - l) * 0.5
+
+    def _entry_ob_edge(self, side: str, state_obj: Any, fallback: float) -> float:
+        obs = getattr(state_obj, 'obs', [])
+        if not obs:
+            return fallback
+        for ob in reversed(obs):
+            if ob.get('mitigated') or ob.get('broken'):
+                continue
+            ob_type = str(ob.get('ob_type', '')).upper()
+            if side == 'BUY' and ob_type == 'BULLISH':
+                return float(ob.get('bottom', fallback))
+            elif side == 'SELL' and ob_type == 'BEARISH':
+                return float(ob.get('top', fallback))
+        return fallback
+
+    def _entry_ema_touch(self, side: str, state_obj: Any, period_value: Any, fallback: float) -> float:
+        period = 21
+        if isinstance(period_value, (int, float)):
+            period = int(period_value)
+        elif isinstance(period_value, str):
+            try:
+                period = int(float(period_value))
+            except (ValueError, TypeError):
+                pass
+        emas = getattr(state_obj, 'emas', {})
+        ema_data = emas.get(period)
+        if ema_data is None:
+            return fallback
+        ema_val = ema_data.get('value') if isinstance(ema_data, dict) else ema_data
+        return float(ema_val) if ema_val is not None else fallback
+
+    def _entry_fixed_offset(self, side: str, state_obj: Any, pips_value: Any, fallback: float) -> float:
+        pips = None
+        if isinstance(pips_value, (int, float)):
+            pips = float(pips_value)
+        elif isinstance(pips_value, str):
+            try:
+                pips = float(pips_value)
+            except (ValueError, TypeError):
+                pass
+        if pips is None or pips <= 0:
+            return fallback
+        point_size = get_point_size(state_obj.symbol)
+        offset = pips * point_size
+        return fallback - offset if side == 'BUY' else fallback + offset
 
     def check_sl_tp(self, order: Dict[str, Any], candle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
