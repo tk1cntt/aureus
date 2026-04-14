@@ -101,19 +101,9 @@ class OrderStatusReporter:
                     evt_type = event.get("type")
 
                     if evt_type == "ORDER_OPENED":
-                        # Fire-and-forget: lookup DB for strategy info then send
                         asyncio.create_task(self._handle_order_opened(event))
                     elif evt_type == "ORDER_CLOSED":
-                        msg = self._format_close(event)
-                        if msg:
-                            success = await self.sender.send_message(self.chat_id, msg)
-                            if success:
-                                logger.info(
-                                    f"Order close notification sent: {event.get('symbol')} "
-                                    f"ticket={event.get('ticket')} profit={event.get('profit')}"
-                                )
-                            else:
-                                logger.warning("Failed to send order close notification to Telegram")
+                        asyncio.create_task(self._handle_order_closed(event))
                 except json.JSONDecodeError as e:
                     logger.warning(f"Invalid JSON in mt5 event: {e}")
                 except Exception as e:
@@ -149,6 +139,29 @@ class OrderStatusReporter:
                     logger.warning("Failed to send order opened notification to Telegram")
         except Exception as e:
             logger.error(f"Error handling ORDER_OPENED: {e}", exc_info=True)
+
+    async def _handle_order_closed(self, event: dict):
+        """Handle ORDER_CLOSED: lookup journal for strategy info and send Telegram notification."""
+        try:
+            trace_id = event.get("trace_id", "")
+            journal = None
+
+            # Try DB lookup for strategy info and original levels
+            if trace_id:
+                journal = await self._lookup_journal(trace_id)
+
+            msg = self._format_close(event, journal)
+            if msg:
+                success = await self.sender.send_message(self.chat_id, msg)
+                if success:
+                    logger.info(
+                        f"Order close notification sent: {event.get('symbol')} "
+                        f"ticket={event.get('ticket')} profit={event.get('profit')}"
+                    )
+                else:
+                    logger.warning("Failed to send order close notification to Telegram")
+        except Exception as e:
+            logger.error(f"Error handling ORDER_CLOSED: {e}", exc_info=True)
 
     def _format_opened(self, event: dict, journal: dict | None) -> str:
         """Format single order opened notification in HTML."""
@@ -247,19 +260,26 @@ class OrderStatusReporter:
 
         return "\n".join(parts)[:4095]  # Telegram limit
 
-    def _format_close(self, event: dict) -> str:
-        """Format single order close notification in HTML."""
-        symbol = html.escape(str(event.get("symbol", "?")))
-        direction = event.get("direction", "?")
-        volume = event.get("volume", 0.0)
+    def _format_close(self, event: dict, journal: dict | None) -> str:
+        """Format single order close notification in HTML with strategy info."""
+        symbol = html.escape(str(event.get("symbol", journal.get("symbol") if journal else "?")))
+        direction = event.get("direction", journal.get("direction") if journal else "?")
+        volume = event.get("volume", journal.get("lot_size") if journal else 0.0)
         profit = event.get("profit", 0.0)
         commission = event.get("commission", 0.0)
         swap = event.get("swap", 0.0)
         net = profit + commission + swap
+        # Use real entry price from journal (entry_price from DB) instead of event (which may be 0)
         entry = event.get("open_price", 0.0)
+        if entry == 0.0 and journal:
+            entry = journal.get("entry_price", 0.0)
         exit_p = event.get("close_price", 0.0)
-        ticket = event.get("ticket", 0)
+        ticket = event.get("ticket", journal.get("ticket") if journal else 0)
         close_time_ms = event.get("t", 0)
+
+        # Strategy info from journal
+        strategy_name = journal.get("strategy_name", "") if journal else ""
+        score = journal.get("score") if journal else None
 
         # Pips calculation
         digits = event.get("digits", 5)
@@ -274,6 +294,19 @@ class OrderStatusReporter:
                 pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
             else:
                 pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
+
+        # SL/TP from journal for RR calculation
+        sl = journal.get("sl_initial") if journal else None
+        tp = journal.get("tp_initial") if journal else None
+
+        # Calculate RR ratio from original SL/TP
+        rr_ratio = None
+        if entry > 0 and sl and sl > 0:
+            pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
+            sl_pips = abs(entry - sl) / pip
+            tp_pips = abs(tp - entry) / pip if tp and tp > 0 else None
+            if tp_pips and sl_pips > 0:
+                rr_ratio = round(tp_pips / sl_pips, 2)
 
         dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
         result_emoji = "\u2705" if net >= 0 else "\u274c"
@@ -290,11 +323,28 @@ class OrderStatusReporter:
         parts = [
             f"{result_emoji} <b>Order Closed</b>",
             "\u2501" * 19,
-            f"{dir_emoji} {symbol} {direction}",
-            f"\U0001f4b0 {net_sign}{net:.2f}$ ({pips_text})",
-            f"\U0001f4ca Vol: {volume:.2f} | Ticket: {ticket}",
-            f"\U0001f4c8 Entry: {entry} \u2192 Exit: {exit_p}",
-            "",
-            f"<i>\U0001f550 {time_str}</i>",
         ]
+
+        # Strategy line (if available)
+        if strategy_name:
+            score_str = f" (score: {score:.1f})" if score else ""
+            parts.append(f"\U0001f3af Strategy: <b>{html.escape(strategy_name)}</b>{score_str}")
+
+        # Symbol, direction, P/L
+        parts.append(f"{dir_emoji} {symbol} {direction}")
+        parts.append(f"\U0001f4b0 {net_sign}{net:.2f}$ ({pips_text})")
+
+        # Execution details
+        parts.append(f"\U0001f4ca Vol: {volume:.2f} | Ticket: {ticket}")
+        if entry > 0:
+            parts.append(f"\U0001f4c8 Entry: {entry} \u2192 Exit: {exit_p}")
+
+        # RR ratio (from original SL/TP)
+        if rr_ratio is not None:
+            parts.append(f"\U0001f4c9 RR: 1:{rr_ratio}")
+
+        # Timestamp
+        parts.append("")
+        parts.append(f"<i>\U0001f550 {time_str}</i>")
+
         return "\n".join(parts)[:4095]  # Telegram limit
