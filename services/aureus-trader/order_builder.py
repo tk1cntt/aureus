@@ -5,6 +5,21 @@ Maps strategy match event fields to the Phase 28 D-01 OPEN_ORDER
 command schema and generates deterministic idempotency keys.
 """
 import hashlib
+import os
+
+
+# RISK_FIXED_AMOUNT default budget (configurable via .env)
+def _get_default_risk_budget() -> float:
+    """Read RISK_FIXED_AMOUNT_BUDGET from .env, fallback to 50.0."""
+    env_val = os.getenv("RISK_FIXED_AMOUNT_BUDGET")
+    if env_val:
+        try:
+            val = float(env_val)
+            if val > 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    return 50.0
 
 
 def generate_cmd_id(event: dict) -> str:
@@ -59,7 +74,7 @@ def build_order_command(match_event: dict) -> dict:
     # MT5 will calculate actual lot size from real entry price and SL distance
     if size_mode == "RISK_FIXED_AMOUNT":
         command["size_mode"] = size_mode
-        command["risk_amount"] = risk_amount if risk_amount else 50.0
+        command["risk_amount"] = risk_amount if risk_amount else _get_default_risk_budget()
         # Set volume=0 as placeholder — MT5 will calculate real lot
         command["volume"] = 0
 

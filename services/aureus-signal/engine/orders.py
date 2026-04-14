@@ -9,6 +9,20 @@ from engine.snapshot_utils import REQUIRED_ORDER_PLAN_KEYS, VALID_ENTRY_TYPES, V
 # Load symbol metadata from symbols.json — single source of truth for symbol parameters.
 # When you change values in symbols.json, all calculations automatically use the new values.
 _SYMBOLS_CONFIG: Dict[str, dict] = {}
+
+# RISK_FIXED_AMOUNT default budget (configurable via .env)
+_DEFAULT_RISK_BUDGET: float = 50.0  # fallback if env not set
+def _get_default_risk_budget() -> float:
+    """Read RISK_FIXED_AMOUNT_BUDGET from .env, fallback to 50.0."""
+    env_val = os.getenv("RISK_FIXED_AMOUNT_BUDGET")
+    if env_val:
+        try:
+            val = float(env_val)
+            if val > 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    return _DEFAULT_RISK_BUDGET
 _SYMBOLS_CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'symbols.json')
 try:
     with open(_SYMBOLS_CONFIG_PATH, 'r') as f:
@@ -277,7 +291,7 @@ class SimulatedTradeManager:
             size_mode = order_plan_snapshot.get("size_mode", "FIXED_UNITS")
             size_value = order_plan_snapshot.get("size_value")
             if size_mode == "RISK_FIXED_AMOUNT":
-                risk_amount = size_value if isinstance(size_value, (int, float)) and size_value > 0 else 50.0
+                risk_amount = size_value if isinstance(size_value, (int, float)) and size_value > 0 else _get_default_risk_budget()
                 order_plan_snapshot["risk_amount"] = risk_amount
                 order_plan_snapshot["size_value"] = 0  # Placeholder — MT5 calculates real lot
                 logger.info(f"[{symbol}] RISK_FIXED_AMOUNT: budget=${risk_amount} — lot will be calculated on MT5")
