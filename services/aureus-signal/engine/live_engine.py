@@ -93,7 +93,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
 
     for signal_name, signal_calc in signals.items():
         try:
-            logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
+            # logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             if res:
                 emitted_tag = res.get("tag", signal_name)
@@ -109,7 +109,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
 
     state.current_signal = record.to_dict()
     state.log_signal_normalize_add(record)
-    logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
+    # logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
 
 def _read_ab_mode() -> str:
     raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()

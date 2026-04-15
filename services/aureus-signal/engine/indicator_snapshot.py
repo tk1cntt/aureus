@@ -17,9 +17,10 @@ def build_indicator_snapshot_for_telegram(state) -> Dict[str, Any]:
         state: SymbolState instance (after signal calculation for current candle)
 
     Returns:
-        Dict with keys: emas, atr_14, vol_sma_20, htf_trend
+        Dict with keys: emas, atr_14, vol_sma_20, htf_trend, digits
         All values are primitive types (no enums, no complex objects).
     """
+    from engine.orders import get_symbol_digits
     transient = getattr(state, "transient_signals", None) or {}
 
     def _get_ema_val(period: int):
@@ -67,4 +68,5 @@ def build_indicator_snapshot_for_telegram(state) -> Dict[str, Any]:
         "vol_sma_20": getattr(state, "vol_sma_20", None),
         "htf_trend": getattr(state, "htf_trend", None),
         "cisd_mtf": cisd_mtf if cisd_mtf else None,
+        "digits": get_symbol_digits(state.symbol) if hasattr(state, 'symbol') else 2,
     }

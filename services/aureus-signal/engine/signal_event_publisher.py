@@ -70,6 +70,7 @@ async def publish_strategy_match(
         "size_value": strategy_result.get("size_value", strategy_result.get("size")),
         "size_mode": strategy_result.get("size_mode", "FIXED_UNITS"),
         "risk_amount": strategy_result.get("risk_amount"),
+        "tp_rr_ratio": strategy_result.get("tp_rr_ratio"),
         "magic_number": strategy_result.get("magic_number"),
         "sl": strategy_result.get("sl_absolute") or strategy_result.get("sl"),
         "tp": strategy_result.get("tp_absolute") or strategy_result.get("tp"),

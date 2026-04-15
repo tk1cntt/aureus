@@ -10,7 +10,7 @@ Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thốn
 
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Aureus** (4362 symbols, 9820 relationships, 206 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Aureus** (4715 symbols, 10956 relationships, 222 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

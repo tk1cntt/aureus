@@ -32,12 +32,12 @@ int LOG_LEVEL = 2; //1:Info - 2:Debug
 //| Per-Symbol State                                                   |
 //+------------------------------------------------------------------+
 struct SymbolContext
-{
-   string   symbol;
-   datetime lastCandleTime;
-   int      candlesSent;
-   bool     initialBackfillDone;
-};
+  {
+   string            symbol;
+   datetime          lastCandleTime;
+   int               candlesSent;
+   bool              initialBackfillDone;
+  };
 
 //+------------------------------------------------------------------+
 //| Global Variables                                                   |
@@ -62,21 +62,21 @@ int           g_ordersFailed;          // Failed order count
 //| Initialization                                                     |
 //+------------------------------------------------------------------+
 int OnInit()
-{
-   //--- Parse InpSymbols
+  {
+//--- Parse InpSymbols
    string parts[];
    g_symbolCount = StringSplit(InpSymbols, ',', parts);
 
    if(g_symbolCount <= 0)
-   {
+     {
       PrintFormat("[AureusProvider] ERROR: No symbols configured in InpSymbols!");
       return INIT_FAILED;
-   }
+     }
 
    ArrayResize(g_contexts, g_symbolCount);
 
    for(int i = 0; i < g_symbolCount; i++)
-   {
+     {
       string sym = parts[i];
       StringTrimLeft(sym);
       StringTrimRight(sym);
@@ -87,74 +87,74 @@ int OnInit()
 
       // Ensure the symbol is in MarketWatch (needed for CopyRates on non-chart symbols)
       if(!SymbolSelect(g_contexts[i].symbol, true))
-      {
+        {
          PrintFormat("[AureusProvider] WARNING: Could not select symbol %s in MarketWatch",
                      g_contexts[i].symbol);
-      }
-   }
+        }
+     }
 
    PrintFormat("[AureusProvider] Configured %d symbols: %s", g_symbolCount, InpSymbols);
    PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
-              InpSendTicks ? "ON" : "OFF", _Symbol);
+               InpSendTicks ? "ON" : "OFF", _Symbol);
 
-   //--- Configure socket
+//--- Configure socket
    g_socket.SetHost(InpGatewayHost);
    g_socket.SetPort(InpGatewayPort);
    g_socket.SetReconnectDelay(3);
    g_socket.SetConnectTimeout(3000);
    g_socket.SetSendTimeout(1000);
 
-   //--- Initialize state
+//--- Initialize state
    g_lastTickMs         = 0;
    g_ticksSent          = 0;
    g_wasDisconnected    = false;
    g_disconnectTime     = 0;
 
-   //--- Initialize command dedup
+//--- Initialize command dedup
    ArrayResize(g_processedCmdIds, InpMaxCmdIdHistory);
    g_cmdIdCount = 0;
 
-   //--- Initialize order stats
+//--- Initialize order stats
    g_ordersExecuted = 0;
    g_ordersFailed   = 0;
 
-   //--- Attempt initial connection
+//--- Attempt initial connection
    if(g_socket.Connect())
-   {
+     {
       // PrintFormat("[AureusProvider] Connected to %s:%d", InpGatewayHost, InpGatewayPort);
 
       //--- Initialize last candle time for each symbol
       for(int i = 0; i < g_symbolCount; i++)
-      {
+        {
          datetime barTimes[];
          if(CopyTime(g_contexts[i].symbol, PERIOD_M1, 0, 1, barTimes) > 0)
             g_contexts[i].lastCandleTime = barTimes[0];
-      }
+        }
 
       PrintFormat("[AureusProvider] Passive mode enabled. Waiting for recovery commands.");
-   }
+     }
    else
-   {
+     {
       PrintFormat("[AureusProvider] Initial connection failed â€” will retry on timer");
       g_wasDisconnected = true;
       g_disconnectTime  = TimeCurrent();
-   }
+     }
 
-   //--- Start timer
+//--- Start timer
    EventSetMillisecondTimer(InpTimerMs);
 
-   //--- Chart comment
+//--- Chart comment
    Comment(StringFormat("Aureus Provider v3.0 [%d symbols â†’ %s:%d]",
-           g_symbolCount, InpGatewayHost, InpGatewayPort));
+                        g_symbolCount, InpGatewayHost, InpGatewayPort));
 
    return INIT_SUCCEEDED;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Deinitialization                                                   |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
-{
+  {
    EventKillTimer();
    g_socket.Disconnect();
 
@@ -164,70 +164,71 @@ void OnDeinit(const int reason)
 
    PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
                g_ticksSent, totalCandles, g_ordersExecuted, g_ordersFailed);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Find context index for a symbol (-1 if not found)                 |
 //+------------------------------------------------------------------+
 int FindContextIndex(string symbol)
-{
+  {
    for(int i = 0; i < g_symbolCount; i++)
-   {
+     {
       if(g_contexts[i].symbol == symbol)
          return i;
-   }
+     }
    return -1;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Build Tick JSON                                                    |
 //+------------------------------------------------------------------+
 string BuildTickJSON(string symbol, const MqlTick &tick)
-{
+  {
    long timeMs = tick.time_msc;
 
    return StringFormat(
-      "{\"type\":\"TICK\",\"symbol\":\"%s\",\"t\":%lld,\"bid\":%.5f,\"ask\":%.5f,\"vol\":%.2f}",
-      symbol, timeMs, tick.bid, tick.ask, tick.volume_real > 0 ? tick.volume_real : (double)tick.volume
-   );
-}
+             "{\"type\":\"TICK\",\"symbol\":\"%s\",\"t\":%lld,\"bid\":%.5f,\"ask\":%.5f,\"vol\":%.2f}",
+             symbol, timeMs, tick.bid, tick.ask, tick.volume_real > 0 ? tick.volume_real : (double)tick.volume
+          );
+  }
 
 //+------------------------------------------------------------------+
 //| Build Candle JSON                                                  |
 //+------------------------------------------------------------------+
 string BuildCandleJSON(string symbol, const MqlRates &rate, string timeframe)
-{
+  {
    long timeMs = (long)rate.time * 1000;
 
    return StringFormat(
-      "{\"type\":\"CANDLE\",\"symbol\":\"%s\",\"t\":%lld,\"o\":%.5f,\"h\":%.5f,\"l\":%.5f,\"c\":%.5f,\"v\":%.2f,\"tf\":\"%s\"}",
-      symbol, timeMs, rate.open, rate.high, rate.low, rate.close,
-      rate.real_volume > 0 ? (double)rate.real_volume : (double)rate.tick_volume,
-      timeframe
-   );
-}
+             "{\"type\":\"CANDLE\",\"symbol\":\"%s\",\"t\":%lld,\"o\":%.5f,\"h\":%.5f,\"l\":%.5f,\"c\":%.5f,\"v\":%.2f,\"tf\":\"%s\"}",
+             symbol, timeMs, rate.open, rate.high, rate.low, rate.close,
+             rate.real_volume > 0 ? (double)rate.real_volume : (double)rate.tick_volume,
+             timeframe
+          );
+  }
 
 //+------------------------------------------------------------------+
 //| Build Backfill JSON (array of candles)                            |
 //+------------------------------------------------------------------+
 string BuildBackfillJSON(string symbol, MqlRates &rates[], int count)
-{
+  {
    string json = StringFormat("{\"type\":\"BACKFILL\",\"symbol\":\"%s\",\"candles\":[", symbol);
 
    for(int i = 0; i < count; i++)
-   {
-      if(i > 0) json += ",";
+     {
+      if(i > 0)
+         json += ",";
       long timeMs = (long)rates[i].time * 1000;
       json += StringFormat(
-         "{\"t\":%lld,\"o\":%.5f,\"h\":%.5f,\"l\":%.5f,\"c\":%.5f,\"v\":%.2f,\"tf\":\"M1\"}",
-         timeMs, rates[i].open, rates[i].high, rates[i].low, rates[i].close,
-         rates[i].real_volume > 0 ? (double)rates[i].real_volume : (double)rates[i].tick_volume
-      );
-   }
+                 "{\"t\":%lld,\"o\":%.5f,\"h\":%.5f,\"l\":%.5f,\"c\":%.5f,\"v\":%.2f,\"tf\":\"M1\"}",
+                 timeMs, rates[i].open, rates[i].high, rates[i].low, rates[i].close,
+                 rates[i].real_volume > 0 ? (double)rates[i].real_volume : (double)rates[i].tick_volume
+              );
+     }
 
    json += "]}";
    return json;
-}
+  }
 //+------------------------------------------------------------------+
 //| Build TRADE_HISTORY JSON (array of closed trades)                 |
 //+------------------------------------------------------------------+
@@ -235,16 +236,17 @@ string BuildBackfillJSON(string symbol, MqlRates &rates[], int count)
 //| Build JSON with all open positions                                 |
 //+------------------------------------------------------------------+
 string BuildPositionsJSON()
-{
+  {
    string json = "{\"type\":\"POSITION_REPORT\",\"positions\":[";
    int total = PositionsTotal();
    bool first = true;
    double totalProfit = 0.0;
 
    for(int i = 0; i < total; i++)
-   {
+     {
       ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
+      if(ticket == 0)
+         continue;
 
       string symbol = PositionGetString(POSITION_SYMBOL);
       long magic = PositionGetInteger(POSITION_MAGIC);
@@ -271,45 +273,46 @@ string BuildPositionsJSON()
 
       totalProfit += profit + swap;
 
-      if(!first) json += ",";
+      if(!first)
+         json += ",";
       first = false;
 
       json += StringFormat(
-         "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic\":%lld,"
-         "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
-         "\"current_price\":%.5f,\"profit\":%.2f,\"swap\":%.2f,"
-         "\"sl\":%.5f,\"tp\":%.5f,\"pips\":%.1f,\"open_time\":%lld}",
-         ticket, symbol, magic, direction, volume, openPrice,
-         currentPrice, profit, swap, sl, tp, pips, (long)openTime * 1000);
-   }
+                 "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic\":%lld,"
+                 "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
+                 "\"current_price\":%.5f,\"profit\":%.2f,\"swap\":%.2f,"
+                 "\"sl\":%.5f,\"tp\":%.5f,\"pips\":%.1f,\"open_time\":%lld}",
+                 ticket, symbol, magic, direction, volume, openPrice,
+                 currentPrice, profit, swap, sl, tp, pips, (long)openTime * 1000);
+     }
 
    json += StringFormat("],\"total\":%d,\"total_profit\":%.2f,\"t\":%lld}",
-            total, totalProfit, (long)TimeCurrent() * 1000);
+                        total, totalProfit, (long)TimeCurrent() * 1000);
    return json;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Execute REQUEST_POSITIONS command                                   |
 //+------------------------------------------------------------------+
 void ExecutePositionsRequest()
-{
+  {
    string json = BuildPositionsJSON();
    if(g_socket.SendJSON(json))
       PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
    else
       PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Build JSON with trade history (closed deals)                       |
 //+------------------------------------------------------------------+
 string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagic=0, string filterSymbol="")
-{
+  {
    if(!HistorySelect(fromTime, toTime))
-   {
+     {
       PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
       return "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"HistorySelect failed\"}";
-   }
+     }
 
    int totalDeals = HistoryDealsTotal();
    string json = "{\"type\":\"TRADE_HISTORY\",\"trades\":[";
@@ -317,9 +320,10 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
    int count = 0;
 
    for(int i = 0; i < totalDeals; i++)
-   {
+     {
       ulong ticket = HistoryDealGetTicket(i);
-      if(ticket == 0) continue;
+      if(ticket == 0)
+         continue;
 
       // Only position close deals
       if(HistoryDealGetInteger(ticket, DEAL_ENTRY) != DEAL_ENTRY_OUT)
@@ -336,7 +340,8 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
          continue;
 
       // Skip manual trades
-      if(magic == 0) continue;
+      if(magic == 0)
+         continue;
 
       long   posTicket   = HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
       double volume      = HistoryDealGetDouble(ticket, DEAL_VOLUME);
@@ -354,13 +359,14 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
       double sl = 0.0;
       double tp = 0.0;
       if(HistoryOrderSelect(posTicket))
-      {
+        {
          openPrice = HistoryOrderGetDouble(posTicket, ORDER_PRICE_OPEN);
          sl = HistoryOrderGetDouble(posTicket, ORDER_SL);
          tp = HistoryOrderGetDouble(posTicket, ORDER_TP);
-      }
+        }
 
-      if(!first) json += ",";
+      if(!first)
+         json += ",";
       first = false;
       count++;
 
@@ -372,35 +378,37 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
       double mult = (digits == 3 || digits == 5) ? MathPow(10, digits - 1) : MathPow(10, digits);
       double pips = (closePrice - openPrice) * mult;
       // dealType == DEAL_TYPE_BUY means the closing deal is a BUY -> original position was SELL
-      if(dealType == DEAL_TYPE_BUY) pips = -pips;
+      if(dealType == DEAL_TYPE_BUY)
+         pips = -pips;
 
       json += StringFormat(
-         "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic_number\":%lld,"
-         "\"direction\":\"%s\",\"entry_price\":%.5f,\"exit_price\":%.5f,"
-         "\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"commission\":%.2f,"
-         "\"swap\":%.2f,\"profit\":%.2f,\"open_time\":%lld,\"close_time\":%lld,"
-         "\"digits\":%lld,\"pips\":%.1f}",
-         posTicket, sym, magic, direction, openPrice, closePrice,
-         sl, tp, volume, commission, swap, profit, openTimeMs, closeTimeMs,
-         digits, pips
-      );
-   }
+                 "{\"ticket\":%lld,\"symbol\":\"%s\",\"magic_number\":%lld,"
+                 "\"direction\":\"%s\",\"entry_price\":%.5f,\"exit_price\":%.5f,"
+                 "\"sl\":%.5f,\"tp\":%.5f,\"volume\":%.2f,\"commission\":%.2f,"
+                 "\"swap\":%.2f,\"profit\":%.2f,\"open_time\":%lld,\"close_time\":%lld,"
+                 "\"digits\":%lld,\"pips\":%.1f}",
+                 posTicket, sym, magic, direction, openPrice, closePrice,
+                 sl, tp, volume, commission, swap, profit, openTimeMs, closeTimeMs,
+                 digits, pips
+              );
+     }
 
    json += StringFormat("],\"count\":%d,\"from_time\":%lld,\"to_time\":%lld}", count, (long)fromTime * 1000, (long)toTime * 1000);
    return json;
-}
+  }
 
 
 //+------------------------------------------------------------------+
 //| Check and send new M1 candle for a specific symbol               |
 //+------------------------------------------------------------------+
 bool CheckAndSendCandleForSymbol(int ctxIndex)
-{
-   if(!InpSendCandles) return false;
+  {
+   if(!InpSendCandles)
+      return false;
 
    string sym = g_contexts[ctxIndex].symbol;
 
-   // Get current and previous bar times
+// Get current and previous bar times
    datetime barTimes[];
    if(CopyTime(sym, PERIOD_M1, 0, 2, barTimes) < 2)
       return false;
@@ -408,32 +416,33 @@ bool CheckAndSendCandleForSymbol(int ctxIndex)
    datetime currentBarTime = barTimes[1]; // newest bar
    datetime prevBarTime    = barTimes[0]; // previous bar
 
-   // New candle detected?
+// New candle detected?
    if(prevBarTime <= g_contexts[ctxIndex].lastCandleTime)
       return false;
 
-   // The closed candle is the one at prevBarTime â€” get its OHLCV
+// The closed candle is the one at prevBarTime â€” get its OHLCV
    MqlRates rates[];
    if(CopyRates(sym, PERIOD_M1, 1, 1, rates) < 1)
       return false;
 
    string json = BuildCandleJSON(sym, rates[0], "M1");
    if(g_socket.SendJSON(json))
-   {
+     {
       g_contexts[ctxIndex].lastCandleTime = prevBarTime;
       g_contexts[ctxIndex].candlesSent++;
       return true;
-   }
+     }
 
    return false;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Initial backfill for a specific symbol                            |
 //+------------------------------------------------------------------+
 void DoInitialBackfillForSymbol(int ctxIndex)
-{
-   if(!InpSendCandles) return;
+  {
+   if(!InpSendCandles)
+      return;
 
    string sym = g_contexts[ctxIndex].symbol;
    int totalBars = InpInitialBars;
@@ -442,17 +451,17 @@ void DoInitialBackfillForSymbol(int ctxIndex)
    MqlRates allRates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, totalBars, allRates);
    if(copied <= 0)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] Initial CopyRates failed: %d", sym, GetLastError());
       return;
-   }
+     }
 
-   // Send in chunks of 200
+// Send in chunks of 200
    int chunkSize = 200;
    int totalSent = 0;
 
    for(int start = 0; start < copied; start += chunkSize)
-   {
+     {
       int end = MathMin(start + chunkSize, copied);
       int count = end - start;
 
@@ -463,36 +472,36 @@ void DoInitialBackfillForSymbol(int ctxIndex)
 
       string json = BuildBackfillJSON(sym, chunk, count);
       if(g_socket.SendJSON(json))
-      {
+        {
          totalSent += count;
          PrintFormat("[AureusProvider] [%s] BACKFILL chunk %d-%d sent (%d candles)",
                      sym, start + 1, end, count);
-      }
+        }
       else
-      {
+        {
          // PrintFormat("[AureusProvider] [%s] BACKFILL chunk send failed at %d", sym, start);
          break;
-      }
+        }
 
       Sleep(100);
-   }
+     }
 
    if(totalSent > 0 && copied > 0)
-   {
+     {
       g_contexts[ctxIndex].lastCandleTime = allRates[copied - 1].time;
       g_contexts[ctxIndex].candlesSent += totalSent;
       PrintFormat("[AureusProvider] [%s] Initial backfill complete: %d/%d candles (%s to %s)",
                   sym, totalSent, copied,
                   TimeToString(allRates[0].time),
                   TimeToString(allRates[copied - 1].time));
-   }
-}
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Perform backfill of missing candles (Range-based) for a symbol   |
 //+------------------------------------------------------------------+
 void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
-{
+  {
    if(!InpSendCandles)
       return;
 
@@ -501,317 +510,336 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
    datetime end   = (toTime > 0) ? toTime : TimeCurrent();
 
    if(start == 0)
-   {
+     {
       if(g_contexts[ctxIndex].lastCandleTime == 0)
-      {
+        {
          PrintFormat("[AureusProvider] [%s] No lastCandleTime â€” skipping backfill", sym);
          return;
-      }
+        }
       start = g_contexts[ctxIndex].lastCandleTime;
-   }
+     }
 
    int missedSeconds = (int)(end - start);
    int missedBars = missedSeconds / 60;
 
    if(missedBars <= 0)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] No candle gap detected", sym);
       return;
-   }
+     }
 
    if(toTime == 0 && missedBars > InpMaxBackfillBars)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] Gap too large (%d bars), limiting to %d",
                   sym, missedBars, InpMaxBackfillBars);
       missedBars = InpMaxBackfillBars;
       start = end - (missedBars * 60);
-   }
+     }
 
    PrintFormat("[AureusProvider] [%s] Backfilling %d M1 bars from %s to %s",
                sym, missedBars, TimeToString(start), TimeToString(end));
 
    MqlRates rates[];
-   // Use time bounds directly instead of iBarShift to force MT5 to download/sync history
+// Use time bounds directly instead of iBarShift to force MT5 to download/sync history
    int copied = CopyRates(sym, PERIOD_M1, start, end, rates);
    if(copied <= 0)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] CopyRates by time failed: %d", sym, GetLastError());
       return;
-   }
+     }
 
-   // Filter to only candles strictly in range
+// Filter to only candles strictly in range
    MqlRates filtered[];
    int filteredCount = 0;
    ArrayResize(filtered, copied);
 
    for(int i = 0; i < copied; i++)
-   {
+     {
       if(rates[i].time > start && rates[i].time <= end)
-      {
+        {
          filtered[filteredCount] = rates[i];
          filteredCount++;
-       }
-   }
+        }
+     }
 
    if(filteredCount == 0)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] No new candles to backfill in range", sym);
       return;
-   }
+     }
 
    ArrayResize(filtered, filteredCount);
 
-   // Send in chunks of 100
+// Send in chunks of 100
    int chunkSize = 100;
    for(int i = 0; i < filteredCount; i += chunkSize)
-   {
+     {
       int cnt = MathMin(chunkSize, filteredCount - i);
       MqlRates chunk[];
       ArrayResize(chunk, cnt);
-      for(int j = 0; j < cnt; j++) chunk[j] = filtered[i + j];
+      for(int j = 0; j < cnt; j++)
+         chunk[j] = filtered[i + j];
 
       string json = BuildBackfillJSON(sym, chunk, cnt);
       if(g_socket.SendJSON(json))
-      {
+        {
          if(chunk[cnt-1].time > g_contexts[ctxIndex].lastCandleTime)
             g_contexts[ctxIndex].lastCandleTime = chunk[cnt-1].time;
 
          g_contexts[ctxIndex].candlesSent += cnt;
-      }
+        }
       else
-      {
+        {
          PrintFormat("[AureusProvider] [%s] Backfill chunk send failed", sym);
          break;
-      }
-   }
+        }
+     }
 
    PrintFormat("[AureusProvider] [%s] Targeted backfill complete: %d candles sent",
                sym, filteredCount);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Perform backfill of missing candles (Count-based) for a symbol   |
 //+------------------------------------------------------------------+
 void DoBackfillCountForSymbol(int ctxIndex, int count)
-{
+  {
    if(!InpSendCandles || count <= 0)
       return;
 
    string sym = g_contexts[ctxIndex].symbol;
-   if(count > InpMaxBackfillBars) count = InpMaxBackfillBars;
+   if(count > InpMaxBackfillBars)
+      count = InpMaxBackfillBars;
 
    PrintFormat("[AureusProvider] [%s] Backfilling last %d M1 bars", sym, count);
 
    MqlRates rates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, count, rates);
    if(copied <= 0)
-   {
+     {
       PrintFormat("[AureusProvider] [%s] CopyRates failed for count backfill: %d", sym, GetLastError());
       return;
-   }
+     }
 
    int chunkSize = 100;
    for(int i = 0; i < copied; i += chunkSize)
-   {
+     {
       int currentCount = MathMin(chunkSize, copied - i);
       MqlRates chunk[];
       ArrayResize(chunk, currentCount);
-      for(int j = 0; j < currentCount; j++) chunk[j] = rates[i + j];
+      for(int j = 0; j < currentCount; j++)
+         chunk[j] = rates[i + j];
 
       string json = BuildBackfillJSON(sym, chunk, currentCount);
       if(g_socket.SendJSON(json))
-      {
+        {
          if(chunk[currentCount-1].time > g_contexts[ctxIndex].lastCandleTime)
             g_contexts[ctxIndex].lastCandleTime = chunk[currentCount-1].time;
 
          g_contexts[ctxIndex].candlesSent += currentCount;
-      }
+        }
       else
-      {
+        {
          PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed", sym);
          break;
-      }
-   }
+        }
+     }
 
    PrintFormat("[AureusProvider] [%s] Count-based backfill complete: %d candles sent", sym, copied);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Main tick handler â€” only sends ticks for chart symbol             |
 //+------------------------------------------------------------------+
 void OnTick()
-{
-   if(!InpSendTicks) return;
+  {
+   if(!InpSendTicks)
+      return;
 
-   //--- Ensure connection
+//--- Ensure connection
    if(!g_socket.IsConnected())
-   {
+     {
       if(!g_socket.EnsureConnected())
          return;
-   }
+     }
 
-   //--- Get latest tick for chart symbol
+//--- Get latest tick for chart symbol
    MqlTick lastTick;
    if(!SymbolInfoTick(_Symbol, lastTick))
       return;
 
-   //--- Dedup: skip if same timestamp as last tick
+//--- Dedup: skip if same timestamp as last tick
    if(lastTick.time_msc <= g_lastTickMs)
       return;
 
-   //--- Build and send tick JSON
+//--- Build and send tick JSON
    string tickJSON = BuildTickJSON(_Symbol, lastTick);
    if(g_socket.SendJSON(tickJSON))
-   {
+     {
       g_lastTickMs = lastTick.time_msc;
       g_ticksSent++;
-   }
-}
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Parse a simple JSON string field: "key":"value" or "key": "value" |
 //+------------------------------------------------------------------+
 string ParseJSONString(const string &raw, const string key)
-{
+  {
    string searchKey = "\"" + key + "\":";
    int pos = StringFind(raw, searchKey);
-   if(pos < 0) return "";
+   if(pos < 0)
+      return "";
 
    int startPos = pos + StringLen(searchKey);
-   // Skip whitespace between colon and opening quote
+// Skip whitespace between colon and opening quote
    while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
       startPos++;
-   // Expect opening quote
+// Expect opening quote
    if(startPos >= StringLen(raw) || StringGetCharacter(raw, startPos) != '"')
       return "";
    startPos++; // Skip opening quote
 
    int endPos = StringFind(raw, "\"", startPos);
-   if(endPos < 0) return "";
+   if(endPos < 0)
+      return "";
 
    return StringSubstr(raw, startPos, endPos - startPos);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Parse a JSON double field: "key":123.45                           |
 //+------------------------------------------------------------------+
 double ParseJSONDouble(const string &raw, const string key)
-{
+  {
    string searchKey = "\"" + key + "\":";
    int pos = StringFind(raw, searchKey);
-   if(pos < 0) return 0.0;
+   if(pos < 0)
+      return 0.0;
    int startPos = pos + StringLen(searchKey);
-   // Skip whitespace
+// Skip whitespace
    while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
       startPos++;
    int endPos = startPos;
    while(endPos < StringLen(raw))
-   {
+     {
       ushort ch = StringGetCharacter(raw, endPos);
       if(ch != '-' && ch != '.' && (ch < '0' || ch > '9'))
          break;
       endPos++;
-   }
-   if(endPos == startPos) return 0.0;
+     }
+   if(endPos == startPos)
+      return 0.0;
    return StringToDouble(StringSubstr(raw, startPos, endPos - startPos));
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Parse a JSON long (integer) field: "key":12345                    |
 //+------------------------------------------------------------------+
 long ParseJSONLong(const string &raw, const string key)
-{
+  {
    string searchKey = "\"" + key + "\":";
    int pos = StringFind(raw, searchKey);
-   if(pos < 0) return 0;
+   if(pos < 0)
+      return 0;
    int startPos = pos + StringLen(searchKey);
    while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
       startPos++;
    int endPos = startPos;
    while(endPos < StringLen(raw))
-   {
+     {
       ushort ch = StringGetCharacter(raw, endPos);
       if(ch != '-' && (ch < '0' || ch > '9'))
          break;
       endPos++;
-   }
-   if(endPos == startPos) return 0;
+     }
+   if(endPos == startPos)
+      return 0;
    return StringToInteger(StringSubstr(raw, startPos, endPos - startPos));
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Check if command ID was already processed (idempotency)           |
 //+------------------------------------------------------------------+
 bool IsDuplicateCmd(string cmdId)
-{
+  {
    for(int i = 0; i < g_cmdIdCount; i++)
-   {
+     {
       if(g_processedCmdIds[i] == cmdId)
          return true;
-   }
+     }
    return false;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Record command ID in dedup history (FIFO)                         |
 //+------------------------------------------------------------------+
 void RecordCmdId(string cmdId)
-{
+  {
    if(g_cmdIdCount >= InpMaxCmdIdHistory)
-   {
+     {
       // FIFO: shift array left, drop oldest
       for(int i = 0; i < g_cmdIdCount - 1; i++)
          g_processedCmdIds[i] = g_processedCmdIds[i + 1];
       g_cmdIdCount--;
-   }
+     }
    g_processedCmdIds[g_cmdIdCount] = cmdId;
    g_cmdIdCount++;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Send ACK response                                                  |
 //+------------------------------------------------------------------+
 void SendACK(string cmdId)
-{
+  {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
-      "{\"type\":\"ACK\",\"cmd_id\":\"%s\",\"t\":%lld}",
-      cmdId, timeMs);
+                    "{\"type\":\"ACK\",\"cmd_id\":\"%s\",\"t\":%lld}",
+                    cmdId, timeMs);
    g_socket.SendJSON(json);
    PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Send NACK response                                                 |
 //+------------------------------------------------------------------+
 void SendNACK(string cmdId, string reason)
-{
+  {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
-      "{\"type\":\"NACK\",\"cmd_id\":\"%s\",\"reason\":\"%s\",\"t\":%lld}",
-      cmdId, reason, timeMs);
+                    "{\"type\":\"NACK\",\"cmd_id\":\"%s\",\"reason\":\"%s\",\"t\":%lld}",
+                    cmdId, reason, timeMs);
    g_socket.SendJSON(json);
    PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Map trade retcode to reason string                                 |
 //+------------------------------------------------------------------+
 string RetcodeToReason(int retcode)
-{
+  {
    switch(retcode)
-   {
-      case 10019: return "INSUFFICIENT_MARGIN";
-      case 10016: return "INVALID_STOPS";
-      case 10017: return "TRADE_DISABLED";
-      case 10018: return "MARKET_CLOSED";
-      case 10006: return "REJECTED";
-      case 10015: return "INVALID_PRICE";
-      case 10014: return "INVALID_VOLUME";
-      case 10013: return "REQUEST_DENIED";
-      default:    return StringFormat("ERROR_%d", retcode);
-   }
-}
+     {
+      case 10019:
+         return "INSUFFICIENT_MARGIN";
+      case 10016:
+         return "INVALID_STOPS";
+      case 10017:
+         return "TRADE_DISABLED";
+      case 10018:
+         return "MARKET_CLOSED";
+      case 10006:
+         return "REJECTED";
+      case 10015:
+         return "INVALID_PRICE";
+      case 10014:
+         return "INVALID_VOLUME";
+      case 10013:
+         return "REQUEST_DENIED";
+      default:
+         return StringFormat("ERROR_%d", retcode);
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Push ORDER_OPENED event                                            |
@@ -819,31 +847,31 @@ string RetcodeToReason(int retcode)
 void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
                      string orderType, double volume, double openPrice,
                      double sl, double tp, long magic)
-{
+  {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
-      "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
-      "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
-      "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"t\":%lld}",
-      cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, timeMs);
+                    "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
+                    "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
+                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"t\":%lld}",
+                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, timeMs);
    g_socket.SendJSON(json);
    PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s", ticket, symbol);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Push ORDER_FAILED event                                            |
 //+------------------------------------------------------------------+
 void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
-{
+  {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
-      "{\"type\":\"ORDER_FAILED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\","
-      "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
-      cmdId, symbol, reason, retcode, timeMs);
+                    "{\"type\":\"ORDER_FAILED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\","
+                    "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
+                    cmdId, symbol, reason, retcode, timeMs);
    g_socket.SendJSON(json);
    PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
                cmdId, reason, retcode);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Push ORDER_CLOSED event                                            |
@@ -851,85 +879,117 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
                      double commission, double swap, long magic)
-{
+  {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
-      "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
-      "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
-      "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"t\":%lld}",
-      symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
-      magic, timeMs);
+                    "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
+                    "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"t\":%lld}",
+                    symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
+                    magic, timeMs);
    g_socket.SendJSON(json);
    PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f", ticket, profit);
-}
+  }
 
+
+string forexPairs[] =
+  {
+   "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF",
+   "EURJPY", "EURGBP", "EURCHF", "EURCAD", "EURAUD", "EURNZD",
+   "GBPJPY", "GBPCHF", "GBPCAD", "GBPAUD", "GBPNZD",
+   "AUDJPY", "AUDCHF", "AUDCAD", "AUDNZD",
+   "NZDJPY", "NZDCHF", "NZDCAD",
+   "CADJPY", "CADCHF", "CHFJPY"
+  };
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+bool IsForexPair(string symbol)
+  {
+   for(int i = 0; i < ArraySize(forexPairs); i++)
+      if(StringCompare(symbol, forexPairs[i]) == 0)
+         return true;
+   return false;
+  }
 //+------------------------------------------------------------------+
 //| Tính toán Lot Size từ fixed budget và tự động điều chỉnh SL nếu cần |
 //| Dùng SYMBOL_TRADE_TICK_VALUE / SYMBOL_TRADE_TICK_SIZE (broker-native) |
 //| Khi lot > max_lot → nới rộng SL để giữ nguyên riskAmount            |
 //+------------------------------------------------------------------+
 double CalculateLotFromBudget(string symbol, string direction,
-                               double entryPriceRequested, double &slRequested,
-                               double riskAmount)
-{
-   // PrintFormat("[AureusProvider] [%s] CalculateLotFromBudget: %.2f → %.2f → %.2f",
-   //                      symbol, entryPriceRequested, slRequested, riskAmount);
+                              double entryPriceRequested, double &slRequested,
+                              double riskAmount)
+  {
    if(riskAmount <= 0)
       return 0.0;
 
-   // --- Lấy tick info từ broker ---
+// --- Lấy tick info từ broker ---
    double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
    double tickSize  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
    if(tickValue <= 0 || tickSize <= 0)
-   {
+     {
       PrintFormat("[lot_calc] [%s] Invalid tick info — tickValue=%.5f tickSize=%.5f",
                   symbol, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   }
+     }
 
-   // --- Get actual entry price from market ---
+// --- Get actual entry price from market ---
    double actualEntry = entryPriceRequested;
    if(actualEntry <= 0)
-   {
+     {
       actualEntry = (direction == "BUY")
                     ? SymbolInfoDouble(symbol, SYMBOL_ASK)
                     : SymbolInfoDouble(symbol, SYMBOL_BID);
-   }
+     }
 
-   // --- SL distance ---
+// --- SL distance ---
    double slDistance = MathAbs(actualEntry - slRequested);
    if(slDistance < tickSize)
-   {
+     {
       PrintFormat("[lot_calc] [%s] SL too close — dist=%.5f tickSize=%.5f",
                   symbol, slDistance, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   }
+     }
 
-   // --- Tiền lỗ cho 1 lot nếu SL bị hit ---
+// --- Tiền lỗ cho 1 lot nếu SL bị hit ---
    double lossPerLot = (slDistance / tickSize) * tickValue;
    if(lossPerLot <= 0)
-   {
+     {
       PrintFormat("[lot_calc] [%s] Zero lossPerLot — dist=%.5f tickVal=%.2f tickSize=%.5f",
                   symbol, slDistance, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   }
+     }
 
-   // --- Lot size lý thuyết ---
+// --- Lot size lý thuyết ---
    double lot = riskAmount / lossPerLot;
    double originalBudget = riskAmount;
 
-   // --- Volume limits ---
+
+
+// --- Volume limits ---
    double minVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
    double maxVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
    double stepVol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-   if(stepVol <= 0) stepVol = 0.01;
+   if(stepVol <= 0)
+      stepVol = 0.01;
 
-   // --- Normalize theo step ---
+// --- Normalize theo step ---
    lot = MathFloor(lot / stepVol) * stepVol;
 
-   // --- Nếu lot > maxVol → nới rộng SL để giữ nguyên risk ---
+   if(IsForexPair(symbol) || StringFind(symbol, "XAU") >= 0 || StringFind(symbol, "USTEC") >= 0)
+     {
+      if(StringFind(symbol, "USTEC") >= 0)
+         maxVol = 1.5;
+      if(IsForexPair(symbol))
+         maxVol = 0.2;
+      if(StringFind(symbol, "XAU") >= 0)
+         maxVol = 0.1;
+     }
+
+// --- Nếu lot > maxVol → nới rộng SL để giữ nguyên risk ---
    if(lot > maxVol)
-   {
+     {
       lot = maxVol;
       // Đảo ngược công thức: slDistance = (riskAmount / lot) * (tickSize / tickValue)
       double newSlDistance = (riskAmount / lot) * (tickSize / tickValue);
@@ -945,20 +1005,21 @@ double CalculateLotFromBudget(string symbol, string direction,
 
       PrintFormat("[lot_calc] [%s] Lot %.2f > max %.2f — SL widened: dist=%.5f → new SL=%.5f",
                   symbol, riskAmount / lossPerLot, maxVol, slDistance, slRequested);
-   }
+     }
 
-   // --- Nếu lot < minVol → từ chối (không tăng budget) ---
+// --- Nếu lot < minVol → từ chối (không tăng budget) ---
    if(lot < minVol)
-   {
+     {
       PrintFormat("[lot_calc] [%s] Calculated lot %.4f < min %.2f — SL too wide for budget $%.2f",
                   symbol, lot, minVol, originalBudget);
       return 0.0;
-   }
+     }
 
-   // --- Final clamp ---
-   if(lot > maxVol) lot = maxVol;
+// --- Final clamp ---
+   if(lot > maxVol)
+      lot = maxVol;
 
-   // --- Kiểm tra Margin ---
+// --- Kiểm tra Margin ---
    ENUM_ORDER_TYPE orderType = (direction == "BUY") ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
    double marginRequired = 0;
    if(!OrderCalcMargin(orderType, symbol, lot,
@@ -966,34 +1027,34 @@ double CalculateLotFromBudget(string symbol, string direction,
                        ? SymbolInfoDouble(symbol, SYMBOL_ASK)
                        : SymbolInfoDouble(symbol, SYMBOL_BID),
                        marginRequired))
-   {
+     {
       PrintFormat("[lot_calc] [%s] Failed to calc margin — error=%d",
                   symbol, GetLastError());
       return 0.0;
-   }
+     }
 
    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
    if(freeMargin < marginRequired)
-   {
+     {
       PrintFormat("[lot_calc] [%s] Insufficient margin — need=%.2f free=%.2f",
                   symbol, marginRequired, freeMargin);
       return 0.0;
-   }
+     }
 
    PrintFormat("[lot_calc] [%s] %s | budget=$%.2f | entry=%.5f | SL=%.5f | "
-              "dist=%.5f | tickVal=%.2f tickSize=%.5f | loss/lot=$%.2f | lot=%.2f | margin=%.2f",
-              symbol, direction, originalBudget, actualEntry, slRequested,
-              slDistance, tickValue, tickSize, lossPerLot, lot, marginRequired);
+               "dist=%.5f | tickVal=%.2f tickSize=%.5f | loss/lot=$%.2f | lot=%.2f | margin=%.2f",
+               symbol, direction, originalBudget, actualEntry, slRequested,
+               slDistance, tickValue, tickSize, lossPerLot, lot, marginRequired);
 
    return lot;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Execute OPEN_ORDER command                                         |
 //+------------------------------------------------------------------+
 void ExecuteOpenOrder(const string &raw)
-{
-   // Parse command fields
+  {
+// Parse command fields
    string cmdId     = ParseJSONString(raw, "cmd_id");
    string symbol    = ParseJSONString(raw, "symbol");
    string direction = ParseJSONString(raw, "direction");
@@ -1008,302 +1069,277 @@ void ExecuteOpenOrder(const string &raw)
    double riskAmount = ParseJSONDouble(raw, "risk_amount");
    double tpRRRatio  = ParseJSONDouble(raw, "tp_rr_ratio");
 
-   price = NormalizeDouble(price, _Digits);
-   sl = NormalizeDouble(sl, _Digits);
-   tp = NormalizeDouble(tp, _Digits);
+   if(tpRRRatio == 0)
+      tpRRRatio = 1.5;
 
-   // When RISK_FIXED_AMOUNT, volume will be calculated on MT5 side
-   riskAmount = InpRiskFixedAmountBudget;
-   
-   // Calculate volume on MT5 side if RISK_FIXED_AMOUNT mode
-   // Note: sl is passed by reference — may be widened if lot > maxVol
-   if(StringFind(sizeMode, "RISK_FIXED_AMOUNT") >= 0 && sl > 0)
-   {
-      double slBefore = sl;
-      volume = CalculateLotFromBudget(symbol, direction, price, sl, riskAmount);
-      if(volume > 0)
-      {
-         if(sl != slBefore)
-            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL widened %.5f → %.5f",
-                        symbol, riskAmount, volume, slBefore, sl);
-         else
-            PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: $%.2f → %.2f lots, SL=%.5f",
-                        symbol, riskAmount, volume, sl);
-      }
-      else
-      {
-         PrintFormat("[AureusProvider] [%s] RISK_FIXED_AMOUNT: cannot calculate lot (SL too wide for budget $%.2f)",
-                     symbol, riskAmount);
-      }
-   }
-
-   // Validate required fields (volume check skipped if MT5 will calculate)
-   if(cmdId == "" || symbol == "" || direction == "" || orderType == "" || volume <= 0)
-   {
+// Validate required fields (volume check skipped if MT5 will calculate)
+   if(cmdId == "" || symbol == "" || direction == "" || orderType == "")
+     {
       SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
       return;
-   }
+     }
 
-   // Check idempotency
+// Check idempotency
    if(IsDuplicateCmd(cmdId))
-   {
+     {
       SendNACK(cmdId, "DUPLICATE");
       return;
-   }
+     }
 
-   // Check symbol is known
+// Check symbol is known
    if(FindContextIndex(symbol) < 0)
-   {
+     {
       SendNACK(cmdId, "UNKNOWN_SYMBOL");
       return;
-   }
+     }
 
-   // Check AutoTrading enabled
+// Check AutoTrading enabled
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
-   {
+     {
       SendNACK(cmdId, "TRADE_DISABLED");
       return;
-   }
+     }
 
-   // ACK â€” command accepted
+// ACK â€” command accepted
    SendACK(cmdId);
    RecordCmdId(cmdId);
 
-   // Build MqlTradeRequest
+// Build MqlTradeRequest
    MqlTradeRequest request;
    MqlTradeResult  result;
    ZeroMemory(request);
    ZeroMemory(result);
 
-   request.symbol   = symbol;
-
-   // Normalize volume
-   double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-   double step_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-   if(step_vol > 0) volume = MathRound(volume / step_vol) * step_vol;
-
-   if(volume < min_vol) volume = min_vol;
-   if(volume > max_vol) volume = max_vol;
-   request.volume   = volume;
-   
-   // Normalize stops for Market orders
+// Normalize stops for Market orders
    int symDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    double pointVal = SymbolInfoDouble(symbol, SYMBOL_POINT);
    long stopLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
 
-   // --- Safe minimum stop distance ---
-   // When stopLevel=0 (common for crypto), broker may still reject stops that are
-   // too close. Use symbol-aware defaults to prevent INVALID_STOPS (10016).
-   double minDistance = (stopLevel + 1) * pointVal;
-   if(stopLevel == 0)
-   {
-      // Symbol-specific safe defaults
-      string symUpper = StringToUpper(symbol);
-      if(StringFind(symUpper, "BTC") >= 0)
-         minDistance = 100.0 * pointVal;        // $100 for BTC
-      else if(StringFind(symUpper, "ETH") >= 0)
-         minDistance = 20.0 * pointVal;          // $20 for ETH
-      else if(StringFind(symUpper, "USTEC") >= 0 || StringFind(symUpper, "US30") >= 0 || StringFind(symUpper, "SPX") >= 0)
-         minDistance = 15.0 * pointVal;          // 15 points for indices
-      else if(StringFind(symUpper, "XAU") >= 0 || StringFind(symUpper, "GOLD") >= 0)
-         minDistance = 3.0 * pointVal;           // $3 for Gold
-      else if(StringFind(symUpper, "JPY") >= 0)
-         minDistance = 50.0 * pointVal;          // 50 pips for JPY pairs
+   price = NormalizeDouble(price, symDigits);
+   sl = NormalizeDouble(sl, symDigits);
+   tp = NormalizeDouble(tp, symDigits);
+
+   double g_point_value = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double g_point_per_pips = (symDigits == 3 || symDigits == 5) ? 10 : 1;
+   double sell_stop_buffer = 2 * g_point_value;
+
+   long spread_points = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+   if(spread_points == 0)
+      spread_points = long((SymbolInfoDouble(symbol, SYMBOL_ASK) - SymbolInfoDouble(symbol, SYMBOL_BID)) / g_point_value);
+
+   double spread_in_price = spread_points * g_point_value;
+   double buffer_in_price = 1 * g_point_per_pips * g_point_value;
+   double total_adjustment = spread_in_price + buffer_in_price;
+
+   double entry_price = 0, sl_price = 0, tp_price = 0, lot_size = 0;
+
+   if(orderType == "MARKET")
+     {
+      double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+      double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+      if(direction == "BUY")
+        {
+         // Vào lệnh BUY ngay
+         entry_price = ask;
+         sl = sl - buffer_in_price;
+         volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
+         tp = entry_price + (entry_price - sl) * tpRRRatio;
+        }
       else
-         minDistance = 100.0 * pointVal;         // 100 pips for forex
+         if(direction == "SELL")
+           {
+            // Vào lệnh SELL ngay
+            entry_price = bid;
+            sl = sl + total_adjustment;
+            volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
+            tp = entry_price - (sl - entry_price) * tpRRRatio;
+           }
+     }
+   else
+      entry_price = price;
 
-      PrintFormat("[AureusProvider] [%s] stopLevel=0, using safe minDistance=%.5f (%.1f points)",
-                  symbol, minDistance, minDistance / pointVal);
-   }
+   PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
+               symbol, tpRRRatio, sl_price, tp_price);
 
-   if (orderType == "MARKET")
-   {
-       double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-       double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+// Normalize volume
+   double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double step_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   if(step_vol > 0)
+      volume = MathRound(volume / step_vol) * step_vol;
 
-       if (sl > 0.0)
-       {
-           if (direction == "BUY" && (ask - sl) < minDistance) sl = ask - minDistance;
-           else if (direction == "SELL" && (sl - bid) < minDistance) sl = bid + minDistance;
-       }
+   if(volume < min_vol)
+      volume = min_vol;
+   if(volume > max_vol)
+      volume = max_vol;
 
-       // Recalculate TP from actual entry price when tp_rr_ratio is provided
-       // This ensures correct RR ratio even when market moves between trigger and execution
-       if (tpRRRatio > 0.0 && sl > 0.0)
-       {
-           double actualEntry = (direction == "BUY") ? ask : bid;
-           double slDistance = MathAbs(actualEntry - sl);
-           tp = (direction == "BUY") ? (actualEntry + slDistance * tpRRRatio) : (actualEntry - slDistance * tpRRRatio);
-           PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
-                       symbol, tpRRRatio, slDistance, tp);
-       }
-       else if (tp > 0.0)
-       {
-           if (direction == "BUY" && (tp - ask) < minDistance) tp = ask + minDistance;
-           else if (direction == "SELL" && (bid - tp) < minDistance) tp = bid - minDistance;
-       }
-   }
-
+   request.volume   = volume;
+   request.symbol   = symbol;
    request.sl       = NormalizeDouble(sl, symDigits);
    request.tp       = NormalizeDouble(tp, symDigits);
    request.magic    = magic;
    request.comment  = comment;
    request.deviation = InpMaxSlippage;
 
-   // Determine supported filling mode for MARKET orders
+// Determine supported filling mode for MARKET orders
    int fillingMode = (int)SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
    ENUM_ORDER_TYPE_FILLING fillType = ORDER_FILLING_IOC; // Default
    if((fillingMode & SYMBOL_FILLING_FOK) != 0)
       fillType = ORDER_FILLING_FOK;
-   else if((fillingMode & SYMBOL_FILLING_IOC) != 0)
-      fillType = ORDER_FILLING_IOC;
    else
-      fillType = ORDER_FILLING_RETURN; // Fallback
+      if((fillingMode & SYMBOL_FILLING_IOC) != 0)
+         fillType = ORDER_FILLING_IOC;
+      else
+         fillType = ORDER_FILLING_RETURN; // Fallback
 
    if(orderType == "MARKET")
-   {
+     {
       request.action = TRADE_ACTION_DEAL;
       request.type   = (direction == "BUY") ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
-      request.price  = (direction == "BUY")
-                        ? SymbolInfoDouble(symbol, SYMBOL_ASK)
-                        : SymbolInfoDouble(symbol, SYMBOL_BID);
+      request.price  = entry_price;
       request.type_filling = fillType;
-   }
-   else if(orderType == "LIMIT")
-   {
-      request.action = TRADE_ACTION_PENDING;
-      request.price  = NormalizeDouble(price, symDigits);
-      request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
-      request.type_filling = fillType;
-      request.type_time = ORDER_TIME_GTC;
-   }
-   else if(orderType == "STOP")
-   {
-      request.action = TRADE_ACTION_PENDING;
-      request.price  = NormalizeDouble(price, symDigits);
-      request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
-      request.type_filling = fillType;
-      request.type_time = ORDER_TIME_GTC;
-   }
+     }
    else
-   {
-      PushOrderFailed(cmdId, symbol, "UNKNOWN_ORDER_TYPE", 0);
-      g_ordersFailed++;
-      return;
-   }
-
-   // --- DEBUG LOGGING FOR INVALID_STOPS DIAGNOSIS ---
-   double askPrice = SymbolInfoDouble(symbol, SYMBOL_ASK);
-   double bidPrice = SymbolInfoDouble(symbol, SYMBOL_BID);
-   double minVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double maxVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-
-   string fillingStr = "UNKNOWN";
-   if(fillType == ORDER_FILLING_FOK) fillingStr = "FOK";
-   else if(fillType == ORDER_FILLING_IOC) fillingStr = "IOC";
-   else if(fillType == ORDER_FILLING_RETURN) fillingStr = "RETURN";
-
-   if (LOG_LEVEL == 2)
-      PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
-         symbol, direction, orderType,
-         request.volume, minVol, maxVol,
-         askPrice, bidPrice,
-         request.sl, request.tp,
-         stopLevel, symDigits, fillingStr);
-
-   if(orderType == "MARKET" && LOG_LEVEL == 2)
-   {
-      if(direction == "BUY")
-         PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
-            askPrice - request.sl, (stopLevel + 1) * pointVal,
-            request.tp - askPrice, (stopLevel + 1) * pointVal);
+      if(orderType == "LIMIT")
+        {
+         request.action = TRADE_ACTION_PENDING;
+         request.price  = NormalizeDouble(price, symDigits);
+         request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
+         request.type_filling = fillType;
+         request.type_time = ORDER_TIME_GTC;
+        }
       else
-         PrintFormat("[AureusProvider] [DEBUG] SELL check: SL-bid=%.5f (need>%.5f) | bid-TP=%.5f (need>%.5f)",
-            request.sl - bidPrice, (stopLevel + 1) * pointVal,
-            bidPrice - request.tp, (stopLevel + 1) * pointVal);
-   }
-   // --- END DEBUG LOGGING ---
+         if(orderType == "STOP")
+           {
+            request.action = TRADE_ACTION_PENDING;
+            request.price  = NormalizeDouble(price, symDigits);
+            request.type   = (direction == "BUY") ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
+            request.type_filling = fillType;
+            request.type_time = ORDER_TIME_GTC;
+           }
+         else
+           {
+            PushOrderFailed(cmdId, symbol, "UNKNOWN_ORDER_TYPE", 0);
+            g_ordersFailed++;
+            return;
+           }
 
-   // Pre-validate with OrderCheck
+   /*
+   // --- DEBUG LOGGING FOR INVALID_STOPS DIAGNOSIS ---
+      double askPrice = SymbolInfoDouble(symbol, SYMBOL_ASK);
+      double bidPrice = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double minVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+      double maxVol    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+
+      string fillingStr = "UNKNOWN";
+      if(fillType == ORDER_FILLING_FOK)
+         fillingStr = "FOK";
+      else
+         if(fillType == ORDER_FILLING_IOC)
+            fillingStr = "IOC";
+         else
+            if(fillType == ORDER_FILLING_RETURN)
+               fillingStr = "RETURN";
+
+      PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
+                  symbol, direction, orderType,
+                  request.volume, minVol, maxVol,
+                  askPrice, bidPrice,
+                  request.sl, request.tp,
+                  stopLevel, symDigits, fillingStr);
+
+      if(orderType == "MARKET")
+        {
+         if(direction == "BUY")
+            PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
+                        askPrice - request.sl, (stopLevel + 1) * pointVal,
+                        request.tp - askPrice, (stopLevel + 1) * pointVal);
+         else
+            PrintFormat("[AureusProvider] [DEBUG] SELL check: SL-bid=%.5f (need>%.5f) | bid-TP=%.5f (need>%.5f)",
+                        request.sl - bidPrice, (stopLevel + 1) * pointVal,
+                        bidPrice - request.tp, (stopLevel + 1) * pointVal);
+        }
+   // --- END DEBUG LOGGING ---
+   //*/
+// Pre-validate with OrderCheck
    MqlTradeCheckResult checkResult;
    ZeroMemory(checkResult);
    if(!OrderCheck(request, checkResult))
-   {
+     {
       PushOrderFailed(cmdId, symbol, RetcodeToReason(checkResult.retcode), checkResult.retcode);
       g_ordersFailed++;
       return;
-   }
+     }
 
-   // Execute OrderSend
+// Execute OrderSend
    if(!OrderSend(request, result))
-   {
+     {
       int err = GetLastError();
       PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode != 0 ? result.retcode : err), result.retcode);
       g_ordersFailed++;
       return;
-   }
+     }
 
    if(result.retcode == TRADE_RETCODE_DONE)
-   {
+     {
       PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
                       volume, result.price, sl, tp, magic);
       g_ordersExecuted++;
-   }
+     }
    else
-   {
+     {
       PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
       g_ordersFailed++;
-   }
-}
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Execute CLOSE_ORDER command                                        |
 //+------------------------------------------------------------------+
 void ExecuteCloseOrder(const string &raw)
-{
+  {
    string cmdId  = ParseJSONString(raw, "cmd_id");
    string symbol = ParseJSONString(raw, "symbol");
    long   ticket = ParseJSONLong(raw, "ticket");
    long   magic  = ParseJSONLong(raw, "magic");
 
    if(cmdId == "" || symbol == "" || ticket == 0)
-   {
+     {
       SendNACK(cmdId != "" ? cmdId : "unknown", "INVALID_COMMAND");
       return;
-   }
+     }
 
    if(IsDuplicateCmd(cmdId))
-   {
+     {
       SendNACK(cmdId, "DUPLICATE");
       return;
-   }
+     }
 
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
-   {
+     {
       SendNACK(cmdId, "TRADE_DISABLED");
       return;
-   }
+     }
 
    SendACK(cmdId);
    RecordCmdId(cmdId);
 
-   // Select the position to close
+// Select the position to close
    if(!PositionSelectByTicket(ticket))
-   {
+     {
       PushOrderFailed(cmdId, symbol, "POSITION_NOT_FOUND", 0);
       g_ordersFailed++;
       return;
-   }
+     }
 
-   // Verify magic number ownership
+// Verify magic number ownership
    long posMagic = PositionGetInteger(POSITION_MAGIC);
    if(posMagic != magic)
-   {
+     {
       PushOrderFailed(cmdId, symbol, "MAGIC_MISMATCH", 0);
       g_ordersFailed++;
       return;
-   }
+     }
 
    double posVolume = PositionGetDouble(POSITION_VOLUME);
    long   posType   = PositionGetInteger(POSITION_TYPE);
@@ -1319,33 +1355,33 @@ void ExecuteCloseOrder(const string &raw)
    request.volume   = posVolume;
    request.magic    = magic;
    request.deviation = InpMaxSlippage;
-   // Opposite direction to close
+// Opposite direction to close
    request.type = (posType == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
    request.price = (posType == POSITION_TYPE_BUY)
-                    ? SymbolInfoDouble(symbol, SYMBOL_BID)
-                    : SymbolInfoDouble(symbol, SYMBOL_ASK);
+                   ? SymbolInfoDouble(symbol, SYMBOL_BID)
+                   : SymbolInfoDouble(symbol, SYMBOL_ASK);
    request.type_filling = ORDER_FILLING_IOC;
 
    if(!OrderSend(request, result))
-   {
+     {
       PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
       g_ordersFailed++;
       return;
-   }
+     }
 
    if(result.retcode != TRADE_RETCODE_DONE)
-   {
+     {
       PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
       g_ordersFailed++;
-   }
-   // ORDER_CLOSED will be pushed by OnTradeTransaction when deal completes
-}
+     }
+// ORDER_CLOSED will be pushed by OnTradeTransaction when deal completes
+  }
 
 //+------------------------------------------------------------------+
 //| Execute REQUEST_ORDERS command — return all open positions         |
 //+------------------------------------------------------------------+
 void ExecuteRequestOrders(const string &raw)
-{
+  {
    string cmdId = ParseJSONString(raw, "cmd_id");
    long   filterMagic = ParseJSONLong(raw, "magic_number");
    string filterSymbol = ParseJSONString(raw, "symbol");
@@ -1356,34 +1392,38 @@ void ExecuteRequestOrders(const string &raw)
    string json = BuildOpenOrdersJSON(filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
-   {
+     {
       PrintFormat("[AureusProvider] ORDERS response sent");
-   }
+     }
    else
-   {
+     {
       PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
-   }
-}
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Build JSON array of open positions                                 |
 //+------------------------------------------------------------------+
 string BuildOpenOrdersJSON(long filterMagic, string filterSymbol)
-{
+  {
    string json = "{\"type\":\"ORDERS\",\"positions\":[";
    int count = 0;
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
+     {
       ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
-      if(!PositionSelectByTicket(ticket)) continue;
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
 
       string symbol = PositionGetString(POSITION_SYMBOL);
       long   magic  = PositionGetInteger(POSITION_MAGIC);
 
-      if(filterMagic > 0 && magic != filterMagic) continue;
-      if(filterSymbol != "" && symbol != filterSymbol) continue;
+      if(filterMagic > 0 && magic != filterMagic)
+         continue;
+      if(filterSymbol != "" && symbol != filterSymbol)
+         continue;
 
       long   posType      = PositionGetInteger(POSITION_TYPE);
       double volume       = PositionGetDouble(POSITION_VOLUME);
@@ -1397,26 +1437,27 @@ string BuildOpenOrdersJSON(long filterMagic, string filterSymbol)
       string comment      = PositionGetString(POSITION_COMMENT);
       string direction    = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
 
-      if(count > 0) json += ",";
+      if(count > 0)
+         json += ",";
       json += StringFormat(
-         "{\"ticket\":%llu,\"symbol\":\"%s\",\"direction\":\"%s\",\"volume\":%.2f,\"entry_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"profit\":%.2f,\"swap\":%.2f,\"commission\":%.2f,\"time\":%lld,\"comment\":\"%s\"}",
-         ticket, symbol, direction, volume, entryPrice, sl, tp, magic,
-         profit, swap, commission, posTime, comment
-      );
+                 "{\"ticket\":%llu,\"symbol\":\"%s\",\"direction\":\"%s\",\"volume\":%.2f,\"entry_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"profit\":%.2f,\"swap\":%.2f,\"commission\":%.2f,\"time\":%lld,\"comment\":\"%s\"}",
+                 ticket, symbol, direction, volume, entryPrice, sl, tp, magic,
+                 profit, swap, commission, posTime, comment
+              );
       count++;
-   }
+     }
 
    json += StringFormat("],\"count\":%d}", count);
    PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
    return json;
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Execute REQUEST_TRADE_HISTORY command                             |
 //+------------------------------------------------------------------+
 void ExecuteTradeHistoryRequest(const string &raw)
-{
-   // Parse time range
+  {
+// Parse time range
    long fromTimeMs = ParseJSONLong(raw, "from_time");
    long toTimeMs   = ParseJSONLong(raw, "to_time");
    long filterMagic = ParseJSONLong(raw, "magic_number");
@@ -1426,12 +1467,12 @@ void ExecuteTradeHistoryRequest(const string &raw)
    datetime toTime   = (datetime)(toTimeMs / 1000);
 
    if(fromTime >= toTime)
-   {
+     {
       PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
       string errorJson = "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}";
       g_socket.SendJSON(errorJson);
       return;
-   }
+     }
 
    PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
                TimeToString(fromTime), TimeToString(toTime), filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
@@ -1439,107 +1480,108 @@ void ExecuteTradeHistoryRequest(const string &raw)
    string json = BuildTradeHistoryJSON(fromTime, toTime, filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
-   {
+     {
       PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
-   }
+     }
    else
-   {
+     {
       PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
-   }
-}
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Listen and process commands from Gateway                           |
 //+------------------------------------------------------------------+
 void ProcessIncomingCommands()
-{
+  {
    if(!g_socket.IsConnected())
       return;
 
    string raw = g_socket.Receive();
-   if(raw == "") return;
+   if(raw == "")
+      return;
 
-   //--- Extract symbol from command
+//--- Extract symbol from command
    string cmdSymbol = ParseJSONString(raw, "symbol");
 
-   // â”€â”€ Order Commands â”€â”€
+// â”€â”€ Order Commands â”€â”€
    if(StringFind(raw, "\"OPEN_ORDER\"") >= 0)
-   {
+     {
       PrintFormat("[AureusProvider] Received OPEN_ORDER command");
       ExecuteOpenOrder(raw);
       return;
-   }
+     }
 
    if(StringFind(raw, "\"CLOSE_ORDER\"") >= 0)
-   {
+     {
       PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
       ExecuteCloseOrder(raw);
       return;
-   }
+     }
 
-   // ── Position Report Request ──
+// ── Position Report Request ──
    if(StringFind(raw, "\"REQUEST_POSITIONS\"") >= 0)
-   {
+     {
       PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
       ExecutePositionsRequest();
       return;
-   }
+     }
 
    if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
 
-   // â"€â"€ Open Orders Request â"€â"€
-   if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
-   {
-      PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
-      ExecuteRequestOrders(raw);
-      return;
-   }
+      // â"€â"€ Open Orders Request â"€â"€
+      if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
+        {
+         PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
+         ExecuteRequestOrders(raw);
+         return;
+        }
 
-   // â"€â"€ Trade History Request â"€â"€
+// â"€â"€ Trade History Request â"€â"€
    if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)
-   {
+     {
       PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
       ExecuteTradeHistoryRequest(raw);
       return;
-   }
+     }
 
-   {
+     {
       int countPos = StringFind(raw, "\"count\":");
       if(countPos > 0)
-      {
+        {
          long count = (long)StringToInteger(StringSubstr(raw, countPos + 8));
 
          // If symbol specified, backfill only that symbol
          if(cmdSymbol != "")
-         {
+           {
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
-            {
+              {
                PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL_COUNT: %d candles",
                            cmdSymbol, count);
                DoBackfillCountForSymbol(idx, (int)count);
-            }
+              }
             else
                PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
-         }
+           }
          else
-         {
+           {
             // No symbol specified â†’ backfill all
             PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillCountForSymbol(i, (int)count);
-         }
-      }
+           }
+        }
       return;
-   }
+     }
 
    if(StringFind(raw, "REQUEST_BACKFILL") >= 0)
-   {
+     {
       int startPos = StringFind(raw, "\"start\":");
       int endPos   = StringFind(raw, "\"end\":");
 
       if(startPos > 0 && endPos > 0)
-      {
+        {
          long startMs = (long)StringToInteger(StringSubstr(raw, startPos + 8));
          long endMs   = (long)StringToInteger(StringSubstr(raw, endPos + 6));
 
@@ -1547,28 +1589,28 @@ void ProcessIncomingCommands()
          datetime toTime   = (datetime)(endMs / 1000);
 
          if(cmdSymbol != "")
-         {
+           {
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
-            {
+              {
                PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL range: %s - %s",
                            cmdSymbol, TimeToString(fromTime), TimeToString(toTime));
                DoBackfillForSymbol(idx, fromTime, toTime);
-            }
+              }
             else
                PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
-         }
+           }
          else
-         {
+           {
             // No symbol specified â†’ backfill all
             PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
                         TimeToString(fromTime), TimeToString(toTime));
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillForSymbol(i, fromTime, toTime);
-         }
-      }
-   }
-}
+           }
+        }
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Trade Transaction handler â€” detects position closes               |
@@ -1576,30 +1618,30 @@ void ProcessIncomingCommands()
 void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeRequest& request,
                         const MqlTradeResult& result)
-{
-   // Only process deal additions
+  {
+// Only process deal additions
    if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
       return;
 
-   // Must be connected to push events
+// Must be connected to push events
    if(!g_socket.IsConnected())
       return;
 
-   // Select the deal from history
+// Select the deal from history
    if(!HistoryDealSelect(trans.deal))
       return;
 
-   // Only process position close/reduce deals
+// Only process position close/reduce deals
    long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
    if(entry != DEAL_ENTRY_OUT)
       return;
 
-   // Filter by magic number â€” only report bot-managed positions
+// Filter by magic number â€” only report bot-managed positions
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
    if(magic == 0)
       return;  // Manual trade, skip
 
-   // Extract deal properties
+// Extract deal properties
    string symbol      = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long   ticket      = HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID);
    double volume      = HistoryDealGetDouble(trans.deal, DEAL_VOLUME);
@@ -1609,61 +1651,61 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    double swap        = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
    long   dealType    = HistoryDealGetInteger(trans.deal, DEAL_TYPE);
 
-   // Determine original direction (close deal is opposite direction)
+// Determine original direction (close deal is opposite direction)
    string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
 
-   // Get open price from position info (if still available)
+// Get open price from position info (if still available)
    double openPrice = 0.0;
    if(PositionSelectByTicket(ticket))
       openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
 
    PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected â€” "
-              "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
-              symbol, ticket, direction, profit, magic);
+               "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
+               symbol, ticket, direction, profit, magic);
 
    PushOrderClosed(symbol, ticket, direction, volume,
                    openPrice, closePrice, profit, commission, swap, magic);
-}
+  }
 
 //+------------------------------------------------------------------+
 //| Timer event â€” candle polling, heartbeat, and status               |
 //+------------------------------------------------------------------+
 void OnTimer()
-{
-   //--- Process commands from Gateway
+  {
+//--- Process commands from Gateway
    ProcessIncomingCommands();
 
-   //--- Connection health check
+//--- Connection health check
    if(!g_socket.IsConnected())
-   {
+     {
       if(!g_wasDisconnected)
-      {
+        {
          g_wasDisconnected = true;
          g_disconnectTime  = TimeCurrent();
-      }
+        }
 
       if(g_socket.EnsureConnected())
-      {
+        {
          // PrintFormat("[AureusProvider] Timer: Reconnected â€” waiting for Server gap detection commands");
          g_wasDisconnected = false;
          g_disconnectTime  = 0;
-      }
+        }
       else
-      {
+        {
          int downSec = (g_disconnectTime > 0) ? (int)(TimeCurrent() - g_disconnectTime) : 0;
          if(downSec % 10 == 0) // Log every ~10 seconds
             PrintFormat("[AureusProvider] Timer: Still disconnected (%d sec)", downSec);
-      }
+        }
       return;
-   }
+     }
 
-   //--- Poll candles for ALL symbols
+//--- Poll candles for ALL symbols
    for(int i = 0; i < g_symbolCount; i++)
-   {
+     {
       CheckAndSendCandleForSymbol(i);
-   }
+     }
 
-   //--- Status comment on chart
+//--- Status comment on chart
    string statusLines = "Aureus Provider v3.0\n";
    statusLines += StringFormat("Gateway: %s:%d | Status: CONNECTED\n",
                                InpGatewayHost, InpGatewayPort);
@@ -1674,15 +1716,16 @@ void OnTimer()
    statusLines += "â”€â”€â”€ Symbol Candles â”€â”€â”€\n";
 
    for(int i = 0; i < g_symbolCount; i++)
-   {
+     {
       statusLines += StringFormat("%s: %d candles | Last: %s\n",
                                   g_contexts[i].symbol,
                                   g_contexts[i].candlesSent,
                                   g_contexts[i].lastCandleTime > 0
-                                     ? TimeToString(g_contexts[i].lastCandleTime)
-                                     : "N/A");
-   }
+                                  ? TimeToString(g_contexts[i].lastCandleTime)
+                                  : "N/A");
+     }
 
    Comment(statusLines);
-}
+  }
+//+------------------------------------------------------------------+
 //+------------------------------------------------------------------+

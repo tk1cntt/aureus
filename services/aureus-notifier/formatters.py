@@ -8,7 +8,7 @@ import html
 from datetime import datetime, timezone
 
 
-def _format_indicator_section(snapshot: dict) -> str:
+def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
     """Format indicator snapshot as HTML lines for Telegram.
 
     Groups EMAs on one line, other indicators on separate lines.
@@ -27,7 +27,7 @@ def _format_indicator_section(snapshot: dict) -> str:
         for i, val in enumerate(ema_values):
             if val is not None:
                 marker = ema_markers[i] if i < len(ema_markers) else ""
-                ema_parts.append(f"{val:.2f}{marker}")
+                ema_parts.append(f"{val:.{precision}f}{marker}")
             else:
                 ema_parts.append("\u2014")  # —
         period_str = "/".join(str(p) for p in ema_periods)
@@ -36,7 +36,7 @@ def _format_indicator_section(snapshot: dict) -> str:
 
     # ATR(14) — D-09: "ATR(14): 12.34"
     atr = snapshot.get("atr_14")
-    atr_display = f"{atr:.2f}" if atr is not None else "\u2014"
+    atr_display = f"{atr:.{precision}f}" if atr is not None else "\u2014"
     lines.append(f"\u2022 <b>ATR(14)</b>: {html.escape(atr_display)}")
 
     # Volume SMA(20) — D-09
@@ -155,8 +155,45 @@ def format_signal_event(event: dict) -> str:
     indicator_snapshot = data.get("indicator_snapshot")
     indicator_section = ""
     if indicator_snapshot and isinstance(indicator_snapshot, dict):
+        # Infer precision:
+        # 1. Try from digits in snapshot (passed from engine symbols config)
+        # 2. Try from close price in signals (most accurate for current symbol)
+        # 3. Try from symbol name (standard forex/metal precision)
+        # 4. Default to 2
+        precision = 2
+
+        # Method 1: Digits from snapshot
+        if "digits" in indicator_snapshot:
+            try:
+                precision = int(indicator_snapshot["digits"])
+            except (ValueError, TypeError):
+                pass
+        else:
+            # Method 2: Signals close
+            found_in_signals = False
+            for s_val in signals.values():
+                if isinstance(s_val, dict) and "close" in s_val:
+                    close_str = str(s_val["close"])
+                    if "." in close_str:
+                        precision = len(close_str.split(".")[1])
+                    found_in_signals = True
+                    break
+
+            # Method 3: Symbol name heuristics (if not found in signals)
+            if not found_in_signals:
+                sym_upper = str(event.get("symbol", "")).upper()
+                if any(major in sym_upper for major in ["EUR", "GBP", "AUD", "NZD", "USD", "CHF", "CAD"]):
+                    if "JPY" in sym_upper:
+                        precision = 3
+                    elif "XAU" in sym_upper or "GOLD" in sym_upper:
+                        precision = 2
+                    else:
+                        precision = 5
+                elif "BTC" in sym_upper or "ETH" in sym_upper:
+                    precision = 2
+
         parts.append('')
-        indicator_section = _format_indicator_section(indicator_snapshot)
+        indicator_section = _format_indicator_section(indicator_snapshot, precision=precision)
         parts.append('<b>\U0001F4C8 Indicator Snapshot:</b>')
         parts.append(indicator_section)
 
@@ -225,9 +262,13 @@ def format_strategy_match(event: dict) -> str:
     tp_display = format_price(tp)
 
     # Entry price display based on entry_type
+    order_plan = data.get("order_plan", {})
+    entry_method = order_plan.get("entry_method", "CURRENT")
+    method_suffix = f" - {entry_method}" if entry_method != "CURRENT" else ""
+
     if entry_type.upper() == "MARKET":
         entry_display = format_price(entry_price)
-        entry_label = f"<b>Entry (Market):</b> {entry_display}"
+        entry_label = f"<b>Entry (Market{method_suffix}):</b> {entry_display}"
     elif entry_type.upper() == "LIMIT":
         limit_price = data.get("entry_price") or data.get("limit_price")
         if limit_price and not isinstance(limit_price, dict):
@@ -243,10 +284,10 @@ def format_strategy_match(event: dict) -> str:
                 entry_display = str(limit_price)
         else:
             entry_display = "N/A (pending limit)"
-        entry_label = f"<b>Entry (Limit):</b> {entry_display}"
+        entry_label = f"<b>Entry (Limit{method_suffix}):</b> {entry_display}"
     else:
         entry_display = format_price(entry_price)
-        entry_label = f"<b>Entry ({entry_type}):</b> {entry_display}"
+        entry_label = f"<b>Entry ({entry_type}{method_suffix}):</b> {entry_display}"
 
     # Direction emoji
     if side.upper() == "BUY":

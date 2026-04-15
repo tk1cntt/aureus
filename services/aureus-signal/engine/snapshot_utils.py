@@ -56,6 +56,7 @@ REQUIRED_FLOW_INTEGRITY_KEYS = (
 REQUIRED_ORDER_PLAN_KEYS = (
     "entry_type",
     "entry_method",
+    "entry_value",
     "entry_policy",
     "sl_mode",
     "sl_value",
