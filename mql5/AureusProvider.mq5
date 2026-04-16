@@ -1282,9 +1282,82 @@ void ExecuteOpenOrder(const string &raw)
 
    if(result.retcode == TRADE_RETCODE_DONE)
      {
-      PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                      volume, result.price, sl, tp, magic);
-      g_ordersExecuted++;
+      if(orderType == "MARKET")
+        {
+         double filledEntry = result.price;
+         if(filledEntry <= 0 && PositionSelect(symbol))
+            filledEntry = PositionGetDouble(POSITION_PRICE_OPEN);
+
+         if(filledEntry <= 0)
+           {
+            PushOrderFailed(cmdId, symbol, "POST_FILL_RESOLVE_FAILED", (int)result.retcode);
+            g_ordersFailed++;
+            return;
+           }
+
+         double tpBefore = request.tp;
+         double slFinal = request.sl;
+         double tpAfter = tpBefore;
+
+         if(direction == "BUY")
+            tpAfter = filledEntry + (filledEntry - slFinal) * tpRRRatio;
+         else
+            tpAfter = filledEntry - (slFinal - filledEntry) * tpRRRatio;
+
+         tpAfter = NormalizeDouble(tpAfter, symDigits);
+
+         PrintFormat("[PF_FILL] cmd_id=%s symbol=%s filled_entry=%.5f", cmdId, symbol, filledEntry);
+         PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
+
+         double minDist = (stopLevel + 1) * pointVal;
+         bool validStops = true;
+         if(direction == "BUY")
+            validStops = ((filledEntry - slFinal) > minDist && (tpAfter - filledEntry) > minDist);
+         else
+            validStops = ((slFinal - filledEntry) > minDist && (filledEntry - tpAfter) > minDist);
+
+         if(!validStops)
+           {
+            string reason = StringFormat("POST_FILL_MODIFY_FAILED|filled_entry=%.5f|tp_before=%.5f|tp_after=%.5f|modify_result=retcode:10016", filledEntry, tpBefore, tpAfter);
+            PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:10016 reason=INVALID_STOPS", cmdId, symbol);
+            PushOrderFailed(cmdId, symbol, reason, 10016);
+            g_ordersFailed++;
+            return;
+           }
+
+         MqlTradeRequest modReq;
+         MqlTradeResult modRes;
+         ZeroMemory(modReq);
+         ZeroMemory(modRes);
+         modReq.action = TRADE_ACTION_SLTP;
+         modReq.symbol = symbol;
+         modReq.magic = magic;
+         modReq.sl = slFinal;
+         modReq.tp = tpAfter;
+         modReq.position = (ulong)PositionGetInteger(POSITION_TICKET);
+
+         bool modOk = OrderSend(modReq, modRes) && modRes.retcode == TRADE_RETCODE_DONE;
+         PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
+
+         if(!modOk)
+           {
+            int modRetcode = (int)(modRes.retcode != 0 ? modRes.retcode : result.retcode);
+            string reason = StringFormat("POST_FILL_MODIFY_FAILED|filled_entry=%.5f|tp_before=%.5f|tp_after=%.5f|modify_result=retcode:%d", filledEntry, tpBefore, tpAfter, modRetcode);
+            PushOrderFailed(cmdId, symbol, reason, modRetcode);
+            g_ordersFailed++;
+            return;
+           }
+
+         PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
+                         volume, filledEntry, slFinal, tpAfter, magic);
+         g_ordersExecuted++;
+        }
+      else
+        {
+         PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
+                         volume, result.price, sl, tp, magic);
+         g_ordersExecuted++;
+        }
      }
    else
      {
