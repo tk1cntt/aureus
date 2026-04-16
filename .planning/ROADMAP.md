@@ -391,6 +391,17 @@ Plans:
 - [x] 42-03-PLAN.md — RISK_FIXED_AMOUNT handling: orders.py + order_builder.py volume=0 + risk_amount forwarding
 - [x] 42-04-PLAN.md — MT5 lot calculation: CalculateLotFromBudget with auto-adjust and guards
 
+### Phase 43: Bổ sung signal màu của nến sau vào db: 1D H1 M30 M15 M5 theo từng nến M1
+
+**Goal:** Mở rộng signal snapshot/persistence để ghi màu nến đa khung thời gian (D1/H1/M30/M15/M5) và Bollinger Bands đa khung thời gian (M1/M5/M15/M30/H1) vào DB theo từng nến M1, theo rule last-closed + null-first và giữ additive compatibility.
+**Requirements**: PH43-01, PH43-02, PH43-03, PH43-04
+**Depends on:** Phase 42
+**Plans:** 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md — TDD helper MTF candle-color/BB + last-closed/null-first contracts
+- [ ] 43-02-PLAN.md — Wire snapshot persistence + schema additive columns + regression tests
+
 ---
 
 ### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
