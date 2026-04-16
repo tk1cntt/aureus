@@ -413,8 +413,7 @@ bool CheckAndSendCandleForSymbol(int ctxIndex)
    if(CopyTime(sym, PERIOD_M1, 0, 2, barTimes) < 2)
       return false;
 
-   datetime currentBarTime = barTimes[1]; // newest bar
-   datetime prevBarTime    = barTimes[0]; // previous bar
+   datetime prevBarTime    = barTimes[0]; // previous closed bar
 
 // New candle detected?
    if(prevBarTime <= g_contexts[ctxIndex].lastCandleTime)
@@ -572,6 +571,7 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
 
 // Send in chunks of 100
    int chunkSize = 100;
+   int sentCount = 0;
    for(int i = 0; i < filteredCount; i += chunkSize)
      {
       int cnt = MathMin(chunkSize, filteredCount - i);
@@ -587,16 +587,18 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
             g_contexts[ctxIndex].lastCandleTime = chunk[cnt-1].time;
 
          g_contexts[ctxIndex].candlesSent += cnt;
+         sentCount += cnt;
         }
       else
         {
-         PrintFormat("[AureusProvider] [%s] Backfill chunk send failed", sym);
+         PrintFormat("[AureusProvider] [%s] Backfill chunk send failed after %d/%d candles",
+                     sym, sentCount, filteredCount);
          break;
         }
      }
 
-   PrintFormat("[AureusProvider] [%s] Targeted backfill complete: %d candles sent",
-               sym, filteredCount);
+   PrintFormat("[AureusProvider] [%s] Targeted backfill finished: %d/%d candles sent",
+               sym, sentCount, filteredCount);
   }
 
 //+------------------------------------------------------------------+
@@ -622,6 +624,7 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
      }
 
    int chunkSize = 100;
+   int sentCount = 0;
    for(int i = 0; i < copied; i += chunkSize)
      {
       int currentCount = MathMin(chunkSize, copied - i);
@@ -637,15 +640,17 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
             g_contexts[ctxIndex].lastCandleTime = chunk[currentCount-1].time;
 
          g_contexts[ctxIndex].candlesSent += currentCount;
+         sentCount += currentCount;
         }
       else
         {
-         PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed", sym);
+         PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed after %d/%d candles",
+                     sym, sentCount, copied);
          break;
         }
      }
 
-   PrintFormat("[AureusProvider] [%s] Count-based backfill complete: %d candles sent", sym, copied);
+   PrintFormat("[AureusProvider] [%s] Count-based backfill finished: %d/%d candles sent", sym, sentCount, copied);
   }
 
 //+------------------------------------------------------------------+
@@ -686,12 +691,16 @@ void OnTick()
 //+------------------------------------------------------------------+
 string ParseJSONString(const string &raw, const string key)
   {
-   string searchKey = "\"" + key + "\":";
-   int pos = StringFind(raw, searchKey);
-   if(pos < 0)
+   string searchKey = "\"" + key + "\"";
+   int keyPos = StringFind(raw, searchKey);
+   if(keyPos < 0)
       return "";
 
-   int startPos = pos + StringLen(searchKey);
+   int colonPos = StringFind(raw, ":", keyPos + StringLen(searchKey));
+   if(colonPos < 0)
+      return "";
+
+   int startPos = colonPos + 1;
 // Skip whitespace between colon and opening quote
    while(startPos < StringLen(raw) && StringGetCharacter(raw, startPos) == ' ')
       startPos++;
@@ -1104,6 +1113,8 @@ void ExecuteOpenOrder(const string &raw)
    SendACK(cmdId);
    RecordCmdId(cmdId);
 
+   bool terminalEventSent = false;
+
 // Build MqlTradeRequest
    MqlTradeRequest request;
    MqlTradeResult  result;
@@ -1284,14 +1295,50 @@ void ExecuteOpenOrder(const string &raw)
      {
       if(orderType == "MARKET")
         {
-         double filledEntry = result.price;
-         if(filledEntry <= 0 && PositionSelect(symbol))
-            filledEntry = PositionGetDouble(POSITION_PRICE_OPEN);
+         // Safety layer 1: deterministic resolve from opened position (source of truth)
+         bool positionResolved = false;
+         ulong positionTicket = 0;
+         double filledEntry = 0.0;
 
-         if(filledEntry <= 0)
+         if(PositionSelect(symbol))
            {
-            PushOrderFailed(cmdId, symbol, "POST_FILL_RESOLVE_FAILED", (int)result.retcode);
-            g_ordersFailed++;
+            long posMagic = PositionGetInteger(POSITION_MAGIC);
+            if(posMagic == magic)
+              {
+               positionResolved = true;
+               positionTicket = (ulong)PositionGetInteger(POSITION_TICKET);
+               filledEntry = PositionGetDouble(POSITION_PRICE_OPEN);
+              }
+           }
+
+         if(!positionResolved)
+           {
+            if(result.price > 0)
+              {
+               filledEntry = result.price;
+               positionTicket = (ulong)result.order;
+               positionResolved = true;
+              }
+           }
+
+         if(!positionResolved || filledEntry <= 0)
+           {
+            // Post-fill finalize is optional: fallback to execution result
+            filledEntry = (result.price > 0) ? result.price : request.price;
+            positionTicket = (ulong)result.order;
+            positionResolved = (filledEntry > 0);
+            PrintFormat("[PF_FILL_FALLBACK] cmd_id=%s symbol=%s fallback_entry=%.5f", cmdId, symbol, filledEntry);
+           }
+
+         if(!positionResolved)
+           {
+            if(!terminalEventSent)
+              {
+               PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
+                               volume, result.price, request.sl, request.tp, magic);
+               terminalEventSent = true;
+               g_ordersExecuted++;
+              }
             return;
            }
 
@@ -1306,22 +1353,40 @@ void ExecuteOpenOrder(const string &raw)
 
          tpAfter = NormalizeDouble(tpAfter, symDigits);
 
-         PrintFormat("[PF_FILL] cmd_id=%s symbol=%s filled_entry=%.5f", cmdId, symbol, filledEntry);
+         PrintFormat("[PF_FILL] cmd_id=%s symbol=%s position_ticket=%llu filled_entry=%.5f", cmdId, symbol, positionTicket, filledEntry);
          PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
 
-         double minDist = (stopLevel + 1) * pointVal;
-         bool validStops = true;
-         if(direction == "BUY")
-            validStops = ((filledEntry - slFinal) > minDist && (tpAfter - filledEntry) > minDist);
-         else
-            validStops = ((slFinal - filledEntry) > minDist && (filledEntry - tpAfter) > minDist);
+         // Safety layer 2: stop/freeze guards before modify
+         long freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+         double minStopDist = (stopLevel + 1) * pointVal;
+         double minFreezeDist = (freezeLevel + 1) * pointVal;
+         double bidNow = SymbolInfoDouble(symbol, SYMBOL_BID);
+         double askNow = SymbolInfoDouble(symbol, SYMBOL_ASK);
 
-         if(!validStops)
+         bool validStops = true;
+         bool validFreeze = true;
+         if(direction == "BUY")
            {
-            string reason = StringFormat("POST_FILL_MODIFY_FAILED|filled_entry=%.5f|tp_before=%.5f|tp_after=%.5f|modify_result=retcode:10016", filledEntry, tpBefore, tpAfter);
-            PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:10016 reason=INVALID_STOPS", cmdId, symbol);
-            PushOrderFailed(cmdId, symbol, reason, 10016);
-            g_ordersFailed++;
+            validStops = ((filledEntry - slFinal) > minStopDist && (tpAfter - filledEntry) > minStopDist);
+            validFreeze = ((bidNow - slFinal) > minFreezeDist && (tpAfter - bidNow) > minFreezeDist);
+           }
+         else
+           {
+            validStops = ((slFinal - filledEntry) > minStopDist && (filledEntry - tpAfter) > minStopDist);
+            validFreeze = ((slFinal - askNow) > minFreezeDist && (askNow - tpAfter) > minFreezeDist);
+           }
+
+         if(!validStops || !validFreeze)
+           {
+            string guardReason = validStops ? "FREEZE_GUARD" : "INVALID_STOPS";
+            PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
+            if(!terminalEventSent)
+              {
+               PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
+                               volume, filledEntry, slFinal, tpBefore, magic);
+               terminalEventSent = true;
+               g_ordersExecuted++;
+              }
             return;
            }
 
@@ -1329,13 +1394,13 @@ void ExecuteOpenOrder(const string &raw)
          MqlTradeResult modRes;
          ZeroMemory(modReq);
          ZeroMemory(modRes);
-         PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s sl=%.5f tp=%.5f", cmdId, symbol, slFinal, tpAfter);
+         PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s position=%llu sl=%.5f tp=%.5f", cmdId, symbol, positionTicket, slFinal, tpAfter);
          modReq.action = TRADE_ACTION_SLTP;
          modReq.symbol = symbol;
          modReq.magic = magic;
          modReq.sl = slFinal;
          modReq.tp = tpAfter;
-         modReq.position = (ulong)PositionGetInteger(POSITION_TICKET);
+         modReq.position = positionTicket;
 
          bool modOk = OrderSend(modReq, modRes) && modRes.retcode == TRADE_RETCODE_DONE;
          PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
@@ -1343,26 +1408,50 @@ void ExecuteOpenOrder(const string &raw)
          if(!modOk)
            {
             int modRetcode = (int)(modRes.retcode != 0 ? modRes.retcode : result.retcode);
-            string reason = StringFormat("POST_FILL_MODIFY_FAILED|filled_entry=%.5f|tp_before=%.5f|tp_after=%.5f|modify_result=retcode:%d", filledEntry, tpBefore, tpAfter, modRetcode);
-            PushOrderFailed(cmdId, symbol, reason, modRetcode);
-            g_ordersFailed++;
+            PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
+            if(!terminalEventSent)
+              {
+               PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
+                               volume, filledEntry, slFinal, tpBefore, magic);
+               terminalEventSent = true;
+               g_ordersExecuted++;
+              }
             return;
            }
 
-         PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                         volume, filledEntry, slFinal, tpAfter, magic);
-         g_ordersExecuted++;
+         if(!terminalEventSent)
+           {
+            PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
+                            volume, filledEntry, slFinal, tpAfter, magic);
+            terminalEventSent = true;
+            g_ordersExecuted++;
+           }
         }
       else
         {
-         PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                         volume, result.price, sl, tp, magic);
-         g_ordersExecuted++;
+         if(!terminalEventSent)
+           {
+            PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
+                            volume, result.price, sl, tp, magic);
+            terminalEventSent = true;
+            g_ordersExecuted++;
+           }
         }
      }
    else
      {
-      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+      if(!terminalEventSent)
+        {
+         PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+         terminalEventSent = true;
+         g_ordersFailed++;
+        }
+     }
+
+   // Safety layer 3: hard terminal event gate (exactly one terminal event)
+   if(!terminalEventSent)
+     {
+      PushOrderFailed(cmdId, symbol, "TERMINAL_EVENT_NOT_EMITTED", (int)result.retcode);
       g_ordersFailed++;
      }
   }
