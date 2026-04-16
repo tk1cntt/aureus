@@ -299,6 +299,75 @@ def test_pending_ai_no_order_opened():
         f"PENDING_AI should not emit ORDER_OPENED, got {tm.last_tick_events}"
 
 
+def test_dedupe_same_key_emits_once_even_if_history_missing():
+    """Cùng symbol/strategy/origin/side chỉ emit 1 lần dù history Redis bị mất."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger = _make_valid_trigger(strategy_id=11, strategy='test_bull_strategy', side='BUY')
+
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+    r._sets["aureus:orders:history:XAUUSD"] = set()
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+
+    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
+    assert len(order_open_streams) == 1
+    assert len(state.simulated_orders) == 1
+
+
+def test_dedupe_allows_different_side_same_candle():
+    """Cùng candle nhưng khác side vẫn phải emit đủ."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    buy_trigger = _make_valid_trigger(strategy_id=21, strategy='test_strategy', side='BUY')
+    sell_trigger = _make_valid_trigger(strategy_id=21, strategy='test_strategy', side='SELL')
+
+    run(tm.process_triggers("XAUUSD", [buy_trigger], state))
+    r._sets["aureus:orders:history:XAUUSD"] = set()
+    run(tm.process_triggers("XAUUSD", [sell_trigger], state))
+
+    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
+    assert len(order_open_streams) == 2
+    assert len(state.simulated_orders) == 2
+
+
+def test_dedupe_allows_different_strategy_same_candle():
+    """Khác strategy cùng candle vẫn phải emit đủ."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger_a = _make_valid_trigger(strategy_id=31, strategy='strategy_a', side='BUY')
+    trigger_b = _make_valid_trigger(strategy_id=32, strategy='strategy_b', side='BUY')
+
+    run(tm.process_triggers("XAUUSD", [trigger_a, trigger_b], state))
+
+    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
+    assert len(order_open_streams) == 2
+    assert len(state.simulated_orders) == 2
+
+
+def test_replay_same_trigger_key_no_new_order_event():
+    """Replay trigger key không tạo thêm order event."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger = _make_valid_trigger(strategy_id=41, strategy='test_replay', side='BUY')
+
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+    initial_stream_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
+
+    r._sets["aureus:orders:history:XAUUSD"] = set()
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+
+    replay_stream_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
+    assert replay_stream_count == initial_stream_count == 1
+
+
 # --- Runner ---
 
 if __name__ == "__main__":

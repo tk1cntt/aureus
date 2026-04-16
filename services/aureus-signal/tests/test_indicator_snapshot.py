@@ -31,10 +31,20 @@ def _make_state(**overrides):
 
 
 def test_returns_expected_keys():
-    """Verify snapshot has all 5 top-level keys."""
+    """Verify snapshot has expected keys including MTF candle color + BB fields."""
     state = _make_state()
     snap = build_indicator_snapshot_for_telegram(state)
-    assert set(snap.keys()) == {'emas', 'atr_14', 'vol_sma_20', 'htf_trend', 'cisd_mtf'}
+    expected = {
+        'emas', 'atr_14', 'vol_sma_20', 'htf_trend', 'cisd_mtf', 'digits',
+        'candle_color_d1', 'candle_color_h1', 'candle_color_m30', 'candle_color_m15', 'candle_color_m5',
+        'bb_m1', 'bb_m5', 'bb_m15', 'bb_m30', 'bb_h1',
+    }
+    assert set(snap.keys()) == expected
+    for key in ['bb_m1', 'bb_m5', 'bb_m15', 'bb_m30', 'bb_h1']:
+        assert key in snap
+    for key in ['candle_color_d1', 'candle_color_h1', 'candle_color_m30', 'candle_color_m15', 'candle_color_m5']:
+        assert key in snap
+    assert snap['digits'] == 2
 
 
 def test_ema_values_extracted():
