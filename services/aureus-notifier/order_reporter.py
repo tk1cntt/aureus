@@ -216,7 +216,7 @@ class OrderStatusReporter:
             time_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
         parts = [
-            f"{dir_emoji} <b>Order Opened</b>",
+            f"🆕 <b>Order Opened</b>",
             "\u2501" * 19,
         ]
 
