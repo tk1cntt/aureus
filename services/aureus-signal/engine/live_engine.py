@@ -750,13 +750,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
                                 # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
                                 if getattr(state, "transient_signals", None):
-                                    from engine.event_policy import evaluate_ai_trigger_events
                                     triggers = evaluate_ai_trigger_events(state.transient_signals)
                                     if triggers:
                                         from engine.signal_event_publisher import publish_signal_event
                                         from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
                                         signal_event_payload = {"signals": state.transient_signals}
-                                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
+                                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state, m1_df=df)
                                         await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, signal_event_payload)
 
                             await r.xack(stream_key, group_name, entry_id)
@@ -777,7 +776,12 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             if snapshot_mode == "FULL" or has_event:
                                 # Write signal snapshot (async, fire-and-forget)
                                 try:
-                                    snapshot = build_snapshot(state, data)
+                                    snapshot = build_snapshot(
+                                        state,
+                                        data,
+                                        m1_df=df,
+                                        digits=cfg.get("digits", 2),
+                                    )
                                     asyncio.create_task(_safe_insert_snapshot(db_pool, snapshot))
                                 except Exception as e:
                                     logger.warning(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
