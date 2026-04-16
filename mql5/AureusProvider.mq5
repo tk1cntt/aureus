@@ -1329,6 +1329,7 @@ void ExecuteOpenOrder(const string &raw)
          MqlTradeResult modRes;
          ZeroMemory(modReq);
          ZeroMemory(modRes);
+         PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s sl=%.5f tp=%.5f", cmdId, symbol, slFinal, tpAfter);
          modReq.action = TRADE_ACTION_SLTP;
          modReq.symbol = symbol;
          modReq.magic = magic;
