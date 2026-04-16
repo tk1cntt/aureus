@@ -6,8 +6,91 @@ import json
 import logging
 from engine.logging_common import get_logger
 import os
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+
+import pandas as pd
+
+from engine.mtf_snapshot import build_mtf_candle_color_map, build_bb_payload
+from engine.signals.resampler import resample_to_tf
+
+
+BB_TFS = ("M1", "M5", "M15", "M30", "H1")
+
+
+def _extract_m1_df(state, m1_df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    if isinstance(m1_df, pd.DataFrame):
+        return m1_df
+
+    state_df = getattr(state, "df", None)
+    if isinstance(state_df, pd.DataFrame):
+        return state_df
+
+    return None
+
+
+def _compute_bb_lines_from_df(df: Optional[pd.DataFrame], period: int = 20, std_mult: float = 2.0) -> Optional[Dict[str, float]]:
+    if df is None or len(df) < period or "c" not in df.columns:
+        return None
+
+    closes = pd.to_numeric(df["c"], errors="coerce").dropna()
+    if len(closes) < period:
+        return None
+
+    window = closes.iloc[-period:]
+    middle = float(window.mean())
+    std = float(window.std(ddof=0))
+    upper = middle + (std_mult * std)
+    lower = middle - (std_mult * std)
+    return {"upper": upper, "middle": middle, "lower": lower}
+
+
+def _build_bb_by_tf_from_m1_df(m1_df: Optional[pd.DataFrame]) -> Dict[str, Optional[Dict[str, float]]]:
+    bb_by_tf: Dict[str, Optional[Dict[str, float]]] = {}
+
+    if m1_df is None or len(m1_df) == 0:
+        for tf in BB_TFS:
+            bb_by_tf[tf] = None
+        return bb_by_tf
+
+    for tf in BB_TFS:
+        if tf == "M1":
+            tf_df = m1_df
+        else:
+            tf_df = resample_to_tf(m1_df, tf)
+            if tf_df is not None and len(tf_df) >= 2:
+                tf_df = tf_df.iloc[:-1]
+        bb_by_tf[tf] = _compute_bb_lines_from_df(tf_df)
+
+    return bb_by_tf
+
+
+def _build_mtf_extension_fields(state, m1_df: Optional[pd.DataFrame], digits: Optional[int]) -> Dict[str, Any]:
+    if digits is None:
+        digits = int(getattr(state, "digits", 2) or 2)
+
+    source_df = _extract_m1_df(state, m1_df)
+
+    candle_color_fields = {
+        "candle_color_d1": None,
+        "candle_color_h1": None,
+        "candle_color_m30": None,
+        "candle_color_m15": None,
+        "candle_color_m5": None,
+    }
+    if isinstance(source_df, pd.DataFrame):
+        candle_color_fields = build_mtf_candle_color_map(source_df, digits)
+
+    state_bb = getattr(state, "bb_by_tf", None)
+    bb_by_tf = state_bb if isinstance(state_bb, dict) else _build_bb_by_tf_from_m1_df(source_df)
+    bb_fields = build_bb_payload(bb_by_tf)
+
+    return {
+        **candle_color_fields,
+        **bb_fields,
+    }
+
+
 
 logger = get_logger(__name__)
 SPEC_VERSION = "2026-03-20-live-trading-v1"
@@ -155,7 +238,12 @@ def validate_decision_trace(trace: Dict[str, Any]) -> bool:
     return True
 
 
-def build_snapshot(state, candle: Dict[str, Any]) -> Dict[str, Any]:
+def build_snapshot(
+    state,
+    candle: Dict[str, Any],
+    m1_df: Optional[pd.DataFrame] = None,
+    digits: Optional[int] = None,
+) -> Dict[str, Any]:
     """
     Collects all signal values from state into a flat dict for DB insertion.
     
@@ -215,6 +303,8 @@ def build_snapshot(state, candle: Dict[str, Any]) -> Dict[str, Any]:
         if last_sp.get('t') == ts_unix:
             swing_label = last_sp.get('type', 'HH' if last_sp.get('is_high') else 'LL')
 
+    mtf_fields = _build_mtf_extension_fields(state, m1_df, digits)
+
     return {
         'time': dt,
         'symbol': symbol,
@@ -239,6 +329,7 @@ def build_snapshot(state, candle: Dict[str, Any]) -> Dict[str, Any]:
         'obs_full': obs_full,
         'swing_points_snapshot': swing_points_snapshot,
         'strategy_progress': strategy_progress,
+        **mtf_fields,
     }
 
 
@@ -249,12 +340,14 @@ async def insert_single_snapshot(db_pool, snapshot: Dict[str, Any], table_name: 
     """
     try:
         query = f"""
-            INSERT INTO {table_name} 
+            INSERT INTO {table_name}
                 (time, symbol, atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                  vol_sma_20, htf_trend, market_regime, session, events, active_obs, swing_label,
-                 aci, sentiment, narrative, obs_full, swing_points_snapshot, strategy_progress)
+                 aci, sentiment, narrative, obs_full, swing_points_snapshot, strategy_progress,
+                 candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
+                 bb_m1, bb_m5, bb_m15, bb_m30, bb_h1)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                    $17, $18, $19, $20, $21, $22)
+                    $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
             ON CONFLICT (time, symbol) DO UPDATE SET
                 atr = EXCLUDED.atr,
                 ema_21 = EXCLUDED.ema_21, ema_34 = EXCLUDED.ema_34,
@@ -272,7 +365,17 @@ async def insert_single_snapshot(db_pool, snapshot: Dict[str, Any], table_name: 
                 narrative = EXCLUDED.narrative,
                 obs_full = EXCLUDED.obs_full,
                 swing_points_snapshot = EXCLUDED.swing_points_snapshot,
-                strategy_progress = EXCLUDED.strategy_progress
+                strategy_progress = EXCLUDED.strategy_progress,
+                candle_color_d1 = EXCLUDED.candle_color_d1,
+                candle_color_h1 = EXCLUDED.candle_color_h1,
+                candle_color_m30 = EXCLUDED.candle_color_m30,
+                candle_color_m15 = EXCLUDED.candle_color_m15,
+                candle_color_m5 = EXCLUDED.candle_color_m5,
+                bb_m1 = EXCLUDED.bb_m1,
+                bb_m5 = EXCLUDED.bb_m5,
+                bb_m15 = EXCLUDED.bb_m15,
+                bb_m30 = EXCLUDED.bb_m30,
+                bb_h1 = EXCLUDED.bb_h1
         """
         await db_pool.execute(query,
             snapshot['time'], snapshot['symbol'],
@@ -284,6 +387,13 @@ async def insert_single_snapshot(db_pool, snapshot: Dict[str, Any], table_name: 
             snapshot.get('aci', 0), snapshot.get('sentiment', 'NEUTRAL'),
             snapshot.get('narrative'), snapshot.get('obs_full'),
             snapshot.get('swing_points_snapshot'), snapshot.get('strategy_progress'),
+            snapshot.get('candle_color_d1'), snapshot.get('candle_color_h1'),
+            snapshot.get('candle_color_m30'), snapshot.get('candle_color_m15'), snapshot.get('candle_color_m5'),
+            json.dumps(snapshot.get('bb_m1')) if snapshot.get('bb_m1') is not None else None,
+            json.dumps(snapshot.get('bb_m5')) if snapshot.get('bb_m5') is not None else None,
+            json.dumps(snapshot.get('bb_m15')) if snapshot.get('bb_m15') is not None else None,
+            json.dumps(snapshot.get('bb_m30')) if snapshot.get('bb_m30') is not None else None,
+            json.dumps(snapshot.get('bb_h1')) if snapshot.get('bb_h1') is not None else None,
         )
     except Exception as e:
         logger.warning(f"[Snapshot] Insert into {table_name} failed for {snapshot.get('symbol')} @ {snapshot.get('time')}: {e}")
@@ -301,12 +411,14 @@ async def batch_insert_snapshots(db_pool, snapshots: List[Dict[str, Any]], table
         async with db_pool.acquire() as conn:
             # Use prepared statement for batch performance
             query = f"""
-                INSERT INTO {table_name} 
+                INSERT INTO {table_name}
                     (time, symbol, atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                      vol_sma_20, htf_trend, market_regime, session, events, active_obs, swing_label,
-                     aci, sentiment, narrative, obs_full, swing_points_snapshot, strategy_progress)
+                     aci, sentiment, narrative, obs_full, swing_points_snapshot, strategy_progress,
+                     candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
+                     bb_m1, bb_m5, bb_m15, bb_m30, bb_h1)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                        $17, $18, $19, $20, $21, $22)
+                        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
                 ON CONFLICT (time, symbol) DO UPDATE SET
                     atr = EXCLUDED.atr,
                     ema_21 = EXCLUDED.ema_21, ema_34 = EXCLUDED.ema_34,
@@ -324,10 +436,20 @@ async def batch_insert_snapshots(db_pool, snapshots: List[Dict[str, Any]], table
                     narrative = EXCLUDED.narrative,
                     obs_full = EXCLUDED.obs_full,
                     swing_points_snapshot = EXCLUDED.swing_points_snapshot,
-                    strategy_progress = EXCLUDED.strategy_progress
+                    strategy_progress = EXCLUDED.strategy_progress,
+                    candle_color_d1 = EXCLUDED.candle_color_d1,
+                    candle_color_h1 = EXCLUDED.candle_color_h1,
+                    candle_color_m30 = EXCLUDED.candle_color_m30,
+                    candle_color_m15 = EXCLUDED.candle_color_m15,
+                    candle_color_m5 = EXCLUDED.candle_color_m5,
+                    bb_m1 = EXCLUDED.bb_m1,
+                    bb_m5 = EXCLUDED.bb_m5,
+                    bb_m15 = EXCLUDED.bb_m15,
+                    bb_m30 = EXCLUDED.bb_m30,
+                    bb_h1 = EXCLUDED.bb_h1
             """
             stmt = await conn.prepare(query)
-            
+
             for s in snapshots:
                 await stmt.fetch(
                     s['time'], s['symbol'],
@@ -339,6 +461,13 @@ async def batch_insert_snapshots(db_pool, snapshots: List[Dict[str, Any]], table
                     s.get('aci', 0), s.get('sentiment', 'NEUTRAL'),
                     s.get('narrative'), s.get('obs_full'),
                     s.get('swing_points_snapshot'), s.get('strategy_progress'),
+                    s.get('candle_color_d1'), s.get('candle_color_h1'),
+                    s.get('candle_color_m30'), s.get('candle_color_m15'), s.get('candle_color_m5'),
+                    json.dumps(s.get('bb_m1')) if s.get('bb_m1') is not None else None,
+                    json.dumps(s.get('bb_m5')) if s.get('bb_m5') is not None else None,
+                    json.dumps(s.get('bb_m15')) if s.get('bb_m15') is not None else None,
+                    json.dumps(s.get('bb_m30')) if s.get('bb_m30') is not None else None,
+                    json.dumps(s.get('bb_h1')) if s.get('bb_h1') is not None else None,
                 )
         
         return len(snapshots)

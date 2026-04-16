@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS aureus_signal_snapshots (
     obs_full JSONB,
     swing_points_snapshot JSONB,
     strategy_progress JSONB,
+    candle_color_d1 TEXT,
+    candle_color_h1 TEXT,
+    candle_color_m30 TEXT,
+    candle_color_m15 TEXT,
+    candle_color_m5 TEXT,
+    bb_m1 JSONB,
+    bb_m5 JSONB,
+    bb_m15 JSONB,
+    bb_m30 JSONB,
+    bb_h1 JSONB,
     PRIMARY KEY (time, symbol)
 );
 
@@ -207,6 +217,16 @@ CREATE TABLE IF NOT EXISTS aureus_backtest_snapshots (
     obs_full JSONB,
     swing_points_snapshot JSONB,
     strategy_progress JSONB,
+    candle_color_d1 TEXT,
+    candle_color_h1 TEXT,
+    candle_color_m30 TEXT,
+    candle_color_m15 TEXT,
+    candle_color_m5 TEXT,
+    bb_m1 JSONB,
+    bb_m5 JSONB,
+    bb_m15 JSONB,
+    bb_m30 JSONB,
+    bb_h1 JSONB,
     PRIMARY KEY (time, symbol)
 );
 
@@ -220,6 +240,29 @@ ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS key_insight TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS trigger_id TEXT;
 ALTER TABLE aureus_ai_analysis ADD COLUMN IF NOT EXISTS response_payload TEXT;
 ALTER TABLE aureus_ai_analysis ALTER COLUMN sentiment DROP NOT NULL;
+
+-- Phase 43: Snapshot MTF fields migration safety (existing DBs)
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS candle_color_d1 TEXT;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS candle_color_h1 TEXT;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS candle_color_m30 TEXT;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS candle_color_m15 TEXT;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS candle_color_m5 TEXT;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS bb_m1 JSONB;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS bb_m5 JSONB;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS bb_m15 JSONB;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS bb_m30 JSONB;
+ALTER TABLE aureus_signal_snapshots ADD COLUMN IF NOT EXISTS bb_h1 JSONB;
+
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS candle_color_d1 TEXT;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS candle_color_h1 TEXT;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS candle_color_m30 TEXT;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS candle_color_m15 TEXT;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS candle_color_m5 TEXT;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS bb_m1 JSONB;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS bb_m5 JSONB;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS bb_m15 JSONB;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS bb_m30 JSONB;
+ALTER TABLE aureus_backtest_snapshots ADD COLUMN IF NOT EXISTS bb_h1 JSONB;
 
 -- ============================================================================
 -- Phase 30: Trade State Management
