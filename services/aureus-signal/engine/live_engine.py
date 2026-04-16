@@ -755,9 +755,9 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                                     if triggers:
                                         from engine.signal_event_publisher import publish_signal_event
                                         from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
-                                        data = {"signals": state.transient_signals}
-                                        data["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
-                                        await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, data)
+                                        signal_event_payload = {"signals": state.transient_signals}
+                                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state)
+                                        await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, signal_event_payload)
 
                             await r.xack(stream_key, group_name, entry_id)
 
