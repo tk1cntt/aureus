@@ -80,7 +80,17 @@ class TradeJournalManager:
 
             # Signal context
             active_signals = data.get("active_signals", match_data.get("active_signals", []))
-            if not isinstance(active_signals, list):
+            if isinstance(active_signals, dict):
+                normalized_signals = []
+                for tag, payload in active_signals.items():
+                    if isinstance(payload, dict):
+                        normalized_signals.append({"tag": tag, **payload})
+                    else:
+                        normalized_signals.append({"tag": tag, "value": payload})
+                active_signals = normalized_signals
+            elif isinstance(active_signals, (tuple, set)):
+                active_signals = list(active_signals)
+            elif not isinstance(active_signals, list):
                 logger.warning("on_strategy_match: active_signals is not a list")
                 active_signals = []
 

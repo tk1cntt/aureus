@@ -81,6 +81,23 @@ class TestOnStrategyMatchInputValidation:
         assert result is True
 
     @pytest.mark.asyncio
+    async def test_TJ_IN_07b_active_signals_dict_normalized(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        """active_signals là dict snapshot → normalize sang list và vẫn insert thành công."""
+        valid_strategy_match_event["data"]["active_signals"] = {
+            "choch_up": {"value": True, "category": "structure"},
+            "cisd_bull": {"value": 1, "category": "momentum"},
+        }
+        mock_db_pool.set_result("fetchval", 1)
+        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+        assert result is True
+
+        query_args = mock_db_pool._conn.queries[0][2]
+        normalized = json.loads(query_args[6])
+        assert isinstance(normalized, list)
+        assert any(item.get("tag") == "choch_up" for item in normalized)
+        assert any(item.get("tag") == "cisd_bull" for item in normalized)
+
+    @pytest.mark.asyncio
     async def test_TJ_IN_08_origin_timestamp_unix_int(self, journal_manager, valid_strategy_match_event, mock_db_pool):
         """origin_timestamp is Unix int → converted to datetime successfully."""
         valid_strategy_match_event["data"]["origin_timestamp"] = 1712500800
