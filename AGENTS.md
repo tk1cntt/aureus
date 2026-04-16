@@ -3,6 +3,8 @@
 
 Mọi trao đổi phải dùng tiếng Việt.
 
+Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thống từ file RUN_SERVICES.md
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
