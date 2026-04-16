@@ -35,6 +35,7 @@ Last activity: 2026-04-14
 
 ### Roadmap Evolution
 
+- Phase 43 added: Bổ sung signal màu của nến sau vào db: 1D H1 M30 M15 M5 theo từng nến M1
 - Phase 40.3 inserted after Phase 40: Fix stale signal trigger on service restart with suppress flag (URGENT)
 - Phase 40.2 inserted after Phase 40: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (URGENT)
 - Phase 40.1 inserted after Phase 40: Tạo signal CISD dựa theo mẫu code sẽ cung cấp (URGENT)
