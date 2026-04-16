@@ -97,6 +97,7 @@ class TestDecisionTraceSchema(unittest.TestCase):
         context["order_plan_snapshot"] = {
             "entry_type": "MARKET",
             "entry_method": "CURRENT",
+            "entry_value": 0,
             "entry_policy": "IMMEDIATE",
             "sl_mode": "PRICE",
             "sl_value": 2298.5,
@@ -104,7 +105,7 @@ class TestDecisionTraceSchema(unittest.TestCase):
             "tp_value": 2.0,
             "trailing_mode": "NONE",
             "trailing_value": 0.0,
-            "size_mode": "FIXED_RISK",
+            "size_mode": "FIXED_LOT",
             "size_value": 0.01,
             "expiry_policy": "BAR_CLOSE",
         }

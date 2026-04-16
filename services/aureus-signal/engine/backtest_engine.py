@@ -224,7 +224,20 @@ async def run_backtest_engine(run_id: str, symbol: str, start_dt: datetime, end_
                                     
                                     # Pipeline Step 4: Simulated Order Management
                                     if strategy_results:
-                                        new_orders = await trade_manager.process_triggers(symbol, strategy_results, c_state)
+                                        recent_candles = [
+                                            {
+                                                "high": float(row["h"]),
+                                                "low": float(row["l"]),
+                                                "t": int(row["t"]),
+                                            }
+                                            for _, row in df.tail(5).iterrows()
+                                        ] if df is not None and len(df) >= 5 else None
+                                        new_orders = await trade_manager.process_triggers(
+                                            symbol,
+                                            strategy_results,
+                                            c_state,
+                                            recent_candles=recent_candles,
+                                        )
                                         if new_orders > 0:
                                             for res in strategy_results:
                                                 logger.debug(f"[{symbol}] STRATEGY TRIGGERED: {res['strategy']}")

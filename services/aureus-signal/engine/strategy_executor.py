@@ -455,6 +455,18 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         strategy_results = registry.evaluate_all(
                             mini_df, signals_snapshot, executor_state
                         )
+
+                        recent_candles = getattr(executor_state, "recent_candles", [])
+                        recent_candles.append(
+                            {
+                                "high": float(payload.get("high", 0)),
+                                "low": float(payload.get("low", 0)),
+                                "t": int(ts_unix),
+                            }
+                        )
+                        if len(recent_candles) > 5:
+                            recent_candles = recent_candles[-5:]
+                        executor_state.recent_candles = recent_candles
                         registry_rejections = registry.get_rejections(clear=True)
 
                         accepted_count = len(strategy_results) if strategy_results else 0
@@ -493,7 +505,13 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 entry_value = order_plan.get('entry_value')
                                 _side = res.get('side', 'BUY')
                                 computed_ep = trade_manager._calculate_entry_price(_side, executor_state, entry_method, entry_value)
-                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(res, executor_state, res, entry_price_override=computed_ep)
+                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(
+                                    res,
+                                    executor_state,
+                                    res,
+                                    entry_price_override=computed_ep,
+                                    recent_candles=recent_candles,
+                                )
                                 res['sl_absolute'] = abs_sl
                                 res['tp_absolute'] = abs_tp
                                 # MT5 will recalculate TP from real entry using this ratio
@@ -525,6 +543,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                     executor_state,
                                     ai_validator,
                                     execution_mode=execution_mode,
+                                    recent_candles=recent_candles,
                                 )
                                 if pending_order:
                                     await queue_ai_audit_task(ai_queue, ai_validator, symbol, mini_df, executor_state, pending_order)

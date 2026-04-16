@@ -11,7 +11,7 @@ from engine.orders import SimulatedTradeManager
 
 
 class TestFindPivotForSl:
-    """Tests for _find_pivot_for_sl() method."""
+    """Tests for _find_pivot_for_sl_candidates() method."""
 
     def setup_method(self):
         self.tm = SimulatedTradeManager(MagicMock())
@@ -28,8 +28,8 @@ class TestFindPivotForSl:
             {"t": 200, "price": 2010.0, "is_high": True, "type": "HH"},
             {"t": 300, "price": 2005.0, "is_high": False, "type": "LL", "broken": False},
         ])
-        result = self.tm._find_pivot_for_sl("BUY", self.state)
-        assert result == 2005.0  # LL gần nhất (t=300)
+        result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
+        assert result and result[0] == 2005.0  # LL gần nhất (t=300)
 
     def test_sell_finds_nearest_hh(self):
         """SELL tìm HH gần nhất chưa broken."""
@@ -38,8 +38,8 @@ class TestFindPivotForSl:
             {"t": 200, "price": 1990.0, "is_high": False, "type": "LL"},
             {"t": 300, "price": 2015.0, "is_high": True, "type": "HH", "broken": False},
         ])
-        result = self.tm._find_pivot_for_sl("SELL", self.state)
-        assert result == 2015.0  # HH gần nhất (t=300)
+        result = self.tm._find_pivot_for_sl_candidates("SELL", self.state)
+        assert result and result[0] == 2015.0  # HH gần nhất (t=300)
 
     def test_skips_broken_pivots(self):
         """Bỏ qua pivot đã broken, tìm pivot trước đó."""
@@ -47,14 +47,14 @@ class TestFindPivotForSl:
             {"t": 100, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 200, "price": 2005.0, "is_high": False, "type": "LL", "broken": True},
         ])
-        result = self.tm._find_pivot_for_sl("BUY", self.state)
-        assert result == 2000.0  # Pivot t=200 bị broken, lùi về t=100
+        result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
+        assert result and result[0] == 2000.0  # Pivot t=200 bị broken, lùi về t=100
 
-    def test_returns_none_if_no_swing_points(self):
-        """Return None khi swing_points rỗng."""
+    def test_returns_empty_if_no_swing_points(self):
+        """Return [] khi swing_points rỗng."""
         self.state.swing_points = []
-        result = self.tm._find_pivot_for_sl("BUY", self.state)
-        assert result is None
+        result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
+        assert result == []
 
     def test_returns_none_if_no_matching_type(self):
         """Return None khi không có swing point cùng loại (HH cho SELL, LL cho BUY)."""
@@ -62,8 +62,8 @@ class TestFindPivotForSl:
             {"t": 100, "price": 2000.0, "is_high": True, "type": "HH"},
             {"t": 200, "price": 2010.0, "is_high": True, "type": "HH"},
         ])
-        result = self.tm._find_pivot_for_sl("BUY", self.state)
-        assert result is None  # Không có LL nào
+        result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
+        assert result == []  # Không có LL nào
 
     def test_skips_wrong_type(self):
         """Bỏ qua LH cho BUY, HL cho SELL (strict SMC)."""
@@ -71,8 +71,8 @@ class TestFindPivotForSl:
             {"t": 100, "price": 2005.0, "is_high": False, "type": "LH"},  # LH, không phải LL
             {"t": 200, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
         ])
-        result = self.tm._find_pivot_for_sl("BUY", self.state)
-        assert result == 2000.0  # Bỏ qua LH, lấy LL
+        result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
+        assert result and result[0] == 2000.0  # Bỏ qua LH, lấy LL
 
 
 class TestCalculateSlTpPivotPoint:
@@ -110,13 +110,13 @@ class TestCalculateSlTpPivotPoint:
         assert sl is not None
         assert sl > 2020.0  # SL phải trên pivot
 
-    def test_pivot_point_no_pivot_rejects(self):
-        """Không tìm thấy pivot → reject (None, None)."""
+    def test_pivot_point_no_pivot_fallbacks_to_fixed_pips(self):
+        """Không tìm thấy pivot → fallback FIXED_PIPS."""
         self.state.swing_points = []
         config = {"sl": {"type": "PIVOT_POINT"}, "tp": {"type": "RR", "value": 2.0}}
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
-        assert sl is None
-        assert tp is None
+        assert sl is not None
+        assert tp is not None
 
     def test_pivot_point_zero_offset(self):
         """offset_pips=0 → SL = đúng giá pivot (không buffer)."""
@@ -139,6 +139,45 @@ class TestCalculateSlTpPivotPoint:
 
         # SL = pivot_price - 0 = pivot_price (same as offset_pips=0)
         assert sl == 2000.0
+
+    def test_pivot_point_buy_skips_invalid_pivot_and_uses_next(self):
+        """BUY: nếu low 5 nến <= pivot thì bỏ pivot đó, chọn pivot kế tiếp."""
+        self.state.swing_points = [
+            {"t": 800, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
+            {"t": 900, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        recent_candles = [
+            {"h": 2015, "l": 2002},
+            {"h": 2016, "l": 2001},
+            {"h": 2017, "l": 1998},
+            {"h": 2018, "l": 2003},
+            {"h": 2019, "l": 2004},
+        ]
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+
+        assert sl == 1990.0
+        assert tp is not None
+
+    def test_pivot_point_sell_skips_invalid_pivot_and_uses_next(self):
+        """SELL: nếu high 5 nến >= pivot thì bỏ pivot đó, chọn pivot kế tiếp."""
+        self.trigger["side"] = "SELL"
+        self.state.swing_points = [
+            {"t": 800, "price": 2030.0, "is_high": True, "type": "HH", "broken": False},
+            {"t": 900, "price": 2020.0, "is_high": True, "type": "HH", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        recent_candles = [
+            {"h": 2025, "l": 2001},
+            {"h": 2024, "l": 2002},
+            {"h": 2022, "l": 2000},
+            {"h": 2023, "l": 2003},
+            {"h": 2021, "l": 2004},
+        ]
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+
+        assert sl == 2030.0
+        assert tp is not None
 
     def test_fixed_pips_unchanged(self):
         """FIXED_PIPS vẫn hoạt động bình thường (backward compatibility)."""

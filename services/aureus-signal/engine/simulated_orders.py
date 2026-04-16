@@ -22,7 +22,13 @@ class SimulatedTradeManager:
         self.last_tick_events: List[str] = [] # Track events in the current candle
         logger.info("SimulatedTradeManager V2 initialized (Isolated-Mode with Advanced Logic).")
 
-    async def process_triggers(self, symbol: str, triggers: List[Dict[str, Any]], state_obj: Any) -> int:
+    async def process_triggers(
+        self,
+        symbol: str,
+        triggers: List[Dict[str, Any]],
+        state_obj: Any,
+        recent_candles: Optional[List[Dict[str, Any]]] = None,
+    ) -> int:
         """
         Processes strategy triggers, checks TraceID via Redis to avoid duplicates,
         calculates advanced SL/TP, and generates simulated orders.
@@ -84,7 +90,13 @@ class SimulatedTradeManager:
 
             # 5. Advanced SL/TP Logic
             exit_config = t.get('exit_config', {})
-            sl, tp = self._calculate_sl_tp(t, state_obj, exit_config, entry_price_override=entry_price)
+            sl, tp = self._calculate_sl_tp(
+                t,
+                state_obj,
+                exit_config,
+                entry_price_override=entry_price,
+                recent_candles=recent_candles,
+            )
             
             if sl is None or tp is None:
                 logger.warning(f"Failed to calculate SL/TP for {trace_id}, skipping.")
@@ -120,7 +132,14 @@ class SimulatedTradeManager:
 
         return new_orders_count
 
-    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any], entry_price_override: float = None):
+    def _calculate_sl_tp(
+        self,
+        trigger: Dict[str, Any],
+        state_obj: Any,
+        config: Dict[str, Any],
+        entry_price_override: float = None,
+        recent_candles: Optional[List[Dict[str, Any]]] = None,
+    ):
         """
         Calculates prices for SL and TP based on strategy config (Ported from Live Engine).
 
@@ -160,6 +179,57 @@ class SimulatedTradeManager:
             price_delta = raw_value * point_size
             sl = (entry - price_delta) if 'BUY' in trigger.get('side', 'BUY') else (entry + price_delta)
             
+        elif sl_mode == 'PIVOT_POINT':
+            offset_pips = sl_cfg.get('offset_pips', 0)
+            offset_distance = offset_pips * point_size
+
+            swing_points = getattr(state_obj, 'swing_points', [])
+            pivots: List[float] = []
+            is_sell = 'SELL' in trigger.get('side', 'BUY')
+            for sp in reversed(swing_points):
+                if sp.get('broken') is True:
+                    continue
+                sp_type = str(sp.get('type', '')).upper()
+                if is_sell:
+                    if sp.get('is_high') is not True or sp_type != 'HH':
+                        continue
+                else:
+                    if sp.get('is_high') is not False or sp_type != 'LL':
+                        continue
+                try:
+                    pivots.append(float(sp['price']))
+                except (TypeError, ValueError, KeyError):
+                    continue
+
+            lows: List[float] = []
+            highs: List[float] = []
+            if recent_candles and len(recent_candles) >= 5:
+                for c in recent_candles[-5:]:
+                    try:
+                        lows.append(float(c.get('low', c.get('l'))))
+                        highs.append(float(c.get('high', c.get('h'))))
+                    except (TypeError, ValueError):
+                        continue
+
+            selected_pivot = None
+            for pivot_price in pivots:
+                if len(lows) >= 5 and len(highs) >= 5:
+                    if is_sell:
+                        if max(highs) >= pivot_price:
+                            continue
+                    else:
+                        if min(lows) <= pivot_price:
+                            continue
+                selected_pivot = pivot_price
+                break
+
+            if selected_pivot is None:
+                fallback_pips = offset_pips if offset_pips > 0 else get_default_sl_pips(state_obj.symbol)
+                fallback_dist = fallback_pips * point_size
+                sl = (entry - fallback_dist) if 'BUY' in trigger.get('side', 'BUY') else (entry + fallback_dist)
+            else:
+                sl = selected_pivot - offset_distance if 'BUY' in trigger.get('side', 'BUY') else selected_pivot + offset_distance
+
         elif sl_mode in ('SIGNAL_LOW', 'SIGNAL_HIGH'):
             target_tag = sl_cfg.get('tag')
             buffer = sl_cfg.get('buffer', 0) * point_size

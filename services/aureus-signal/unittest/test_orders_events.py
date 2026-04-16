@@ -68,19 +68,43 @@ def test_init_has_last_tick_events():
     assert tm.last_tick_events == [], "Should be empty on init"
 
 
+def _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY'):
+    sl_cfg = {'mode': 'FIXED_PIPS', 'value': 100}
+    tp_cfg = {'mode': 'RR', 'value': 1.5}
+    trailing_cfg = {'mode': 'NONE', 'value': 0}
+    return {
+        'strategy_id': strategy_id,
+        'strategy': strategy,
+        'origin_timestamp': '1709300000',
+        'side': side,
+        # Flattened config at root (required by _calculate_sl_tp in orders.py)
+        'sl': sl_cfg,
+        'tp': tp_cfg,
+        'trailing': trailing_cfg,
+        # Snapshot config inside order_plan (required by order-plan validation)
+        'order_plan': {
+            'entry_type': 'MARKET',
+            'entry_method': 'CURRENT',
+            'entry_value': 0,
+            'entry_policy': 'IMMEDIATE',
+            'sl': sl_cfg,
+            'tp': tp_cfg,
+            'trailing': trailing_cfg,
+            'size_mode': 'FIXED_LOT',
+            'size': 0.01,
+            'expiry_policy': 'BAR_CLOSE',
+        },
+        'exit_config': {},
+    }
+
+
 def test_order_opened_event():
     """AC1: ORDER_OPENED appended when a new trade is created with ACTIVE status."""
     r = FakeRedis()
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = {
-        'strategy_id': 1,
-        'strategy': 'test_bull_strategy',
-        'origin_timestamp': '1709300000',
-        'side': 'BUY',
-        'exit_config': {},
-    }
+    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY')
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
 
@@ -94,13 +118,7 @@ def test_order_open_payload_contains_bridge_contract_fields():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = {
-        'strategy_id': 9,
-        'strategy': 'test_bull_strategy',
-        'origin_timestamp': '1709300000',
-        'side': 'BUY',
-        'exit_config': {},
-    }
+    trigger = _make_valid_trigger(strategy_id=9, strategy='test_bull_strategy', side='BUY')
 
     run(tm.process_triggers("XAUUSD", [trigger], state, execution_mode="nautilus"))
 
@@ -191,13 +209,7 @@ def test_trade_execution_unchanged():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = {
-        'strategy_id': 1,
-        'strategy': 'test_bear_strategy',
-        'origin_timestamp': '1709300000',
-        'side': 'SELL',
-        'exit_config': {},
-    }
+    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bear_strategy', side='SELL')
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
 
@@ -215,13 +227,7 @@ def test_sl_tp_calculation_unchanged():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = {
-        'strategy_id': 1,
-        'strategy': 'test_bull_strategy',
-        'origin_timestamp': '1709300000',
-        'side': 'BUY',
-        'exit_config': {},
-    }
+    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY')
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
     order = state.simulated_orders[0]
@@ -283,14 +289,8 @@ def test_pending_ai_no_order_opened():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = {
-        'strategy_id': 1,
-        'strategy': 'test_strategy',
-        'origin_timestamp': '1709300000',
-        'side': 'BUY',
-        'exit_config': {},
-        'ai_validation': True,
-    }
+    trigger = _make_valid_trigger(strategy_id=1, strategy='test_strategy', side='BUY')
+    trigger['ai_validation'] = True
 
     # With ai_validator present, status = PENDING_AI
     run(tm.process_triggers("XAUUSD", [trigger], state, ai_validator="mock"))

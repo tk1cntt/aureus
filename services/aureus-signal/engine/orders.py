@@ -160,6 +160,7 @@ class SimulatedTradeManager:
         state_obj: Any,
         ai_validator: Any = None,
         execution_mode: str = "simulated",
+        recent_candles: Optional[List[Dict[str, Any]]] = None,
     ):
         """Processes strategy triggers, checks TraceID, and generates simulated orders."""
         for t in triggers:
@@ -224,7 +225,13 @@ class SimulatedTradeManager:
 
             # 3. Calculate SL/TP using computed entry_price
             # config is pulled directly from t because registry.py flattens sl/tp configs onto the root of the map
-            sl, tp = self._calculate_sl_tp(t, state_obj, t, entry_price_override=computed_entry)
+            sl, tp = self._calculate_sl_tp(
+                t,
+                state_obj,
+                t,
+                entry_price_override=computed_entry,
+                recent_candles=recent_candles,
+            )
 
             if sl is None or tp is None:
                 logger.debug(
@@ -519,19 +526,18 @@ class SimulatedTradeManager:
         if len(state_obj.order_rejections) > 500:
             state_obj.order_rejections = state_obj.order_rejections[-500:]
 
-    def _find_pivot_for_sl(self, side: str, state_obj: Any) -> Optional[float]:
-        """Tìm swing point hợp lệ cho PIVOT_POINT SL.
+    def _find_pivot_for_sl_candidates(self, side: str, state_obj: Any) -> List[float]:
+        """Trả về danh sách pivot candidates hợp lệ cho PIVOT_POINT SL.
 
         BUY → LL (Lower Low) gần nhất chưa broken.
         SELL → HH (Higher High) gần nhất chưa broken.
-
-        Returns pivot price hoặc None nếu không tìm thấy.
         """
         swing_points = getattr(state_obj, 'swing_points', [])
         if not swing_points:
-            return None
+            return []
 
         is_high = ('SELL' in side)  # SELL cần HH, BUY cần LL
+        pivots: List[float] = []
 
         for sp in reversed(swing_points):
             if sp.get('is_high') != is_high:
@@ -543,11 +549,21 @@ class SimulatedTradeManager:
                 continue
             if not is_high and sp_type != 'LL':
                 continue
-            return float(sp['price'])
+            try:
+                pivots.append(float(sp['price']))
+            except (TypeError, ValueError, KeyError):
+                continue
 
-        return None
+        return pivots
 
-    def _calculate_sl_tp(self, trigger: Dict[str, Any], state_obj: Any, config: Dict[str, Any], entry_price_override: float = None):
+    def _calculate_sl_tp(
+        self,
+        trigger: Dict[str, Any],
+        state_obj: Any,
+        config: Dict[str, Any],
+        entry_price_override: float = None,
+        recent_candles: Optional[List[Dict[str, Any]]] = None,
+    ):
         """Calculates prices for SL and TP based on strategy config.
 
         SL value priority:
@@ -595,23 +611,55 @@ class SimulatedTradeManager:
             offset_pips = sl_cfg.get('offset_pips', 0)
             offset_distance = offset_pips * point_size
 
-            pivot_price = self._find_pivot_for_sl(side, state_obj)
-            if pivot_price is None:
+            pivots = self._find_pivot_for_sl_candidates(side, state_obj)
+            selected_pivot = None
+
+            lows: List[float] = []
+            highs: List[float] = []
+            if recent_candles and len(recent_candles) >= 5:
+                last5 = recent_candles[-5:]
+                for c in last5:
+                    try:
+                        lows.append(float(c.get('low', c.get('l'))))
+                        highs.append(float(c.get('high', c.get('h'))))
+                    except (TypeError, ValueError):
+                        continue
+
+            for pivot_price in pivots:
+                if len(lows) >= 5 and len(highs) >= 5:
+                    if 'BUY' in side:
+                        if min(lows) <= pivot_price:
+                            logger.debug(
+                                f"[{strategy_name}] [{symbol}] PIVOT_POINT reject BUY pivot={pivot_price} "
+                                f"because min(low_5)={min(lows)} <= pivot"
+                            )
+                            continue
+                    else:
+                        if max(highs) >= pivot_price:
+                            logger.debug(
+                                f"[{strategy_name}] [{symbol}] PIVOT_POINT reject SELL pivot={pivot_price} "
+                                f"because max(high_5)={max(highs)} >= pivot"
+                            )
+                            continue
+                selected_pivot = pivot_price
+                break
+
+            if selected_pivot is None:
                 fallback_pips = offset_pips if offset_pips > 0 else get_default_sl_pips(symbol)
                 fallback_dist = fallback_pips * point_size
                 sl = (entry - fallback_dist) if 'BUY' in side else (entry + fallback_dist)
                 logger.warning(
-                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid swing point found, "
+                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid pivot after 5-candle filter, "
                     f"fallback to FIXED_PIPS (distance={fallback_pips} pips, sl={sl})"
                 )
             else:
                 if 'BUY' in side:
-                    sl = pivot_price - offset_distance
+                    sl = selected_pivot - offset_distance
                 else:
-                    sl = pivot_price + offset_distance
+                    sl = selected_pivot + offset_distance
                 logger.info(
                     f"[{strategy_name}] [{symbol}] SL: entry={entry}, mode=PIVOT_POINT, "
-                    f"pivot_price={pivot_price}, offset_pips={offset_pips}, offset_distance={offset_distance}, "
+                    f"pivot_price={selected_pivot}, offset_pips={offset_pips}, offset_distance={offset_distance}, "
                     f"sl={sl}, side={side}"
                 )
 
