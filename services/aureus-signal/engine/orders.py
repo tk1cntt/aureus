@@ -1,4 +1,5 @@
 import logging
+from collections import deque
 from engine.logging_common import get_logger
 import json
 import os
@@ -152,6 +153,23 @@ class SimulatedTradeManager:
     def __init__(self, r):
         self.r = r # Redis client
         self.last_tick_events: List[str] = []  # Track trade events per candle cycle
+        self._recent_trigger_keys: deque[str] = deque(maxlen=2000)
+        self._recent_trigger_lookup: set[str] = set()
+
+    def _build_trigger_dedupe_key(self, symbol: str, strategy_id: Any, origin_t: Any, side: str) -> str:
+        return f"{symbol}:{strategy_id}:{origin_t}:{side}"
+
+    def _mark_trigger_key(self, key: str) -> None:
+        if key in self._recent_trigger_lookup:
+            return
+        if len(self._recent_trigger_keys) >= self._recent_trigger_keys.maxlen:
+            expired = self._recent_trigger_keys.popleft()
+            self._recent_trigger_lookup.discard(expired)
+        self._recent_trigger_keys.append(key)
+        self._recent_trigger_lookup.add(key)
+
+    def _is_duplicate_trigger_key(self, key: str) -> bool:
+        return key in self._recent_trigger_lookup
 
     async def process_triggers(
         self,
@@ -217,6 +235,15 @@ class SimulatedTradeManager:
                 if 'up' in name or 'bull' in name: side = 'BUY'
                 elif 'down' in name or 'bear' in name: side = 'SELL'
                 else: side = 'BUY'
+
+            trigger_key = self._build_trigger_dedupe_key(symbol, strat_id, origin_t, side)
+            if self._is_duplicate_trigger_key(trigger_key):
+                logger.debug(
+                    f"{PIPELINE_LOG_PREFIX}[D][process_triggers][duplicate_trigger_key] "
+                    f"symbol={symbol} strategy={strategy_name} strategy_id={strat_id} trigger_key={trigger_key} "
+                    f"reason_code=DUPLICATE_TRIGGER_KEY"
+                )
+                continue
 
             # 2. Compute entry_price from entry_method
             entry_method = order_plan_snapshot.get("entry_method", "CURRENT")
@@ -347,6 +374,7 @@ class SimulatedTradeManager:
                 "type": stream_type,
                 "data": json.dumps(order)
             })
+            self._mark_trigger_key(trigger_key)
 
             # 6. Trigger AI Audit Task if needed
             if status == "PENDING_AI":

@@ -57,7 +57,7 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "ORDER_FLOW_BULL",
-            "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps with tighter stops.",
+            "description": "BUY khi xuất hiện CHOCH bullish rồi xác nhận thêm sweep_bull (sequence: choch_up → sweep_bull).",
             "min_score": 6.0,
             "config": {
                 "min_score_threshold": 6.0,
@@ -72,6 +72,8 @@ async def seed_system_strategies(pool):
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_down"]
@@ -80,7 +82,7 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "ORDER_FLOW_BEAR",
-            "description": "Specialized Trend Continuation focusing on Session Liquidity Sweeps with tighter stops.",
+            "description": "SELL khi xuất hiện CHOCH bearish rồi xác nhận thêm sweep_bear (sequence: choch_down → sweep_bear).",
             "min_score": 6.0,
             "config": {
                 "min_score_threshold": 6.0,
@@ -95,6 +97,8 @@ async def seed_system_strategies(pool):
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_up"]
@@ -103,7 +107,7 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "SESSION_SWEEP_BULL",
-            "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
+            "description": "BUY chỉ khi có sweep_bull theo session liquidity (sequence: sweep_bull, không dùng CHOCH).",
             "min_score": 6.0,
             "config": {
                 "min_score_threshold": 6.0,
@@ -125,7 +129,7 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "SESSION_SWEEP_BEAR",
-            "description": "Dominance-based strategy. Massive OB imbalance with trend alignment and sweep trigger.",
+            "description": "SELL chỉ khi có sweep_bear theo session liquidity (sequence: sweep_bear, không dùng CHOCH).",
             "min_score": 6.0,
             "config": {
                 "min_score_threshold": 6.0,
@@ -249,13 +253,14 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "LIMIT_PULLBACK_BULL",
-            "description": "Vào lệnh BUY tại 50% retracement của candle trigger. Entry type LIMIT, entry_method PULLBACK_50.",
+            "description": "BUY LIMIT pullback 50% chỉ khi có CHOCH bullish rồi sweep_bull (sequence: choch_up → sweep_bull). Entry method PULLBACK_50 (khác FIXED_OFFSET/ORDER_FLOW).",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
                 "context_filters": [],
                 "sequence": [
-                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                    {"tag": "choch_up", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+                    {"tag": "sweep_bull", "weight": 3.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
                     "direction": "BUY",
@@ -295,13 +300,14 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "LIMIT_EMA_TOUCH_BULL",
-            "description": "Vào lệnh BUY khi giá chạm EMA 21. Entry type LIMIT, entry_method EMA_TOUCH period 21.",
+            "description": "Vào lệnh BUY LIMIT khi có CHOCH bullish và EMA 21 cross up (sequence: choch_up → ema_21_up). Entry method EMA_TOUCH period 21.",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
                 "context_filters": [],
                 "sequence": [
-                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                    {"tag": "choch_up", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
+                    {"tag": "ema_21_up", "weight": 3.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
                     "direction": "BUY",
@@ -319,13 +325,13 @@ async def seed_system_strategies(pool):
         },
         {
             "name": "LIMIT_FIXED_OFFSET_BULL",
-            "description": "Vào lệnh BUY dưới giá hiện tại 15 pips. Entry type LIMIT, entry_method FIXED_OFFSET.",
+            "description": "BUY LIMIT fixed offset 15 pips chỉ khi sweep_bull xuất hiện mà không cần CHOCH step (sequence: sweep_bull). Entry method FIXED_OFFSET (khác PULLBACK_50/ORDER_FLOW).",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
                 "context_filters": [],
                 "sequence": [
-                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]}
+                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
                 ],
                 "trade_execution": {
                     "direction": "BUY",
@@ -338,6 +344,54 @@ async def seed_system_strategies(pool):
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_PULLBACK_BEAR",
+            "description": "SELL LIMIT pullback 50% chỉ khi có CHOCH bearish rồi sweep_bear (sequence: choch_down → sweep_bear). Entry method PULLBACK_50 (khác FIXED_OFFSET/ORDER_FLOW).",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
+                    {"tag": "sweep_bear", "weight": 3.0, "required": True, "max_wait": 15, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "PULLBACK_50",
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
+            "name": "LIMIT_FIXED_OFFSET_BEAR",
+            "description": "SELL LIMIT fixed offset 15 pips chỉ khi sweep_bear xuất hiện mà không cần CHOCH step (sequence: sweep_bear). Entry method FIXED_OFFSET (khác PULLBACK_50/ORDER_FLOW).",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "sweep_bear", "weight": 5.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "size": 0.01,
+                    "entry_type": "LIMIT",
+                    "entry_method": "FIXED_OFFSET",
+                    "entry_value": 15,
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
                 }
             }
         },
