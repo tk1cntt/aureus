@@ -34,6 +34,7 @@
 | 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
 | 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
 | 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | ✅ DONE 2026-04-14 |
+| 44.0 | Profiling Baseline Performance — đo CPU/memory per signal | — | Not planned |
 
 ---
 
@@ -289,16 +290,6 @@ Plans:
 - [x] 40-02-PLAN.md — indicator_snapshot.py helper + tests (SIG-02)
 - [x] 40-03-PLAN.md — live_engine hook + Telegram formatter + tests (SIG-03, SIG-04)
 
----
-
-## Next Up
-
-**Phase 36.1** — Trade Execution Journal *(urgent insertion)*
-
-<sub>`/clear` first → fresh context window</sub>
-
-## Backlog
-
 ### Phase 40.3: Fix stale signal trigger on service restart with suppress flag (INSERTED)
 
 **Goal:** Thêm `_signal_suppressed` flag vào live_engine.py để chặn signals và strategies trigger trên stale data khi service restart. Flag set True sau snapshot restore hoặc full warmup, reset False khi nhận candle real-time đầu tiên từ gateway.
@@ -402,8 +393,6 @@ Plans:
 - [ ] 43-01-PLAN.md — TDD helper MTF candle-color/BB + last-closed/null-first contracts
 - [ ] 43-02-PLAN.md — Wire snapshot persistence + schema additive columns + regression tests
 
----
-
 ### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
 
 **Goal:** Sửa aureus-db-writer để parse đúng order events dạng wrapped payload (`type` + `data`) từ Redis stream, đảm bảo ghi dữ liệu trade nhất quán cho trade journal FK.
@@ -422,3 +411,23 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 44.0: Profiling Baseline Performance
+
+**Goal:** Instrument signal engine để đo CPU/memory/time per signal, per symbol, per candle trong 24h. Output: profiling data thực tế để ưu tiên optimization phases (44.1-44.5) dựa trên measurement, không phải assumptions.
+**Requirements**: PROF-01 (instrument timing), PROF-02 (log aggregation), PROF-03 (bottleneck identification)
+**Depends on:** None — can run on current codebase
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 44.0 to break down)
+
+### Phase 44: Tối ưu cách tính toán khi có nhiều signal với nhiều symbol
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 43, Phase 44.0
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 44 to break down)
