@@ -22,7 +22,7 @@ class WindowManager:
         "D1": 86400,
     }
 
-    def __init__(self, max_window=3000):
+    def __init__(self, max_window=3000, batch_threshold=10):
         self.max_window = max_window
         self.windows = defaultdict(list)
         self.window_dicts = defaultdict(dict)  # O(1) lookup: t -> candle reference
@@ -30,6 +30,11 @@ class WindowManager:
         self.states = {}
         self.backfill_status = {}  # symbol -> {'status': str, 'reason': str, 'updated_at': int}
         self.window_integrity = {}  # symbol -> {'is_contiguous_window': bool, ...}
+        # --- Batched DataFrame rebuild (44.1) ---
+        self._base_dfs = {}           # symbol -> base DataFrame (snapshot of window)
+        self._pending_buffers = defaultdict(list)  # symbol -> pending candles not yet in base_df
+        self._batch_threshold = batch_threshold
+        self._batch_stale = set()     # symbols whose base_df is stale and needs full rebuild
 
     def reset(self, symbol):
         """Clears memory state for a specific symbol."""
@@ -45,6 +50,12 @@ class WindowManager:
             del self.backfill_status[symbol]
         if symbol in self.window_integrity:
             del self.window_integrity[symbol]
+        # --- Batched rebuild state (44.1) ---
+        if symbol in self._base_dfs:
+            del self._base_dfs[symbol]
+        if symbol in self._pending_buffers:
+            del self._pending_buffers[symbol]
+        self._batch_stale.discard(symbol)
 
     def _timeframe_to_seconds(self, tf):
         return self._TIMEFRAME_SECONDS.get(str(tf).strip().upper(), 60)
@@ -83,6 +94,56 @@ class WindowManager:
             "reason": reason,
         }
 
+    # --- Batched DataFrame rebuild helpers (44.1) ---
+    def _invalidate_base(self, symbol):
+        """Mark base_df as stale so next _build_df_lazy does full rebuild."""
+        self._batch_stale.add(symbol)
+
+    def _build_df_lazy(self, symbol):
+        """Build DataFrame from base + pending buffer. Returns (df, is_batch_hit).
+
+        is_batch_hit=True means we used incremental concat (fast).
+        is_batch_hit=False means we rebuilt from full window (slow but necessary).
+        """
+        if symbol in self._batch_stale:
+            # Forced full rebuild due to edge case (trim, out-of-order, etc.)
+            window = self.windows.get(symbol, [])
+            df = pd.DataFrame(window)
+            self._base_dfs[symbol] = df
+            self._pending_buffers[symbol] = []
+            self._batch_stale.discard(symbol)
+            return df, False
+
+        base_df = self._base_dfs.get(symbol)
+        pending = self._pending_buffers.get(symbol, [])
+
+        if base_df is None or len(pending) == 0:
+            # No base or nothing pending — full rebuild from window
+            window = self.windows.get(symbol, [])
+            df = pd.DataFrame(window)
+            self._base_dfs[symbol] = df
+            self._pending_buffers[symbol] = []
+            return df, False
+
+        # Incremental concat: base_df + pending (small)
+        pending_df = pd.DataFrame(pending)
+        df = pd.concat([base_df, pending_df], ignore_index=True)
+        return df, True
+
+    def _sync_base_with_window(self, symbol):
+        """Rebuild base_df directly from current window state and clear pending buffer.
+
+        Call this when threshold is reached or when pending buffer needs to be flushed.
+        """
+        window = self.windows.get(symbol, [])
+        if window:
+            df = pd.DataFrame(window)
+            self._base_dfs[symbol] = df
+        else:
+            self._base_dfs.pop(symbol, None)
+        self._pending_buffers[symbol] = []
+        self._batch_stale.discard(symbol)
+
     def update(self, symbol, data):
         """Append a new candle, update state, and return symbols context."""
         if symbol not in self.states:
@@ -101,32 +162,49 @@ class WindowManager:
 
         window = self.windows[symbol]
         window_dict = self.window_dicts[symbol]
+        is_new_candle = True  # Track if we appended (not updated existing)
 
         if window and window[-1]["t"] == candle["t"]:
+            is_new_candle = False  # Same-timestamp update
             window[-1] = candle
             window_dict[candle["t"]] = candle
+            # Invalidate base for same-timestamp update — data changed
+            self._invalidate_base(symbol)
         elif candle["t"] in window_dict:
+            is_new_candle = False  # Update existing candle (out of position)
             for idx, existing in enumerate(window):
                 if existing["t"] == candle["t"]:
                     window[idx] = candle
                     break
             window_dict[candle["t"]] = candle
+            self._invalidate_base(symbol)
         else:
             window.append(candle)
             window_dict[candle["t"]] = candle
             if len(window) > 1 and candle["t"] < window[-2]["t"]:
                 window.sort(key=lambda x: x["t"])
+                self._invalidate_base(symbol)  # Out-of-order → force rebuild
 
+        # Window trim → invalidate base (window contents changed below threshold)
         if len(window) > self.max_window:
             removed_candles = window[:-self.max_window]
             self.windows[symbol] = window[-self.max_window:]
             window = self.windows[symbol]
             for removed in removed_candles:
                 window_dict.pop(removed["t"], None)
+            self._invalidate_base(symbol)
 
-        # --- Profiling: time DataFrame build (PROF-01) ---
+        # --- Batched DataFrame rebuild (44.1) ---
+        if is_new_candle:
+            pending = self._pending_buffers[symbol]
+            pending.append(candle)
+            # If threshold reached, sync base with full window and clear pending
+            if len(pending) >= self._batch_threshold:
+                self._sync_base_with_window(symbol)
+
+        # Build DataFrame using batched strategy
         t_df_start = time.perf_counter_ns()
-        df = pd.DataFrame(window)
+        df, is_batch_hit = self._build_df_lazy(symbol)
         df_build_ns = time.perf_counter_ns() - t_df_start
         self.dfs[symbol] = df
 
@@ -152,6 +230,8 @@ class WindowManager:
             logger.info(
                 f"[PROFILING] [{symbol}] candle={self._profiling_candle_count[symbol]} "
                 f"df_build={df_build_ns/1_000_000:.2f}ms "
+                f"batch_hit={is_batch_hit} "
+                f"pending_size={len(self._pending_buffers.get(symbol, []))} "
                 f"integrity={integrity_ns/1_000_000:.2f}ms "
                 f"window_size={len(window)}"
             )
