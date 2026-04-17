@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                            AureusProvider.mq5     |
-//|                    Aureus Data Provider â€” Multi-Symbol Streaming   |
+//|                    Aureus Data Provider — Multi-Symbol Streaming   |
 //|                    Streams market data + receives order commands   |
 //+------------------------------------------------------------------+
 #property copyright   "Aureus Project"
@@ -27,7 +27,7 @@ input int      InpTimerMs            = 100;                      // Timer interv
 input int      InpMaxSlippage        = 20;                       // Max slippage for market orders (points)
 input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
-int LOG_LEVEL = 2; //1:Info - 2:Debug
+input bool     InpDebugMode          = false;
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
 //+------------------------------------------------------------------+
@@ -45,7 +45,7 @@ struct SymbolContext
 AureusSocket  g_socket;                // TCP socket
 SymbolContext g_contexts[];             // Per-symbol state array
 int           g_symbolCount;           // Number of configured symbols
-long          g_lastTickMs;            // Last tick timestamp (ms) â€” for dedup (chart symbol)
+long          g_lastTickMs;            // Last tick timestamp (ms) — for dedup (chart symbol)
 int           g_ticksSent;             // Counter (chart symbol ticks)
 bool          g_wasDisconnected;       // Track if we were disconnected
 datetime      g_disconnectTime;        // When we lost connection
@@ -69,7 +69,7 @@ int OnInit()
 
    if(g_symbolCount <= 0)
      {
-      PrintFormat("[AureusProvider] ERROR: No symbols configured in InpSymbols!");
+      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: No symbols configured in InpSymbols!");
       return INIT_FAILED;
      }
 
@@ -88,13 +88,13 @@ int OnInit()
       // Ensure the symbol is in MarketWatch (needed for CopyRates on non-chart symbols)
       if(!SymbolSelect(g_contexts[i].symbol, true))
         {
-         PrintFormat("[AureusProvider] WARNING: Could not select symbol %s in MarketWatch",
+         if(InpDebugMode) PrintFormat("[AureusProvider] WARNING: Could not select symbol %s in MarketWatch",
                      g_contexts[i].symbol);
         }
      }
 
-   PrintFormat("[AureusProvider] Configured %d symbols: %s", g_symbolCount, InpSymbols);
-   PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
+   if(InpDebugMode) PrintFormat("[AureusProvider] Configured %d symbols: %s", g_symbolCount, InpSymbols);
+   if(InpDebugMode) PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
                InpSendTicks ? "ON" : "OFF", _Symbol);
 
 //--- Configure socket
@@ -121,7 +121,7 @@ int OnInit()
 //--- Attempt initial connection
    if(g_socket.Connect())
      {
-      // PrintFormat("[AureusProvider] Connected to %s:%d", InpGatewayHost, InpGatewayPort);
+      // if(InpDebugMode) PrintFormat("[AureusProvider] Connected to %s:%d", InpGatewayHost, InpGatewayPort);
 
       //--- Initialize last candle time for each symbol
       for(int i = 0; i < g_symbolCount; i++)
@@ -131,11 +131,11 @@ int OnInit()
             g_contexts[i].lastCandleTime = barTimes[0];
         }
 
-      PrintFormat("[AureusProvider] Passive mode enabled. Waiting for recovery commands.");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Passive mode enabled. Waiting for recovery commands.");
      }
    else
      {
-      PrintFormat("[AureusProvider] Initial connection failed â€” will retry on timer");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Initial connection failed — will retry on timer");
       g_wasDisconnected = true;
       g_disconnectTime  = TimeCurrent();
      }
@@ -162,7 +162,7 @@ void OnDeinit(const int reason)
    for(int i = 0; i < g_symbolCount; i++)
       totalCandles += g_contexts[i].candlesSent;
 
-   PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
+   if(InpDebugMode) PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
                g_ticksSent, totalCandles, g_ordersExecuted, g_ordersFailed);
   }
 
@@ -298,9 +298,9 @@ void ExecutePositionsRequest()
   {
    string json = BuildPositionsJSON();
    if(g_socket.SendJSON(json))
-      PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
+      if(InpDebugMode) PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
    else
-      PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
+      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
   }
 
 //+------------------------------------------------------------------+
@@ -310,7 +310,7 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
   {
    if(!HistorySelect(fromTime, toTime))
      {
-      PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
+      if(InpDebugMode) PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
       return "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"HistorySelect failed\"}";
      }
 
@@ -419,7 +419,7 @@ bool CheckAndSendCandleForSymbol(int ctxIndex)
    if(prevBarTime <= g_contexts[ctxIndex].lastCandleTime)
       return false;
 
-// The closed candle is the one at prevBarTime â€” get its OHLCV
+// The closed candle is the one at prevBarTime — get its OHLCV
    MqlRates rates[];
    if(CopyRates(sym, PERIOD_M1, 1, 1, rates) < 1)
       return false;
@@ -445,13 +445,13 @@ void DoInitialBackfillForSymbol(int ctxIndex)
 
    string sym = g_contexts[ctxIndex].symbol;
    int totalBars = InpInitialBars;
-   PrintFormat("[AureusProvider] [%s] Sending initial backfill: %d M1 candles", sym, totalBars);
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Sending initial backfill: %d M1 candles", sym, totalBars);
 
    MqlRates allRates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, totalBars, allRates);
    if(copied <= 0)
      {
-      PrintFormat("[AureusProvider] [%s] Initial CopyRates failed: %d", sym, GetLastError());
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Initial CopyRates failed: %d", sym, GetLastError());
       return;
      }
 
@@ -473,12 +473,12 @@ void DoInitialBackfillForSymbol(int ctxIndex)
       if(g_socket.SendJSON(json))
         {
          totalSent += count;
-         PrintFormat("[AureusProvider] [%s] BACKFILL chunk %d-%d sent (%d candles)",
+         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] BACKFILL chunk %d-%d sent (%d candles)",
                      sym, start + 1, end, count);
         }
       else
         {
-         // PrintFormat("[AureusProvider] [%s] BACKFILL chunk send failed at %d", sym, start);
+         // if(InpDebugMode) PrintFormat("[AureusProvider] [%s] BACKFILL chunk send failed at %d", sym, start);
          break;
         }
 
@@ -489,7 +489,7 @@ void DoInitialBackfillForSymbol(int ctxIndex)
      {
       g_contexts[ctxIndex].lastCandleTime = allRates[copied - 1].time;
       g_contexts[ctxIndex].candlesSent += totalSent;
-      PrintFormat("[AureusProvider] [%s] Initial backfill complete: %d/%d candles (%s to %s)",
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Initial backfill complete: %d/%d candles (%s to %s)",
                   sym, totalSent, copied,
                   TimeToString(allRates[0].time),
                   TimeToString(allRates[copied - 1].time));
@@ -512,7 +512,7 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
      {
       if(g_contexts[ctxIndex].lastCandleTime == 0)
         {
-         PrintFormat("[AureusProvider] [%s] No lastCandleTime â€” skipping backfill", sym);
+         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No lastCandleTime — skipping backfill", sym);
          return;
         }
       start = g_contexts[ctxIndex].lastCandleTime;
@@ -523,19 +523,19 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
 
    if(missedBars <= 0)
      {
-      PrintFormat("[AureusProvider] [%s] No candle gap detected", sym);
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No candle gap detected", sym);
       return;
      }
 
    if(toTime == 0 && missedBars > InpMaxBackfillBars)
      {
-      PrintFormat("[AureusProvider] [%s] Gap too large (%d bars), limiting to %d",
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Gap too large (%d bars), limiting to %d",
                   sym, missedBars, InpMaxBackfillBars);
       missedBars = InpMaxBackfillBars;
       start = end - (missedBars * 60);
      }
 
-   PrintFormat("[AureusProvider] [%s] Backfilling %d M1 bars from %s to %s",
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfilling %d M1 bars from %s to %s",
                sym, missedBars, TimeToString(start), TimeToString(end));
 
    MqlRates rates[];
@@ -543,7 +543,7 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
    int copied = CopyRates(sym, PERIOD_M1, start, end, rates);
    if(copied <= 0)
      {
-      PrintFormat("[AureusProvider] [%s] CopyRates by time failed: %d", sym, GetLastError());
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] CopyRates by time failed: %d", sym, GetLastError());
       return;
      }
 
@@ -563,7 +563,7 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
 
    if(filteredCount == 0)
      {
-      PrintFormat("[AureusProvider] [%s] No new candles to backfill in range", sym);
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No new candles to backfill in range", sym);
       return;
      }
 
@@ -591,13 +591,13 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
         }
       else
         {
-         PrintFormat("[AureusProvider] [%s] Backfill chunk send failed after %d/%d candles",
+         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfill chunk send failed after %d/%d candles",
                      sym, sentCount, filteredCount);
          break;
         }
      }
 
-   PrintFormat("[AureusProvider] [%s] Targeted backfill finished: %d/%d candles sent",
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Targeted backfill finished: %d/%d candles sent",
                sym, sentCount, filteredCount);
   }
 
@@ -613,13 +613,13 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
    if(count > InpMaxBackfillBars)
       count = InpMaxBackfillBars;
 
-   PrintFormat("[AureusProvider] [%s] Backfilling last %d M1 bars", sym, count);
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfilling last %d M1 bars", sym, count);
 
    MqlRates rates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, count, rates);
    if(copied <= 0)
      {
-      PrintFormat("[AureusProvider] [%s] CopyRates failed for count backfill: %d", sym, GetLastError());
+      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] CopyRates failed for count backfill: %d", sym, GetLastError());
       return;
      }
 
@@ -644,17 +644,17 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
         }
       else
         {
-         PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed after %d/%d candles",
+         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed after %d/%d candles",
                      sym, sentCount, copied);
          break;
         }
      }
 
-   PrintFormat("[AureusProvider] [%s] Count-based backfill finished: %d/%d candles sent", sym, sentCount, copied);
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Count-based backfill finished: %d/%d candles sent", sym, sentCount, copied);
   }
 
 //+------------------------------------------------------------------+
-//| Main tick handler â€” only sends ticks for chart symbol             |
+//| Main tick handler — only sends ticks for chart symbol             |
 //+------------------------------------------------------------------+
 void OnTick()
   {
@@ -806,7 +806,7 @@ void SendACK(string cmdId)
                     "{\"type\":\"ACK\",\"cmd_id\":\"%s\",\"t\":%lld}",
                     cmdId, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
+   if(InpDebugMode) PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
   }
 
 //+------------------------------------------------------------------+
@@ -819,7 +819,7 @@ void SendNACK(string cmdId, string reason)
                     "{\"type\":\"NACK\",\"cmd_id\":\"%s\",\"reason\":\"%s\",\"t\":%lld}",
                     cmdId, reason, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
+   if(InpDebugMode) PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
   }
 
 //+------------------------------------------------------------------+
@@ -864,7 +864,7 @@ void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
                     "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"t\":%lld}",
                     cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s", ticket, symbol);
+   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s", ticket, symbol);
   }
 
 //+------------------------------------------------------------------+
@@ -878,7 +878,7 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
                     "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
                     cmdId, symbol, reason, retcode, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
+   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
                cmdId, reason, retcode);
   }
 
@@ -897,7 +897,7 @@ void PushOrderClosed(string symbol, long ticket, string direction, double volume
                     symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
                     magic, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f", ticket, profit);
+   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f", ticket, profit);
   }
 
 
@@ -938,7 +938,7 @@ double CalculateLotFromBudget(string symbol, string direction,
    double tickSize  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
    if(tickValue <= 0 || tickSize <= 0)
      {
-      PrintFormat("[lot_calc] [%s] Invalid tick info — tickValue=%.5f tickSize=%.5f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Invalid tick info — tickValue=%.5f tickSize=%.5f",
                   symbol, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
@@ -956,7 +956,7 @@ double CalculateLotFromBudget(string symbol, string direction,
    double slDistance = MathAbs(actualEntry - slRequested);
    if(slDistance < tickSize)
      {
-      PrintFormat("[lot_calc] [%s] SL too close — dist=%.5f tickSize=%.5f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] SL too close — dist=%.5f tickSize=%.5f",
                   symbol, slDistance, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
@@ -965,7 +965,7 @@ double CalculateLotFromBudget(string symbol, string direction,
    double lossPerLot = (slDistance / tickSize) * tickValue;
    if(lossPerLot <= 0)
      {
-      PrintFormat("[lot_calc] [%s] Zero lossPerLot — dist=%.5f tickVal=%.2f tickSize=%.5f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Zero lossPerLot — dist=%.5f tickVal=%.2f tickSize=%.5f",
                   symbol, slDistance, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
@@ -1012,14 +1012,14 @@ double CalculateLotFromBudget(string symbol, string direction,
       slDistance = newSlDistance;
       lossPerLot = (slDistance / tickSize) * tickValue;
 
-      PrintFormat("[lot_calc] [%s] Lot %.2f > max %.2f — SL widened: dist=%.5f → new SL=%.5f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Lot %.2f > max %.2f — SL widened: dist=%.5f → new SL=%.5f",
                   symbol, riskAmount / lossPerLot, maxVol, slDistance, slRequested);
      }
 
 // --- Nếu lot < minVol → từ chối (không tăng budget) ---
    if(lot < minVol)
      {
-      PrintFormat("[lot_calc] [%s] Calculated lot %.4f < min %.2f — SL too wide for budget $%.2f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Calculated lot %.4f < min %.2f — SL too wide for budget $%.2f",
                   symbol, lot, minVol, originalBudget);
       return 0.0;
      }
@@ -1037,7 +1037,7 @@ double CalculateLotFromBudget(string symbol, string direction,
                        : SymbolInfoDouble(symbol, SYMBOL_BID),
                        marginRequired))
      {
-      PrintFormat("[lot_calc] [%s] Failed to calc margin — error=%d",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Failed to calc margin — error=%d",
                   symbol, GetLastError());
       return 0.0;
      }
@@ -1045,12 +1045,12 @@ double CalculateLotFromBudget(string symbol, string direction,
    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
    if(freeMargin < marginRequired)
      {
-      PrintFormat("[lot_calc] [%s] Insufficient margin — need=%.2f free=%.2f",
+      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Insufficient margin — need=%.2f free=%.2f",
                   symbol, marginRequired, freeMargin);
       return 0.0;
      }
 
-   PrintFormat("[lot_calc] [%s] %s | budget=$%.2f | entry=%.5f | SL=%.5f | "
+   if(InpDebugMode) PrintFormat("[lot_calc] [%s] %s | budget=$%.2f | entry=%.5f | SL=%.5f | "
                "dist=%.5f | tickVal=%.2f tickSize=%.5f | loss/lot=$%.2f | lot=%.2f | margin=%.2f",
                symbol, direction, originalBudget, actualEntry, slRequested,
                slDistance, tickValue, tickSize, lossPerLot, lot, marginRequired);
@@ -1109,7 +1109,7 @@ void ExecuteOpenOrder(const string &raw)
       return;
      }
 
-// ACK â€” command accepted
+// ACK — command accepted
    SendACK(cmdId);
    RecordCmdId(cmdId);
 
@@ -1169,7 +1169,7 @@ void ExecuteOpenOrder(const string &raw)
    else
       entry_price = price;
 
-   PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
+   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
                symbol, tpRRRatio, sl_price, tp_price);
 
 // Normalize volume
@@ -1252,7 +1252,7 @@ void ExecuteOpenOrder(const string &raw)
             if(fillType == ORDER_FILLING_RETURN)
                fillingStr = "RETURN";
 
-      PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
+      if(InpDebugMode) PrintFormat("[AureusProvider] [DEBUG] Order %s %s %s: vol=%.2f (min=%.2f,max=%.2f) | ask=%.5f bid=%.5f | SL=%.5f TP=%.5f | stopLevel=%ld pts | digits=%d | filling=%s",
                   symbol, direction, orderType,
                   request.volume, minVol, maxVol,
                   askPrice, bidPrice,
@@ -1262,11 +1262,11 @@ void ExecuteOpenOrder(const string &raw)
       if(orderType == "MARKET")
         {
          if(direction == "BUY")
-            PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
+            if(InpDebugMode) PrintFormat("[AureusProvider] [DEBUG] BUY check: ask-SL=%.5f (need>%.5f) | TP-ask=%.5f (need>%.5f)",
                         askPrice - request.sl, (stopLevel + 1) * pointVal,
                         request.tp - askPrice, (stopLevel + 1) * pointVal);
          else
-            PrintFormat("[AureusProvider] [DEBUG] SELL check: SL-bid=%.5f (need>%.5f) | bid-TP=%.5f (need>%.5f)",
+            if(InpDebugMode) PrintFormat("[AureusProvider] [DEBUG] SELL check: SL-bid=%.5f (need>%.5f) | bid-TP=%.5f (need>%.5f)",
                         request.sl - bidPrice, (stopLevel + 1) * pointVal,
                         bidPrice - request.tp, (stopLevel + 1) * pointVal);
         }
@@ -1327,7 +1327,7 @@ void ExecuteOpenOrder(const string &raw)
             filledEntry = (result.price > 0) ? result.price : request.price;
             positionTicket = (ulong)result.order;
             positionResolved = (filledEntry > 0);
-            PrintFormat("[PF_FILL_FALLBACK] cmd_id=%s symbol=%s fallback_entry=%.5f", cmdId, symbol, filledEntry);
+            if(InpDebugMode) PrintFormat("[PF_FILL_FALLBACK] cmd_id=%s symbol=%s fallback_entry=%.5f", cmdId, symbol, filledEntry);
            }
 
          if(!positionResolved)
@@ -1353,8 +1353,8 @@ void ExecuteOpenOrder(const string &raw)
 
          tpAfter = NormalizeDouble(tpAfter, symDigits);
 
-         PrintFormat("[PF_FILL] cmd_id=%s symbol=%s position_ticket=%llu filled_entry=%.5f", cmdId, symbol, positionTicket, filledEntry);
-         PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
+         if(InpDebugMode) PrintFormat("[PF_FILL] cmd_id=%s symbol=%s position_ticket=%llu filled_entry=%.5f", cmdId, symbol, positionTicket, filledEntry);
+         if(InpDebugMode) PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
 
          // Safety layer 2: stop/freeze guards before modify
          long freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
@@ -1379,7 +1379,7 @@ void ExecuteOpenOrder(const string &raw)
          if(!validStops || !validFreeze)
            {
             string guardReason = validStops ? "FREEZE_GUARD" : "INVALID_STOPS";
-            PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
+            if(InpDebugMode) PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
             if(!terminalEventSent)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
@@ -1394,7 +1394,7 @@ void ExecuteOpenOrder(const string &raw)
          MqlTradeResult modRes;
          ZeroMemory(modReq);
          ZeroMemory(modRes);
-         PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s position=%llu sl=%.5f tp=%.5f", cmdId, symbol, positionTicket, slFinal, tpAfter);
+         if(InpDebugMode) PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s position=%llu sl=%.5f tp=%.5f", cmdId, symbol, positionTicket, slFinal, tpAfter);
          modReq.action = TRADE_ACTION_SLTP;
          modReq.symbol = symbol;
          modReq.magic = magic;
@@ -1403,12 +1403,12 @@ void ExecuteOpenOrder(const string &raw)
          modReq.position = positionTicket;
 
          bool modOk = OrderSend(modReq, modRes) && modRes.retcode == TRADE_RETCODE_DONE;
-         PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
+         if(InpDebugMode) PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
 
          if(!modOk)
            {
             int modRetcode = (int)(modRes.retcode != 0 ? modRes.retcode : result.retcode);
-            PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
+            if(InpDebugMode) PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
             if(!terminalEventSent)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
@@ -1549,18 +1549,18 @@ void ExecuteRequestOrders(const string &raw)
    long   filterMagic = ParseJSONLong(raw, "magic_number");
    string filterSymbol = ParseJSONString(raw, "symbol");
 
-   PrintFormat("[AureusProvider] REQUEST_ORDERS: cmdId=%s magic=%lld symbol=%s",
+   if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_ORDERS: cmdId=%s magic=%lld symbol=%s",
                cmdId, filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
 
    string json = BuildOpenOrdersJSON(filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
      {
-      PrintFormat("[AureusProvider] ORDERS response sent");
+      if(InpDebugMode) PrintFormat("[AureusProvider] ORDERS response sent");
      }
    else
      {
-      PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
+      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
      }
   }
 
@@ -1611,7 +1611,7 @@ string BuildOpenOrdersJSON(long filterMagic, string filterSymbol)
      }
 
    json += StringFormat("],\"count\":%d}", count);
-   PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
+   if(InpDebugMode) PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
    return json;
   }
 
@@ -1631,24 +1631,24 @@ void ExecuteTradeHistoryRequest(const string &raw)
 
    if(fromTime >= toTime)
      {
-      PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
+      if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
       string errorJson = "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}";
       g_socket.SendJSON(errorJson);
       return;
      }
 
-   PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
+   if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
                TimeToString(fromTime), TimeToString(toTime), filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
 
    string json = BuildTradeHistoryJSON(fromTime, toTime, filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
      {
-      PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
+      if(InpDebugMode) PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
      }
    else
      {
-      PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
+      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
      }
   }
 
@@ -1670,14 +1670,14 @@ void ProcessIncomingCommands()
 // â”€â”€ Order Commands â”€â”€
    if(StringFind(raw, "\"OPEN_ORDER\"") >= 0)
      {
-      PrintFormat("[AureusProvider] Received OPEN_ORDER command");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Received OPEN_ORDER command");
       ExecuteOpenOrder(raw);
       return;
      }
 
    if(StringFind(raw, "\"CLOSE_ORDER\"") >= 0)
      {
-      PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
       ExecuteCloseOrder(raw);
       return;
      }
@@ -1685,7 +1685,7 @@ void ProcessIncomingCommands()
 // ── Position Report Request ──
    if(StringFind(raw, "\"REQUEST_POSITIONS\"") >= 0)
      {
-      PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
       ExecutePositionsRequest();
       return;
      }
@@ -1695,7 +1695,7 @@ void ProcessIncomingCommands()
       // â"€â"€ Open Orders Request â"€â"€
       if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
         {
-         PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
+         if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
          ExecuteRequestOrders(raw);
          return;
         }
@@ -1703,7 +1703,7 @@ void ProcessIncomingCommands()
 // â"€â"€ Trade History Request â"€â"€
    if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)
      {
-      PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
+      if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
       ExecuteTradeHistoryRequest(raw);
       return;
      }
@@ -1720,17 +1720,17 @@ void ProcessIncomingCommands()
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
               {
-               PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL_COUNT: %d candles",
+               if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL_COUNT: %d candles",
                            cmdSymbol, count);
                DoBackfillCountForSymbol(idx, (int)count);
               }
             else
-               PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
+               if(InpDebugMode) PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
            }
          else
            {
             // No symbol specified â†’ backfill all
-            PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
+            if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillCountForSymbol(i, (int)count);
            }
@@ -1756,17 +1756,17 @@ void ProcessIncomingCommands()
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
               {
-               PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL range: %s - %s",
+               if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL range: %s - %s",
                            cmdSymbol, TimeToString(fromTime), TimeToString(toTime));
                DoBackfillForSymbol(idx, fromTime, toTime);
               }
             else
-               PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
+               if(InpDebugMode) PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
            }
          else
            {
             // No symbol specified â†’ backfill all
-            PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
+            if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
                         TimeToString(fromTime), TimeToString(toTime));
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillForSymbol(i, fromTime, toTime);
@@ -1776,7 +1776,7 @@ void ProcessIncomingCommands()
   }
 
 //+------------------------------------------------------------------+
-//| Trade Transaction handler â€” detects position closes               |
+//| Trade Transaction handler — detects position closes               |
 //+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeRequest& request,
@@ -1799,7 +1799,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(entry != DEAL_ENTRY_OUT)
       return;
 
-// Filter by magic number â€” only report bot-managed positions
+// Filter by magic number — only report bot-managed positions
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
    if(magic == 0)
       return;  // Manual trade, skip
@@ -1822,7 +1822,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(PositionSelectByTicket(ticket))
       openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
 
-   PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected â€” "
+   if(InpDebugMode) PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
                "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
                symbol, ticket, direction, profit, magic);
 
@@ -1831,7 +1831,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
   }
 
 //+------------------------------------------------------------------+
-//| Timer event â€” candle polling, heartbeat, and status               |
+//| Timer event — candle polling, heartbeat, and status               |
 //+------------------------------------------------------------------+
 void OnTimer()
   {
@@ -1849,7 +1849,7 @@ void OnTimer()
 
       if(g_socket.EnsureConnected())
         {
-         // PrintFormat("[AureusProvider] Timer: Reconnected â€” waiting for Server gap detection commands");
+         // if(InpDebugMode) PrintFormat("[AureusProvider] Timer: Reconnected — waiting for Server gap detection commands");
          g_wasDisconnected = false;
          g_disconnectTime  = 0;
         }
@@ -1857,7 +1857,7 @@ void OnTimer()
         {
          int downSec = (g_disconnectTime > 0) ? (int)(TimeCurrent() - g_disconnectTime) : 0;
          if(downSec % 10 == 0) // Log every ~10 seconds
-            PrintFormat("[AureusProvider] Timer: Still disconnected (%d sec)", downSec);
+            if(InpDebugMode) PrintFormat("[AureusProvider] Timer: Still disconnected (%d sec)", downSec);
         }
       return;
      }

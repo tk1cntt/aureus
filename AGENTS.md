@@ -5,6 +5,8 @@ Mọi trao đổi phải dùng tiếng Việt.
 
 Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thống từ file RUN_SERVICES.md
 
+Sửa file AureusProvider.mq5 phải thực hiện theo mql5\Build_Rules.md
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
@@ -60,7 +62,7 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-This project is indexed by GitNexus as **Aureus** (4818 symbols, 11217 relationships, 216 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Aureus** (4840 symbols, 11269 relationships, 217 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

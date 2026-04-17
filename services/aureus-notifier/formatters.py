@@ -54,21 +54,20 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
     else:
         lines.append(f"\u2022 <b>HTF Trend</b>: {htf_display}")
 
-    # CISD Multi-TF — always show all 4 TFs
+    # CISD Multi-TF — show each TF on its own line
     cisd_mtf = snapshot.get("cisd_mtf") or {}
     status_emoji = {
         "bullish": "\U0001F7E2",  # 🟢
         "bearish": "\U0001F534",  # 🔴
     }
-    cisd_parts = []
+    lines.append("\u2022 <b>CISD MTF</b>:")
     for tf in ("M5", "M15", "M30", "H1"):
         status = cisd_mtf.get(tf)
         if status:
             emoji = status_emoji.get(status, "")
-            cisd_parts.append(f"{tf}: {emoji} {status.capitalize()}")
+            lines.append(f"  \u2022 {tf}: {emoji} {status.capitalize()}")
         else:
-            cisd_parts.append(f"{tf}: \u2014")  # — no tracking
-    lines.append(f"\u2022 <b>CISD MTF</b>: {' | '.join(cisd_parts)}")
+            lines.append(f"  \u2022 {tf}: \u2014")  # — no tracking
 
     # Candle Color MTF
     color_emoji = {
@@ -76,15 +75,14 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
         "BEARISH": "\U0001F534",  # 🔴
         "DOJI": "\u26AA",         # ⚪
     }
-    candle_parts = []
+    lines.append("\u2022 <b>Candle Color MTF</b>:")
     for tf in ("D1", "H1", "M30", "M15", "M5"):
         val = snapshot.get(f"candle_color_{tf.lower()}")
         if val:
             emoji = color_emoji.get(str(val).upper(), "")
-            candle_parts.append(f"{tf}: {emoji} {html.escape(str(val))}")
+            lines.append(f"  \u2022 {tf}: {emoji} {html.escape(str(val))}")
         else:
-            candle_parts.append(f"{tf}: \u2014")
-    lines.append(f"\u2022 <b>Candle Color MTF</b>: {' | '.join(candle_parts)}")
+            lines.append(f"  \u2022 {tf}: \u2014")
 
     # Bollinger Bands MTF
     def _fmt_bb(bb: dict | None) -> str:
@@ -97,10 +95,9 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
             return "\u2014"
         return html.escape(f"U:{upper:.{precision}f} M:{middle:.{precision}f} L:{lower:.{precision}f}")
 
-    bb_parts = []
+    lines.append("\u2022 <b>BB MTF</b>:")
     for tf in ("M1", "M5", "M15", "M30", "H1"):
-        bb_parts.append(f"{tf}: {_fmt_bb(snapshot.get(f'bb_{tf.lower()}'))}")
-    lines.append(f"\u2022 <b>BB MTF</b>: {' | '.join(bb_parts)}")
+        lines.append(f"  \u2022 {tf}: {_fmt_bb(snapshot.get(f'bb_{tf.lower()}'))}")
 
     return "\n".join(lines)
 
