@@ -91,10 +91,16 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
     close_price = float(df.iloc[-1]["c"])
     record = state.create_candle_record(ts_unix, close_price)
 
+    # --- Profiling: per-signal timing (PROF-01) ---
+    t_start = time.perf_counter_ns()
+    timing = {}
+
     for signal_name, signal_calc in signals.items():
         try:
             # logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
+            t_signal = time.perf_counter_ns()
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
+            timing[signal_name] = time.perf_counter_ns() - t_signal
             if res:
                 emitted_tag = res.get("tag", signal_name)
                 if emitted_tag:
@@ -106,10 +112,52 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
                     )
         except Exception as e:
             logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
+            timing[signal_name] = time.perf_counter_ns() - t_signal
+
+    timing["_total"] = time.perf_counter_ns() - t_start
+
+    # --- Profiling: log summary every 100 candles (PROF-02) ---
+    candle_count = getattr(state, "_profiling_candle_count", 0) + 1
+    state._profiling_candle_count = candle_count
+    if candle_count % 100 == 0:
+        avg = {k: round(v / 100 / 1_000_000, 4) for k, v in timing.items()}
+        logger.info(f"[PROFILING] [{symbol}] candle={candle_count} avg_ms={json.dumps(avg)}")
+
+    # --- Profiling: push to Redis stream (PROF-02) ---
+    if redis_client:
+        try:
+            last_candle = getattr(state, "last_candle", None) or {}
+            last_t = last_candle.get("t", ts_unix)
+            payload = {"t": str(last_t)}
+            payload.update({k: str(v) for k, v in timing.items()})
+            _schedule_profiling_push(redis_client, symbol, payload)
+        except Exception as e:
+            logger.warning(f"[PROFILING] Failed to schedule Redis push: {e}")
 
     state.current_signal = record.to_dict()
     state.log_signal_normalize_add(record)
     # logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
+
+
+async def _safe_profiling_push(redis_client: Any, symbol: str, payload: dict) -> None:
+    """Push profiling data to Redis stream. Fails silently — never crashes the engine."""
+    try:
+        await redis_client.xadd(
+            f"aureus:profiling:{symbol}",
+            payload,
+            maxlen=10000,
+        )
+    except Exception as e:
+        logger.warning(f"[PROFILING] Redis push failed for {symbol}: {e}")
+
+
+def _schedule_profiling_push(redis_client: Any, symbol: str, payload: dict) -> None:
+    """Schedule a Redis push task. Safe to call from sync code."""
+    try:
+        asyncio.create_task(_safe_profiling_push(redis_client, symbol, payload))
+    except Exception as e:
+        logger.warning(f"[PROFILING] Failed to schedule Redis push: {e}")
+
 
 def _read_ab_mode() -> str:
     raw = str(os.getenv("AB_MODE") or os.getenv("AUREUS_AB_MODE") or "B").strip().upper()

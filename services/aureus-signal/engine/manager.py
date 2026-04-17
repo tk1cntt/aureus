@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import time
 from engine.logging_common import get_logger
 from collections import defaultdict
 
@@ -123,9 +124,14 @@ class WindowManager:
             for removed in removed_candles:
                 window_dict.pop(removed["t"], None)
 
+        # --- Profiling: time DataFrame build (PROF-01) ---
+        t_df_start = time.perf_counter_ns()
         df = pd.DataFrame(window)
+        df_build_ns = time.perf_counter_ns() - t_df_start
         self.dfs[symbol] = df
 
+        # --- Profiling: time integrity check (PROF-01) ---
+        t_integrity_start = time.perf_counter_ns()
         integrity = self._build_integrity_metadata(window)
         self.set_window_integrity(
             symbol,
@@ -136,6 +142,19 @@ class WindowManager:
             reason=integrity["reason"],
             updated_at=candle["t"],
         )
+        integrity_ns = time.perf_counter_ns() - t_integrity_start
+
+        # --- Profiling: log every 100 candles (PROF-02) ---
+        if not hasattr(self, "_profiling_candle_count"):
+            self._profiling_candle_count = defaultdict(int)
+        self._profiling_candle_count[symbol] += 1
+        if self._profiling_candle_count[symbol] % 100 == 0:
+            logger.info(
+                f"[PROFILING] [{symbol}] candle={self._profiling_candle_count[symbol]} "
+                f"df_build={df_build_ns/1_000_000:.2f}ms "
+                f"integrity={integrity_ns/1_000_000:.2f}ms "
+                f"window_size={len(window)}"
+            )
 
         state.update_with_candle(candle)
 
