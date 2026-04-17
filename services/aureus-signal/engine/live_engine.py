@@ -83,7 +83,11 @@ def load_symbols_config(path="symbols.json"):
 
 
 def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
-    """Executes all signal calculators for current candle and appends one normalized CandleRecord."""
+    """Executes all signal calculators for current candle and appends one normalized CandleRecord.
+
+    Phase 44.3: Dirty-Flag per Signal — skips stateless indicator signals when
+    their input data is unchanged from the previous candle.
+    """
     if df is None or len(df) == 0:
         return
 
@@ -94,13 +98,27 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
     # --- Profiling: per-signal timing (PROF-01) ---
     t_start = time.perf_counter_ns()
     timing = {}
+    skipped_count = 0
 
     for signal_name, signal_calc in signals.items():
         try:
-            # logger.debug(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Calculating signal {signal_name}")
+            # --- Phase 44.3: Dirty-Flag skip ---
+            current_hash = _compute_signal_input_hash(signal_name, df, state)
+            if current_hash is not None:
+                prev_hash = state._signal_hash.get(signal_name) if hasattr(state, '_signal_hash') else None
+                if current_hash == prev_hash:
+                    timing[signal_name] = 0
+                    skipped_count += 1
+                    continue
+
             t_signal = time.perf_counter_ns()
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
             timing[signal_name] = time.perf_counter_ns() - t_signal
+
+            # Store hash after successful calculation
+            if current_hash is not None and hasattr(state, '_signal_hash'):
+                state._signal_hash[signal_name] = current_hash
+
             if res:
                 emitted_tag = res.get("tag", signal_name)
                 if emitted_tag:
@@ -115,13 +133,18 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
             timing[signal_name] = time.perf_counter_ns() - t_signal
 
     timing["_total"] = time.perf_counter_ns() - t_start
+    timing["_skipped"] = skipped_count
 
     # --- Profiling: log summary every 100 candles (PROF-02) ---
     candle_count = getattr(state, "_profiling_candle_count", 0) + 1
     state._profiling_candle_count = candle_count
     if candle_count % 100 == 0:
-        avg = {k: round(v / 100 / 1_000_000, 4) for k, v in timing.items()}
-        logger.info(f"[PROFILING] [{symbol}] candle={candle_count} avg_ms={json.dumps(avg)}")
+        # Timing metrics (nanoseconds → milliseconds)
+        timing_ms = {k: round(v / 100 / 1_000_000, 4) for k, v in timing.items() if k != "_skipped"}
+        logger.info(
+            f"[PROFILING] [{symbol}] candle={candle_count} avg_ms={json.dumps(timing_ms)} "
+            f"skipped={skipped_count}"
+        )
 
     # --- Profiling: push to Redis stream (PROF-02) ---
     if redis_client:
@@ -137,6 +160,62 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
     state.current_signal = record.to_dict()
     state.log_signal_normalize_add(record)
     # logger.info(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] {record.to_dict()}")
+
+
+# --- Phase 44.3: Dirty-Flag helpers ---
+_SKIPPABLE_SIGNALS = frozenset({
+    "ema_21", "ema_34", "ema_55", "ema_89", "ema_100", "ema_200",
+    "atr_14", "vol_sma", "trend", "session", "cisd", "cisd_mtf",
+})
+
+
+def _compute_signal_input_hash(signal_name: str, df: Any, state: Any):
+    """Compute a hash of the input data for a given signal.
+
+    Returns None if the signal is not skippable (stateful signals).
+    """
+    if signal_name not in _SKIPPABLE_SIGNALS:
+        return None
+
+    candle = df.iloc[-1]
+
+    # EMA signals: only depend on close price and previous EMA value
+    if signal_name.startswith("ema_"):
+        period = int(signal_name.split("_")[1])
+        ema_val = state.emas.get(period, {}).get("current")
+        return hash(("ema", candle["c"], ema_val))
+
+    # ATR: depends on H, L, C and previous ATR
+    if signal_name == "atr_14":
+        atr_val = getattr(state, "atr", None)
+        return hash(("atr", candle["h"], candle["l"], candle["c"], atr_val))
+
+    # VolSMA: depends on current volume and buffer
+    if signal_name == "vol_sma":
+        buf = getattr(state, "_vol_sma_20_buffer", [])
+        return hash(("vol", candle["v"], len(buf)))
+
+    # Trend: depends on close, EMA200, and OB counts
+    if signal_name == "trend":
+        ema200 = state.emas.get(200, {}).get("current")
+        obs = getattr(state, "obs", [])
+        green = sum(1 for ob in obs if not ob.get("mitigated") and ob.get("ob_type") == "BULLISH")
+        red = sum(1 for ob in obs if not ob.get("mitigated") and ob.get("ob_type") == "BEARISH")
+        return hash(("trend", candle["c"], ema200, green, red))
+
+    # Session: depends only on timestamp
+    if signal_name == "session":
+        return hash(("session", candle["t"]))
+
+    # CISD: depends on OHLC of last candle
+    if signal_name == "cisd":
+        return hash(("cisd", candle["o"], candle["h"], candle["l"], candle["c"]))
+
+    # CISD_MTF: depends on OHLC of last candle
+    if signal_name == "cisd_mtf":
+        return hash(("cisd_mtf", candle["o"], candle["h"], candle["l"], candle["c"]))
+
+    return None
 
 
 async def _safe_profiling_push(redis_client: Any, symbol: str, payload: dict) -> None:

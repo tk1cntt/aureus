@@ -127,6 +127,9 @@ class SymbolState:
 
         # Phase 44.2: Verification counter for incremental cache drift detection
         self._verification_counter: int = 0
+
+        # Phase 44.3: Dirty-flag hash cache for skippable signals
+        self._signal_hash: Dict[str, int] = {}
         
         # AI Control & Result Storage
         self.ai_update_pending: bool = False
