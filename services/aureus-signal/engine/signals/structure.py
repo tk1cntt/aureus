@@ -1,10 +1,14 @@
+import copy
 import logging
+import os
 from engine.logging_common import get_logger
 from .base import BaseSignal, SignalType
 import pandas as pd
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 logger = get_logger(__name__)
+
+
 class StructureSignal(BaseSignal):
     """
     Detects Market Structure Shifts (CHoCH) and creates Order Blocks (OB).
@@ -17,7 +21,81 @@ class StructureSignal(BaseSignal):
     def __init__(self):
         super().__init__("Market Structure Processor (MQL5 Parity)")
 
+    def _get_structure_opt_mode(self) -> str:
+        mode = os.getenv("AUREUS_STRUCTURE_OPT_MODE", "off").strip().lower()
+        if mode not in {"off", "shadow", "on"}:
+            return "off"
+        return mode
+
+    def _snapshot_contract(self, state_obj: Any, result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        transient = getattr(state_obj, "transient_signals", {})
+        obs = getattr(state_obj, "obs", [])
+        swings = getattr(state_obj, "swing_points", [])
+        return {
+            "transient_signals": copy.deepcopy(transient),
+            "obs": copy.deepcopy(obs),
+            "swing_points": copy.deepcopy(swings),
+            "result": copy.deepcopy(result),
+        }
+
+    def _compare_shadow_contract(self, old_state: Dict[str, Any], new_state: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        diff_fields: List[str] = []
+        for field in ["transient_signals", "obs", "swing_points", "result"]:
+            if old_state.get(field) != new_state.get(field):
+                diff_fields.append(field)
+        return (len(diff_fields) == 0, diff_fields)
+
+    def _restore_runtime_state(self, target: Any, source: Any) -> None:
+        target.transient_signals = copy.deepcopy(getattr(source, "transient_signals", {}))
+        target.obs = copy.deepcopy(getattr(source, "obs", []))
+        target.swing_points = copy.deepcopy(getattr(source, "swing_points", []))
+
+    def _log_shadow_mismatch(self, state_obj: Any, df: pd.DataFrame, diff_fields: List[str]) -> None:
+        symbol = getattr(state_obj, "symbol", "UNKNOWN")
+        t_val = None
+        if len(df) > 0:
+            t_val = int(df.iloc[-1]["t"])
+        logger.warning("[structure-shadow-mismatch] symbol=%s t=%s diff_fields=%s", symbol, t_val, diff_fields)
+
     def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
+        mode = self._get_structure_opt_mode()
+
+        if mode == "off":
+            return self._calculate_old_path(df, state_obj, **kwargs)
+
+        if mode == "shadow":
+            old_runtime = copy.deepcopy(state_obj)
+            new_runtime = copy.deepcopy(state_obj)
+
+            old_result = self._calculate_old_path(df, old_runtime, **kwargs)
+            new_result = self._calculate_optimized_path(df, new_runtime, **kwargs)
+
+            old_contract = self._snapshot_contract(old_runtime, old_result)
+            new_contract = self._snapshot_contract(new_runtime, new_result)
+            is_match, diff_fields = self._compare_shadow_contract(old_contract, new_contract)
+
+            if not is_match:
+                self._log_shadow_mismatch(state_obj, df, diff_fields)
+
+            self._restore_runtime_state(state_obj, old_runtime)
+            return old_result
+
+        old_runtime = copy.deepcopy(state_obj)
+        old_result = self._calculate_old_path(df, old_runtime, **kwargs)
+        new_result = self._calculate_optimized_path(df, state_obj, **kwargs)
+
+        old_contract = self._snapshot_contract(old_runtime, old_result)
+        new_contract = self._snapshot_contract(state_obj, new_result)
+        is_match, diff_fields = self._compare_shadow_contract(old_contract, new_contract)
+
+        if not is_match:
+            self._log_shadow_mismatch(state_obj, df, diff_fields)
+            self._restore_runtime_state(state_obj, old_runtime)
+            return old_result
+
+        return new_result
+
+    def _calculate_old_path(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
         if len(df) < 5 or state_obj is None:
             return None
 
@@ -27,33 +105,24 @@ class StructureSignal(BaseSignal):
 
         points = state_obj.swing_points
         nPoints = len(points)
-        
-        # --- Performance Optimization ---
-        # Generate timestamp to integer positional index mapping once per cycle.
-        # This replaces the old caching which became stale when len(df) was 
-        # constant in a rolling window.
+
         t_values = df['t'].values
         t_map = {int(t): i for i, t in enumerate(t_values)}
-        
-        # Pivot-Centric Scan: Iterate through every historical pivot
-        # Check if it has been broken by subsequent price action
+
         new_signals = []
         for i in range(nPoints):
             p = points[i]
-            if p.get('is_choch'): continue
-            
-            # User Rule: Only HH and LL swing points trigger CHOCH on breach.
-            # (LH and HL are considered internal structure and ignored for CHOCH).
+            if p.get('is_choch'):
+                continue
+
             if p.get('type') not in ["HH", "LL"]:
                 continue
-            
+
             is_bullish = p['is_high']
-            
-            # Using i as both starting scan index and pivot index
+
             signal = self._process_choch(df, points, i, i, is_bullish, state_obj=state_obj, t_map=t_map)
             if signal:
                 new_signals.append(signal)
-                # Also store in transient_signals for consumer outlets
                 tag = signal.get('tag')
                 if tag:
                     history = getattr(state_obj, 'signal_history', [])
@@ -88,8 +157,11 @@ class StructureSignal(BaseSignal):
 
         if new_signals:
             return new_signals[-1]
-            
+
         return None
+
+    def _calculate_optimized_path(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
+        return self._calculate_old_path(df, state_obj, **kwargs)
 
     def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any):
         """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""
