@@ -124,6 +124,9 @@ class SymbolState:
         self.atr: float = 5.0
         self.atr_sma_20: float = 10.0
         self.news_events: List[Dict[str, Any]] = []
+
+        # Phase 44.2: Verification counter for incremental cache drift detection
+        self._verification_counter: int = 0
         
         # AI Control & Result Storage
         self.ai_update_pending: bool = False

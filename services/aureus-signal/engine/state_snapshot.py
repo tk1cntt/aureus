@@ -27,6 +27,7 @@ class StateSnapshot:
     ema_100: Optional[float] = None
     ema_200: Optional[float] = None
     vol_sma_20: Optional[float] = None
+    vol_sma_buffer: Optional[str] = None  # Phase 44.2: JSON array of volume values for incremental restore
 
     # Market Context
     htf_trend: Optional[str] = None
@@ -64,6 +65,7 @@ class StateSnapshot:
             'ema_100': self.ema_100,
             'ema_200': self.ema_200,
             'vol_sma_20': self.vol_sma_20,
+            'vol_sma_buffer': self.vol_sma_buffer,
             'htf_trend': self.htf_trend,
             'market_regime': self.market_regime,
             'session': self.session,
@@ -132,6 +134,14 @@ class StateSnapshot:
             if last_sp.get('t') == ts_unix:
                 swing_label = last_sp.get('type', 'HH' if last_sp.get('is_high') else 'LL')
 
+        # Phase 44.2: Serialize VolSMA circular buffer
+        vol_sma_buffer = None
+        buffer_attr = '_vol_sma_20_buffer'
+        if hasattr(state, buffer_attr):
+            buf = getattr(state, buffer_attr)
+            if isinstance(buf, list) and len(buf) > 0:
+                vol_sma_buffer = json.dumps(buf)
+
         return cls(
             symbol=symbol,
             timestamp=ts_unix,
@@ -143,6 +153,7 @@ class StateSnapshot:
             ema_100=get_ema(100),
             ema_200=get_ema(200),
             vol_sma_20=state.vol_sma_20 if hasattr(state, 'vol_sma_20') else None,
+            vol_sma_buffer=vol_sma_buffer,
             htf_trend=getattr(state, 'htf_trend', None),
             market_regime=getattr(state, 'market_regime', None),
             session=getattr(state, 'current_session', None),
@@ -185,6 +196,7 @@ class StateSnapshot:
             ema_100=row.get('ema_100'),
             ema_200=row.get('ema_200'),
             vol_sma_20=row.get('vol_sma_20'),
+            vol_sma_buffer=_json_field(row.get('vol_sma_buffer')),
             htf_trend=row.get('htf_trend'),
             market_regime=row.get('market_regime'),
             session=row.get('session'),
@@ -215,6 +227,14 @@ class StateSnapshot:
             state.emas[200] = self.ema_200 or 0
         if self.vol_sma_20 is not None:
             state.vol_sma_20 = self.vol_sma_20
+        # Phase 44.2: Restore VolSMA buffer for incremental cache
+        if self.vol_sma_buffer:
+            try:
+                buf = json.loads(self.vol_sma_buffer) if isinstance(self.vol_sma_buffer, str) else self.vol_sma_buffer
+                if isinstance(buf, list) and len(buf) > 0:
+                    state._vol_sma_20_buffer = buf
+            except Exception:
+                pass
         if self.htf_trend:
             state.htf_trend = self.htf_trend
         if self.market_regime:
