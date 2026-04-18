@@ -776,6 +776,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
     asyncio.create_task(daily_gc_loop())
     
+    symbol_health_manager = SymbolRuntimeHealthManager()
+
     async def _process_candle_work_item(symbol: str, item: CandleWorkItem) -> None:
         stream_key = item.stream_key
         entry_id = item.entry_id
@@ -785,13 +787,18 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
         try:
             ts_unix = int(data.get('t', 0))
+            processing_mode = resolve_symbol_processing_mode(symbol, symbol_health_manager)
 
             state = window_manager.states.get(symbol)
             if state:
                 last_executed_t = int(state.tracking_vars.get('last_executed_candle_t', 0) or 0)
                 runtime.set_last_executed_candle_t(symbol, last_executed_t)
 
-            df, state = window_manager.update(symbol, data)
+            if processing_mode == "fallback_serial":
+                async with symbol_locks[symbol]:
+                    df, state = window_manager.update(symbol, data)
+            else:
+                df, state = window_manager.update(symbol, data)
             state.transient_signals = {}
 
             remaining = getattr(state, "_warmup_candles_remaining", 0)
@@ -879,7 +886,26 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
             state.tracking_vars['last_executed_candle_t'] = ts_unix
 
+            queue_depth = runtime._queues.get(symbol).qsize() if symbol in runtime._queues else 0
+            lag_ms = max(0.0, (time.time() - float(ts_unix)) * 1000.0)
+            symbol_health_manager.update_symbol_metrics(
+                symbol,
+                lag_p95_ms=lag_ms,
+                queue_depth=queue_depth,
+                error_rate=0.0,
+            )
+            symbol_health_manager.get_symbol_status(symbol)
+
         except Exception as e:
+            symbol_health_manager.record_symbol_failure(symbol)
+            symbol_health_manager.update_symbol_metrics(
+                symbol,
+                lag_p95_ms=0.0,
+                queue_depth=0,
+                error_rate=1.0,
+            )
+            symbol_health_manager.get_symbol_status(symbol)
+
             logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {entry_id}: {e}")
         finally:
             if item.ack:

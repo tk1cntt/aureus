@@ -1,11 +1,16 @@
 import pytest
 import asyncio
+import inspect
 import json
+import os
+import sys
 import time
 from unittest.mock import AsyncMock
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from engine.providers.base import DecisionSignal
-from engine.live_engine import shadow_execute_pulse, resolve_symbol_processing_mode
+from engine.live_engine import run_signal_engine, shadow_execute_pulse, resolve_symbol_processing_mode
 from engine.symbol_runtime import SymbolRuntimeHealthManager
 
 def test_shadow_mode_execution_wrapper():
@@ -54,6 +59,14 @@ async def _test_shadow_mode_execution_wrapper_async():
     assert payload["confidence"] == 0.99
     assert payload["reasoning"] == "mock_reasoning"
     assert "llm_latency_ms" in payload
+
+
+def test_run_signal_engine_wires_health_and_rollout_hooks():
+    source = inspect.getsource(run_signal_engine)
+    assert "SymbolRuntimeHealthManager(" in source
+    assert "resolve_symbol_processing_mode(" in source
+    assert "update_symbol_metrics(" in source
+    assert "get_symbol_status(" in source
 
 
 def test_rollout_transition_shadow_canary_full():
