@@ -299,6 +299,38 @@ def test_pending_ai_no_order_opened():
         f"PENDING_AI should not emit ORDER_OPENED, got {tm.last_tick_events}"
 
 
+def test_trace_id_uses_symbol_strategy_origin_format():
+    """D-08: trace_id phải có format symbol:strategy_id:origin_timestamp."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger = _make_valid_trigger(strategy_id=55, strategy='test_trace', side='BUY')
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+
+    assert len(state.simulated_orders) == 1
+    assert state.simulated_orders[0]["trace_id"] == "XAUUSD:55:1709300000"
+
+
+def test_duplicate_trace_id_no_new_order_event():
+    """D-08: replay/retry cùng trace_id không được tạo thêm ORDER_OPEN."""
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    trigger = _make_valid_trigger(strategy_id=56, strategy='test_trace_replay', side='BUY')
+
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+    first_open_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
+
+    run(tm.process_triggers("XAUUSD", [trigger], state))
+    second_open_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
+
+    assert first_open_count == 1
+    assert second_open_count == 1
+    assert len(state.simulated_orders) == 1
+
+
 def test_dedupe_same_key_emits_once_even_if_history_missing():
     """Cùng symbol/strategy/origin/side chỉ emit 1 lần dù history Redis bị mất."""
     r = FakeRedis()

@@ -493,5 +493,22 @@ class TestTriggeredTLifecycle(unittest.TestCase):
         self.assertEqual(progress.get("triggered_t"), 200)
 
 
+class TestStrategyExecutorSnapshotConsistency(unittest.TestCase):
+    """Contract D-07: snapshot/current_signal phải cùng candle timestamp."""
+
+    def test_rejects_mismatched_snapshot_timestamp(self):
+        from engine.strategy_executor import validate_snapshot_candle_consistency
+
+        payload = {
+            "t": 1709300000,
+            "current_signal": {"t": 1709300000, "tag": "choch_up"},
+            "signals_snapshot": {"choch_up": {"t": 1709300060, "value": True}},
+        }
+
+        is_valid, reason = validate_snapshot_candle_consistency(payload)
+        self.assertFalse(is_valid)
+        self.assertEqual(reason, "SNAPSHOT_CANDLE_MISMATCH")
+
+
 if __name__ == "__main__":
     unittest.main()
