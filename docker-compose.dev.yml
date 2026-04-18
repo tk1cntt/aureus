@@ -98,6 +98,7 @@ services:
       - LLM_BASE_URL=http://host.docker.internal:8005/v1
       - PYTHONUNBUFFERED=1
       - LOG_FILE=/app/logs/aureus-signal.log
+      - AUREUS_STRUCTURE_OPT_MODE=shadow
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
