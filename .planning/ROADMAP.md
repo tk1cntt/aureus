@@ -198,6 +198,18 @@ Plans:
 Plans:
 - [x] 36-01-PLAN.md — Executed
 
+### Phase 45: Hỗ trợ xử lý song song signal, strategy cho nhiều symbol một lúc chứ k tuần tự như hiện tại
+
+**Goal:** Triển khai runtime song song per-symbol cho cả signal và strategy với FIFO strict theo symbol, drop out-of-order candle, idempotency trace_id per symbol+candle, cùng cơ chế rollout an toàn Shadow→Canary→Full kèm auto-rollback theo SLO per-symbol.
+**Requirements**: PH45-01, PH45-02, PH45-03, PH45-04, PH45-05, PH45-06, PH45-07
+**Depends on:** Phase 44
+**Plans:** 1/3 plans executed
+
+Plans:
+- [x] 45-01-PLAN.md — Per-symbol worker runtime cho signal + FIFO/drop out-of-order contracts
+- [ ] 45-02-PLAN.md — Strategy per-symbol worker + snapshot-cùng-candle + trace_id strict dedupe
+- [ ] 45-03-PLAN.md — Circuit-breaker/backlog/SLO per-symbol + rollout Shadow/Canary/Full + auto rollback
+
 ---
 
 ## Phase 37: Trade Execution Journal (INSERTED)
@@ -417,7 +429,7 @@ Plans:
 **Goal:** Instrument signal engine để đo CPU/memory/time per signal, per symbol, per candle trong 24h. Output: profiling data thực tế để ưu tiên optimization phases (44.1-44.5) dựa trên measurement, không phải assumptions.
 **Requirements**: PROF-01 (instrument timing), PROF-02 (log aggregation), PROF-03 (bottleneck identification)
 **Depends on:** None — can run on current codebase
-**Plans:** 0 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 44.0 to break down)
@@ -430,4 +442,4 @@ Plans:
 **Plans:** 0 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 44 to break down)
+- [x] TBD (run /gsd-plan-phase 44 to break down) (completed 2026-04-18)

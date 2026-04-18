@@ -52,6 +52,47 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 - [ ] **PERF-07**: Filter theo symbol, strategy, timeframe
 - [ ] **PERF-08**: Trang trade history trên aureus-dashboard
 
+### Runtime Parallelization (PH45)
+
+- [x] **PH45-01**: Signal engine hỗ trợ per-symbol worker (1 worker/symbol active)
+- [x] **PH45-02**: FIFO strict theo candle `t` trong từng symbol
+- [x] **PH45-03**: Out-of-order candle bị drop theo policy `ts_unix <= last_executed_candle_t`
+- [ ] **PH45-04**: Strategy executor chỉ xử lý khi snapshot cùng candle (strict consistency)
+- [ ] **PH45-05**: Idempotency strict theo `trace_id` cho `symbol + strategy + origin_timestamp`
+- [ ] **PH45-06**: Circuit-breaker + backlog threshold hoạt động độc lập theo từng symbol
+- [ ] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
+
+**PH45 verification baseline (execution gate):**
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_per_symbol_worker_runtime.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_out_of_order_drop_policy.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_strategy_trigger_lifecycle.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/unittest/test_orders_events.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_symbol_slo_rollback.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_live_engine_shadow_mode.py -q`
+- `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_multi_symbol.py -q`
+
+**PH45 SLO mặc định để rollback tự động (canary/full):**
+- `lag_p95_ms > 2000` liên tiếp 3 phút, hoặc
+- `queue_depth > 200` liên tiếp 3 phút, hoặc
+- `error_rate > 5%` liên tiếp 3 phút.
+
+Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên tiếp (hysteresis).
+**Lưu ý:** ngưỡng này là baseline vận hành cho Phase 45, có thể tinh chỉnh bằng dữ liệu thực tế sau canary nhưng phải cập nhật lại mục này trước khi promote full.
+
+**PH45 architecture guardrails (không được vi phạm):**
+- Không dùng global queue/global lock làm serialize toàn bộ symbols.
+- Không dùng reorder window cho out-of-order candle trong phase này.
+- Không rollback global khi một symbol vi phạm SLO.
+- Không mở rộng scope sang cleanup logic tín hiệu ngoài D-01..D-12.
+
+**PH45 traceability source:** `.planning/phases/45-h-tr-x-ly-song-song-signal-strategy-cho-nhi-u-symbol-m-t-/45-CONTEXT.md`
+
+**Status:** Planned (chưa execute)
+
+**Last updated:** 2026-04-18
+
+---
+
 ## Future Requirements
 
 ### Performance Analytics Extended
@@ -109,12 +150,19 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 | PERF-06 | Phase 32 | Pending |
 | PERF-07 | Phase 32 | Pending |
 | PERF-08 | Phase 33 | Pending |
+| PH45-01 | Phase 45 | Planned |
+| PH45-02 | Phase 45 | Planned |
+| PH45-03 | Phase 45 | Planned |
+| PH45-04 | Phase 45 | Planned |
+| PH45-05 | Phase 45 | Planned |
+| PH45-06 | Phase 45 | Planned |
+| PH45-07 | Phase 45 | Planned |
 
 **Coverage:**
-- v1.5 requirements: 30 total
-- Mapped to phases: 30
+- v1.5 requirements: 37 total
+- Mapped to phases: 37
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-06 after Phase 27 completion*
+*Last updated: 2026-04-18 after Phase 45 planning review*
