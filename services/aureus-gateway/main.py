@@ -194,6 +194,25 @@ class OrdersEvent(BaseModel):
 # Global counter to track cumulative backfill candles since startup
 cumulative_backfill_counters = {}
 
+
+_ATOMIC_PUBLISH_SCRIPT = """
+local latest_key = KEYS[1]
+local stream_key = KEYS[2]
+local incoming_ts = tonumber(ARGV[1])
+local maxlen = tonumber(ARGV[2])
+local prev_t = redis.call('HGET', latest_key, 't')
+if prev_t and incoming_ts <= tonumber(prev_t) then
+  return 0
+end
+for i = 3, #ARGV, 2 do
+  redis.call('HSET', latest_key, ARGV[i], ARGV[i + 1])
+end
+redis.call('XADD', stream_key, 'MAXLEN', '~', maxlen, '*', unpack(ARGV, 3))
+return 1
+"""
+
+_BACKFILL_DEDUPE_TTL_SECONDS = 86400
+
 async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bool:
     """Process a single TICK or CANDLE message. Returns True if processed."""
     msg_type = data.get('type')
@@ -246,19 +265,19 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
     latest_key = f"aureus:latest:{symbol}:{msg_type.lower()}"
     stream_key = f"aureus:stream:{symbol}:{msg_type.lower()}"
 
-    # Dedup: reject any message with timestamp <= stored
-    prev_t = await r.hget(latest_key, "t")
-    if prev_t and incoming_ts <= int(prev_t):
-        logger.debug(f"[{symbol if msg_type in ('TICK', 'CANDLE') else 'GLOBAL'}] [process_message] Rejecting DUP/OLD {msg_type}: {incoming_ts} <= {prev_t}")
-        return False
-
     update_data = valid_msg.model_dump()
     if msg_type == 'TICK':
         update_data['v'] = update_data.pop('vol')
     hash_update = {k: str(v) for k, v in update_data.items() if k != 'type'}
 
-    await r.hset(latest_key, mapping=hash_update)
-    await r.xadd(stream_key, hash_update, maxlen=5000, approximate=True)
+    argv = [str(incoming_ts), "5000"]
+    for k, v in hash_update.items():
+        argv.extend([k, v])
+
+    published = await r.eval(_ATOMIC_PUBLISH_SCRIPT, 2, latest_key, stream_key, *argv)
+    if int(published) == 0:
+        logger.debug(f"[{symbol if msg_type in ('TICK', 'CANDLE') else 'GLOBAL'}] [process_message] Rejecting DUP/OLD {msg_type}: {incoming_ts}")
+        return False
 
     if msg_type == 'CANDLE':
         logger.info(f"[{symbol}] [process_message] 2... Receive from Gateway {hash_update}")
@@ -293,7 +312,6 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
     # logger.info(f"[{symbol}] [process_backfill] 1... BACKFILL {symbol}: Sent RECALCULATE command to stream")
 
     processed = 0
-    processed = 0
     for i, candle in enumerate(backfill.candles):
         candle_data = candle.model_dump()
         hash_update = {k: str(v) for k, v in candle_data.items()}
@@ -303,6 +321,12 @@ async def process_backfill(r: redis.Redis, data: dict, source: str = "TCP") -> b
         from datetime import datetime
         dt_str = datetime.fromtimestamp(candle.t / 1000).strftime('%Y-%m-%d %H:%M:%S')
         logger.debug(f"[{symbol}] [process_backfill] 1... BACKFILL candle {i+1}: {dt_str} @ {candle.c}")
+
+        dedupe_key = f"aureus:dedupe:backfill:{symbol}:{candle.tf}:{candle.t}"
+        inserted = await r.set(dedupe_key, "1", ex=_BACKFILL_DEDUPE_TTL_SECONDS, nx=True)
+        if not inserted:
+            logger.debug(f"[{symbol}] [process_backfill] Skip duplicate candle t={candle.t} tf={candle.tf}")
+            continue
 
         # Add to stream (DB writer handles dedup via ON CONFLICT)
         await r.xadd(stream_key, hash_update, maxlen=5000, approximate=True)

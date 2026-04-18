@@ -830,8 +830,17 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             ts_ms = int(data.get('t', 0))
                             ts_unix = ts_ms // 1000 if ts_ms > 1e12 else ts_ms
                             data['t'] = str(ts_unix)
+
+                            state = window_manager.states.get(symbol)
+                            if state:
+                                last_executed_t = int(state.tracking_vars.get('last_executed_candle_t', 0) or 0)
+                                if ts_unix <= last_executed_t:
+                                    logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Skip duplicate candle execution: last_executed={last_executed_t}")
+                                    await r.xack(stream_key, group_name, entry_id)
+                                    continue
+
                             candle_count += 1
-                            
+
                             df, state = window_manager.update(symbol, data)
                             state.transient_signals = {} # Clear for new candle (Producer-Consumer pattern)
 
@@ -935,6 +944,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             candle_count += 1
                             if candle_count % 20 == 0:
                                 logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
+
+                            state.tracking_vars['last_executed_candle_t'] = ts_unix
 
                             # Trigger Event-Driven AI Pulse Analysis (Aggregated for this candle)
                             for ai_event in evaluate_ai_trigger_events(state.transient_signals):
