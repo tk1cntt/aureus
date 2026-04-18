@@ -7,7 +7,7 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import process_message
+from main import process_message, process_backfill
 
 
 def _published_payloads(mock_redis):
@@ -234,6 +234,8 @@ def mock_redis():
     r.hset = AsyncMock()
     r.xadd = AsyncMock()
     r.publish = AsyncMock()
+    r.eval = AsyncMock(return_value=1)
+    r.set = AsyncMock(return_value=True)
     return r
 
 @pytest.mark.asyncio
@@ -337,9 +339,51 @@ async def test_trade_history_event_with_error_missing_fields(mock_redis):
     result = await process_message(mock_redis, data, source="TCP")
     assert result is True
     mock_redis.publish.assert_called_once()
-    
+
     # Verify the published data has the error field
     published_json = mock_redis.publish.call_args[0][1]
     parsed = json.loads(published_json)
     assert parsed["type"] == "TRADE_HISTORY"
     assert parsed["error"] == "invalid_time_range"
+
+
+@pytest.mark.asyncio
+async def test_process_message_uses_atomic_publish_and_rejects_duplicate(mock_redis):
+    candle = {
+        "type": "CANDLE",
+        "symbol": "XAUUSD",
+        "t": 1712376000000,
+        "o": 1960.0,
+        "h": 1962.0,
+        "l": 1959.5,
+        "c": 1961.2,
+        "v": 120.0,
+        "tf": "M1",
+    }
+    mock_redis.eval = AsyncMock(side_effect=[1, 0])
+
+    accepted = await process_message(mock_redis, candle, source="TCP")
+    rejected = await process_message(mock_redis, candle, source="TCP")
+
+    assert accepted is True
+    assert rejected is False
+    assert mock_redis.eval.await_count == 2
+    mock_redis.hget.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_backfill_idempotency_skips_duplicate_candles(mock_redis):
+    data = {
+        "type": "BACKFILL",
+        "symbol": "XAUUSD",
+        "candles": [
+            {"t": 1712376000000, "o": 1960.0, "h": 1962.0, "l": 1959.0, "c": 1961.0, "v": 100.0, "tf": "M1"},
+            {"t": 1712376000000, "o": 1960.0, "h": 1962.0, "l": 1959.0, "c": 1961.0, "v": 100.0, "tf": "M1"},
+        ],
+    }
+    mock_redis.set = AsyncMock(side_effect=[True, None])
+
+    result = await process_backfill(mock_redis, data, source="TCP")
+
+    assert result is True
+    assert mock_redis.xadd.await_count == 1
