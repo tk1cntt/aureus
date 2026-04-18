@@ -49,6 +49,27 @@ def enrich_strategy_decisions_with_contract_metadata(strategy_results: list[dict
     return enriched
 
 
+def validate_snapshot_candle_consistency(payload: dict) -> tuple[bool, str | None]:
+    """D-07: current_signal và signals_snapshot phải cùng candle `t` với payload."""
+    candle_t = int(payload.get("t") or 0)
+    if candle_t <= 0:
+        return False, "MISSING_CANDLE_TIMESTAMP"
+
+    current_signal = payload.get("current_signal") or {}
+    if isinstance(current_signal, dict) and current_signal.get("t") is not None:
+        if int(current_signal.get("t")) != candle_t:
+            return False, "SNAPSHOT_CANDLE_MISMATCH"
+
+    signals_snapshot = payload.get("signals_snapshot") or {}
+    if isinstance(signals_snapshot, dict):
+        for value in signals_snapshot.values():
+            if isinstance(value, dict) and value.get("t") is not None:
+                if int(value.get("t")) != candle_t:
+                    return False, "SNAPSHOT_CANDLE_MISMATCH"
+
+    return True, None
+
+
 def enrich_registry_rejections_with_contract_metadata(
     symbol: str,
     rejections: list[dict],
@@ -382,6 +403,14 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             continue
 
                         payload = json.loads(payload_raw)
+                        is_consistent, reject_reason = validate_snapshot_candle_consistency(payload)
+                        if not is_consistent:
+                            logger.warning(
+                                f"[EXECUTOR][{symbol}] Snapshot mismatch for entry {eid_str}: reason={reject_reason}"
+                            )
+                            await r.xack(stream_key, group_name, entry_id)
+                            continue
+
                         ts_unix = payload.get("t", 0)
                         log_signal_normalize = payload.get("log_signal_normalize", [])
                         signals_snapshot = payload.get("signals_snapshot", {})
