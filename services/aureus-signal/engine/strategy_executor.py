@@ -71,6 +71,17 @@ def validate_snapshot_candle_consistency(payload: dict) -> tuple[bool, str | Non
     return True, None
 
 
+def resolve_strategy_processing_mode(symbol: str, health_manager: SymbolRuntimeHealthManager) -> str:
+    return health_manager.get_symbol_mode(symbol)
+
+
+def extract_strategy_runtime_metrics(payload: dict, default_queue_depth: int) -> tuple[float, int, float]:
+    lag_p95_ms = float(payload.get("strategy_lag_p95_ms") or payload.get("lag_p95_ms") or 0.0)
+    queue_depth = int(payload.get("strategy_queue_depth") or default_queue_depth)
+    error_rate = float(payload.get("strategy_error_rate") or payload.get("error_rate") or 0.0)
+    return lag_p95_ms, queue_depth, error_rate
+
+
 def enrich_registry_rejections_with_contract_metadata(
     symbol: str,
     rejections: list[dict],
@@ -247,6 +258,8 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
     # --- Per-Symbol Strategy Registry ---
     symbol_strategies = {}
     executor_strategy_progress = {}
+    health_manager = SymbolRuntimeHealthManager()
+    symbol_error_counts = {symbol: 0 for symbol in symbols_list}
     for symbol in symbols_list:
         symbol_strategies[symbol] = StrategyRegistry()
         await symbol_strategies[symbol].load_from_db(db_pool, symbol)
@@ -413,10 +426,29 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             continue
 
                         ts_unix = payload.get("t", 0)
+                        queue_depth = sum(len(stream_entries) for _, stream_entries in messages)
+                        lag_p95_ms, runtime_queue_depth, error_rate = extract_strategy_runtime_metrics(payload, queue_depth)
+                        transition_reason = health_manager.update_symbol_metrics(
+                            symbol,
+                            lag_p95_ms=lag_p95_ms,
+                            queue_depth=runtime_queue_depth,
+                            error_rate=error_rate,
+                        )
+                        mode = resolve_strategy_processing_mode(symbol, health_manager)
+                        status = health_manager.get_symbol_status(symbol)
+                        if transition_reason:
+                            logger.warning(
+                                f"[EXECUTOR][{symbol}] rollout transition: reason={transition_reason} mode={mode}"
+                            )
+                        if mode == "shadow":
+                            logger.info(f"[EXECUTOR][{symbol}] shadow mode active, skip trigger execution")
+                            await r.xack(stream_key, group_name, entry_id)
+                            continue
+
                         log_signal_normalize = payload.get("log_signal_normalize", [])
                         signals_snapshot = payload.get("signals_snapshot", {})
                         logger.info(
-                            f"[EXECUTOR][{symbol}] 📊 Deserialized | t={ts_unix} | "
+                            f"[EXECUTOR][{symbol}] 📊 Deserialized | t={ts_unix} | mode={mode} | allow_parallel={status['allow_parallel']} | "
                             f"log_signal_normalize={len(log_signal_normalize)} records | "
                             f"signals_snapshot_keys={list(signals_snapshot.keys()) if isinstance(signals_snapshot, dict) else 'N/A'} | "
                             f"swing_points={len(payload.get('swing_points', []))} | "
@@ -586,10 +618,21 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                             except Exception as e:
                                 logger.error(f"[EXECUTOR][{symbol}] process_triggers failed: {e}", exc_info=True)
 
+                        symbol_error_counts[symbol] = 0
+                        health_manager.record_symbol_success(symbol)
                         await r.xack(stream_key, group_name, entry_id)
 
                     except Exception as e:
                         eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
+                        symbol_error_counts[symbol] = symbol_error_counts.get(symbol, 0) + 1
+                        queue_depth = sum(len(stream_entries) for _, stream_entries in messages)
+                        health_manager.update_symbol_metrics(
+                            symbol,
+                            lag_p95_ms=0.0,
+                            queue_depth=queue_depth,
+                            error_rate=min(1.0, symbol_error_counts[symbol] / 20.0),
+                        )
+                        health_manager.record_symbol_failure(symbol)
                         logger.error(f"[EXECUTOR][{symbol}] Error processing entry {eid_str}: {e}\n{traceback.format_exc()}")
                         await r.xack(stream_key, group_name, entry_id)
 
