@@ -35,7 +35,7 @@ from engine.signals.news_provider import NewsProvider
 from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
 from engine.event_policy import evaluate_ai_trigger_events
-from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime
+from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime, SymbolRuntimeHealthManager
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -313,6 +313,10 @@ def build_symbol_work_item(
         ts_unix=int(ts_unix),
         payload=payload,
     )
+
+
+def resolve_symbol_processing_mode(symbol: str, health_manager: SymbolRuntimeHealthManager) -> str:
+    return health_manager.get_symbol_mode(symbol)
 
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):

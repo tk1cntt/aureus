@@ -5,7 +5,8 @@ import time
 from unittest.mock import AsyncMock
 
 from engine.providers.base import DecisionSignal
-from engine.live_engine import shadow_execute_pulse
+from engine.live_engine import shadow_execute_pulse, resolve_symbol_processing_mode
+from engine.symbol_runtime import SymbolRuntimeHealthManager
 
 def test_shadow_mode_execution_wrapper():
     """
@@ -53,3 +54,49 @@ async def _test_shadow_mode_execution_wrapper_async():
     assert payload["confidence"] == 0.99
     assert payload["reasoning"] == "mock_reasoning"
     assert "llm_latency_ms" in payload
+
+
+def test_rollout_transition_shadow_canary_full():
+    manager = SymbolRuntimeHealthManager()
+    manager.set_symbol_mode("XAUUSD", "shadow")
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "shadow"
+
+    manager.set_symbol_mode("XAUUSD", "canary")
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "canary"
+
+    manager.set_symbol_mode("XAUUSD", "full")
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "full"
+
+
+def test_rollout_forces_fallback_serial_when_slo_breaches():
+    manager = SymbolRuntimeHealthManager()
+    manager.set_symbol_mode("XAUUSD", "canary")
+
+    for _ in range(3):
+        manager.update_symbol_metrics("XAUUSD", lag_p95_ms=3000.0, queue_depth=250, error_rate=0.10)
+
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "fallback_serial"
+
+    manager.set_symbol_mode("EURUSD", "full")
+    manager.update_symbol_metrics("EURUSD", lag_p95_ms=300.0, queue_depth=20, error_rate=0.0)
+    assert resolve_symbol_processing_mode("EURUSD", manager) == "full"
+
+
+def test_invalid_rollout_mode_is_rejected():
+    manager = SymbolRuntimeHealthManager()
+    with pytest.raises(ValueError):
+        manager.set_symbol_mode("XAUUSD", "beta")
+
+
+def test_rollout_allows_recovery_to_full_after_hysteresis():
+    manager = SymbolRuntimeHealthManager()
+    manager.set_symbol_mode("XAUUSD", "full")
+    for _ in range(3):
+        manager.update_symbol_metrics("XAUUSD", lag_p95_ms=3000.0, queue_depth=250, error_rate=0.10)
+
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "fallback_serial"
+
+    for _ in range(5):
+        manager.update_symbol_metrics("XAUUSD", lag_p95_ms=500.0, queue_depth=50, error_rate=0.0)
+
+    assert resolve_symbol_processing_mode("XAUUSD", manager) == "full"
