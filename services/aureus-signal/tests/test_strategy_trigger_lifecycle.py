@@ -11,6 +11,7 @@ Covers:
   7. Multi-step sequence: only fires when ALL required steps match
   8. on_bar_close path: same guarantees via registry evaluation path
 """
+import inspect
 import json
 import os
 import sys
@@ -22,6 +23,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from engine.state import SymbolState
 from engine.strategies.template import TemplateStrategy
+from engine.strategy_executor import run_strategy_executor
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +510,13 @@ class TestStrategyExecutorSnapshotConsistency(unittest.TestCase):
         is_valid, reason = validate_snapshot_candle_consistency(payload)
         self.assertFalse(is_valid)
         self.assertEqual(reason, "SNAPSHOT_CANDLE_MISMATCH")
+
+
+def test_run_strategy_executor_keeps_snapshot_gate_before_trigger_processing():
+    source = inspect.getsource(run_strategy_executor)
+    snapshot_idx = source.index("validate_snapshot_candle_consistency(payload)")
+    trigger_idx = source.index("process_triggers(")
+    assert snapshot_idx < trigger_idx
 
 
 if __name__ == "__main__":
