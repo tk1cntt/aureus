@@ -57,8 +57,8 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 - [x] **PH45-01**: Signal engine hỗ trợ per-symbol worker (1 worker/symbol active)
 - [x] **PH45-02**: FIFO strict theo candle `t` trong từng symbol
 - [x] **PH45-03**: Out-of-order candle bị drop theo policy `ts_unix <= last_executed_candle_t`
-- [ ] **PH45-04**: Strategy executor chỉ xử lý khi snapshot cùng candle (strict consistency)
-- [ ] **PH45-05**: Idempotency strict theo `trace_id` cho `symbol + strategy + origin_timestamp`
+- [x] **PH45-04**: Strategy executor chỉ xử lý khi snapshot cùng candle (strict consistency)
+- [x] **PH45-05**: Idempotency strict theo `trace_id` cho `symbol + strategy + origin_timestamp`
 - [ ] **PH45-06**: Circuit-breaker + backlog threshold hoạt động độc lập theo từng symbol
 - [ ] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
 
