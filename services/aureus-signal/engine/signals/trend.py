@@ -33,8 +33,14 @@ class TrendSignal(BaseSignal):
 
         # M1-Strict Unmitigated OB Counter Matrix
         obs = getattr(state_obj, 'obs', [])
-        green_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BULLISH')
-        red_count = sum(1 for ob in obs if not ob.get('mitigated', False) and ob.get('ob_type') == 'BEARISH')
+        green_count = sum(
+            1 for ob in obs
+            if isinstance(ob, dict) and not ob.get('mitigated', False) and ob.get('ob_type') == 'BULLISH'
+        )
+        red_count = sum(
+            1 for ob in obs
+            if isinstance(ob, dict) and not ob.get('mitigated', False) and ob.get('ob_type') == 'BEARISH'
+        )
 
         # "N=2, M>=2" Order Flow Matrix Contract
         if green_count >= 2 and red_count >= 2:

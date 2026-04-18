@@ -182,7 +182,14 @@ def _compute_signal_input_hash(signal_name: str, df: Any, state: Any):
     # EMA signals: only depend on close price and previous EMA value
     if signal_name.startswith("ema_"):
         period = int(signal_name.split("_")[1])
-        ema_val = state.emas.get(period, {}).get("current")
+        emas = getattr(state, "emas", {})
+        if not isinstance(emas, dict):
+            emas = {}
+        ema_state = emas.get(period)
+        if isinstance(ema_state, dict):
+            ema_val = ema_state.get("current")
+        else:
+            ema_val = ema_state
         return hash(("ema", candle["c"], ema_val))
 
     # ATR: depends on H, L, C and previous ATR
@@ -197,7 +204,11 @@ def _compute_signal_input_hash(signal_name: str, df: Any, state: Any):
 
     # Trend: depends on close, EMA200, and OB counts
     if signal_name == "trend":
-        ema200 = state.emas.get(200, {}).get("current")
+        ema200_state = state.emas.get(200)
+        if isinstance(ema200_state, dict):
+            ema200 = ema200_state.get("current")
+        else:
+            ema200 = ema200_state
         obs = getattr(state, "obs", [])
         green = sum(
             1 for ob in obs

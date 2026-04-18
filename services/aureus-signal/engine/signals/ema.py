@@ -31,8 +31,8 @@ class EMASignal(BaseSignal):
             curr_close = float(curr_candle['c'])
             curr_t = int(curr_candle['t'])
 
-            # Initialize state emas if missing
-            if not hasattr(state_obj, 'emas'):
+            # Initialize/normalize state.emas
+            if not hasattr(state_obj, 'emas') or not isinstance(state_obj.emas, dict):
                 state_obj.emas = {}
 
             # Check for cached value from previous candle
