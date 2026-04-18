@@ -35,6 +35,7 @@ from engine.signals.news_provider import NewsProvider
 from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
 from engine.event_policy import evaluate_ai_trigger_events
+from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -297,6 +298,21 @@ async def news_refresh_worker(refresh_interval_seconds: int) -> None:
             logger.warning(f"[GLOBAL] [news_refresh_worker] Error: Background news refresh failed: {e}")
 
         await asyncio.sleep(interval)
+
+
+def build_symbol_work_item(
+    entry_id: Any,
+    stream_key: str,
+    ts_unix: int,
+    payload: dict,
+) -> CandleWorkItem:
+    eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
+    return CandleWorkItem(
+        entry_id=eid_str,
+        stream_key=stream_key,
+        ts_unix=int(ts_unix),
+        payload=payload,
+    )
 
 
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
