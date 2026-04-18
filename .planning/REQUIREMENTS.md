@@ -59,8 +59,8 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 - [x] **PH45-03**: Out-of-order candle bị drop theo policy `ts_unix <= last_executed_candle_t`
 - [x] **PH45-04**: Strategy executor chỉ xử lý khi snapshot cùng candle (strict consistency)
 - [x] **PH45-05**: Idempotency strict theo `trace_id` cho `symbol + strategy + origin_timestamp`
-- [ ] **PH45-06**: Circuit-breaker + backlog threshold hoạt động độc lập theo từng symbol
-- [ ] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
+- [x] **PH45-06**: Circuit-breaker + backlog threshold hoạt động độc lập theo từng symbol
+- [x] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
 
 **PH45 verification baseline (execution gate):**
 - `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_per_symbol_worker_runtime.py -q`

@@ -203,12 +203,12 @@ Plans:
 **Goal:** Triển khai runtime song song per-symbol cho cả signal và strategy với FIFO strict theo symbol, drop out-of-order candle, idempotency trace_id per symbol+candle, cùng cơ chế rollout an toàn Shadow→Canary→Full kèm auto-rollback theo SLO per-symbol.
 **Requirements**: PH45-01, PH45-02, PH45-03, PH45-04, PH45-05, PH45-06, PH45-07
 **Depends on:** Phase 44
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 45-01-PLAN.md — Per-symbol worker runtime cho signal + FIFO/drop out-of-order contracts
 - [x] 45-02-PLAN.md — Strategy per-symbol worker + snapshot-cùng-candle + trace_id strict dedupe
-- [ ] 45-03-PLAN.md — Circuit-breaker/backlog/SLO per-symbol + rollout Shadow/Canary/Full + auto rollback
+- [x] 45-03-PLAN.md — Circuit-breaker/backlog/SLO per-symbol + rollout Shadow/Canary/Full + auto rollback
 
 ---
 
