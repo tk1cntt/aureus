@@ -4,6 +4,7 @@ import os
 from engine.logging_common import get_logger
 from .base import BaseSignal, SignalType
 import pandas as pd
+import numpy as np
 from typing import Dict, Any, Optional, List, Tuple
 
 logger = get_logger(__name__)
@@ -161,7 +162,347 @@ class StructureSignal(BaseSignal):
         return None
 
     def _calculate_optimized_path(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
-        return self._calculate_old_path(df, state_obj, **kwargs)
+        if len(df) < 5 or state_obj is None:
+            return None
+
+        points = getattr(state_obj, 'swing_points', None)
+        if not isinstance(points, list) or not points:
+            return None
+
+        nPoints = len(points)
+
+        t_values = df['t'].to_numpy(dtype=np.int64, copy=False)
+        h_values = df['h'].to_numpy(dtype=np.float64, copy=False)
+        l_values = df['l'].to_numpy(dtype=np.float64, copy=False)
+        o_values = df['o'].to_numpy(dtype=np.float64, copy=False)
+        c_values = df['c'].to_numpy(dtype=np.float64, copy=False)
+
+        t_map = {int(t): i for i, t in enumerate(t_values)}
+
+        new_signals = []
+        for i in range(nPoints):
+            p = points[i]
+            if p.get('is_choch'):
+                continue
+
+            if p.get('type') not in ["HH", "LL"]:
+                continue
+
+            is_bullish = p['is_high']
+
+            signal = self._process_choch_numpy(
+                points,
+                i,
+                i,
+                is_bullish,
+                state_obj=state_obj,
+                t_values=t_values,
+                o_values=o_values,
+                h_values=h_values,
+                l_values=l_values,
+                c_values=c_values,
+                t_map=t_map,
+            )
+            if signal:
+                new_signals.append(signal)
+                tag = signal.get('tag')
+                if tag:
+                    history = getattr(state_obj, 'signal_history', [])
+                    transient = getattr(state_obj, 'transient_signals', None)
+                    is_duplicate = any(
+                        s.get('tag') == tag for s in history if s.get('t') == signal.get('breakout_t')
+                    )
+                    if not is_duplicate and isinstance(transient, dict):
+                        transient[tag] = signal
+
+        transient = getattr(state_obj, 'transient_signals', None)
+        if isinstance(transient, dict):
+            transient["ob_state"] = {
+                "active_obs": [
+                    {
+                        "top": ob.get("top"),
+                        "bottom": ob.get("bottom"),
+                        "ob_type": ob.get("ob_type"),
+                        "t_start": ob.get("t_start"),
+                        "status": ob.get("status", "PENDING"),
+                        "break_counter": ob.get("break_counter", 0),
+                        "mitigated": ob.get("mitigated", False),
+                        "t_mitigation": ob.get("t_mitigation", 0),
+                    }
+                    for ob in getattr(state_obj, 'obs', [])
+                ]
+            }
+
+        self._verify_mitigations_numpy(
+            state_obj,
+            t_values=t_values,
+            o_values=o_values,
+            h_values=h_values,
+            l_values=l_values,
+            c_values=c_values,
+        )
+
+        if new_signals:
+            return new_signals[-1]
+
+        return None
+
+    def _process_choch_numpy(
+        self,
+        points: List[Dict[str, Any]],
+        current_idx: int,
+        pivot_idx: int,
+        is_bullish: bool,
+        state_obj: Any,
+        t_values: np.ndarray,
+        o_values: np.ndarray,
+        h_values: np.ndarray,
+        l_values: np.ndarray,
+        c_values: np.ndarray,
+        t_map: Dict[int, int],
+    ) -> Optional[Dict[str, Any]]:
+        pivot_price = points[pivot_idx]['price']
+        pivot_t = points[pivot_idx]['t']
+
+        if points[pivot_idx].get('is_choch'):
+            return None
+
+        pivot_t_int = int(pivot_t)
+        if pivot_t_int not in t_map:
+            start_idx = 0
+        else:
+            start_idx = t_map[pivot_t_int] + 1
+
+        if is_bullish:
+            breakout_mask = h_values[start_idx:] > pivot_price
+        else:
+            breakout_mask = l_values[start_idx:] < pivot_price
+
+        breakout_positions = np.flatnonzero(breakout_mask)
+        if breakout_positions.size == 0:
+            return None
+
+        k = start_idx + int(breakout_positions[0])
+        breakout_t = int(t_values[k])
+
+        zone_base_idx = -1
+        if is_bullish:
+            min_price = float('inf')
+            for m in range(pivot_idx + 1, len(points)):
+                if points[m]['type'] == "LL" and points[m]['t'] < breakout_t:
+                    if points[m]['price'] < min_price:
+                        min_price = points[m]['price']
+                        zone_base_idx = m
+        else:
+            max_price = float('-inf')
+            for m in range(pivot_idx + 1, len(points)):
+                if points[m]['type'] == "HH" and points[m]['t'] < breakout_t:
+                    if points[m]['price'] > max_price:
+                        max_price = points[m]['price']
+                        zone_base_idx = m
+
+        if zone_base_idx == -1:
+            return None
+
+        points[pivot_idx]['is_choch'] = True
+        points[pivot_idx]['choch_type'] = "Up" if is_bullish else "Down"
+        points[pivot_idx]['breakout_t'] = breakout_t
+        points[pivot_idx]['chochConfirmingPointIndex'] = current_idx
+        points[pivot_idx]['chochZoneBasePointIndex'] = zone_base_idx
+
+        ob = self._process_ob_numpy(
+            points,
+            pivot_idx,
+            is_bullish,
+            t_values=t_values,
+            o_values=o_values,
+            h_values=h_values,
+            l_values=l_values,
+            c_values=c_values,
+            t_map=t_map,
+        )
+        if not ob:
+            return None
+
+        symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+        ob['symbol'] = symbol
+
+        add_ob = getattr(state_obj, 'add_ob', None)
+        if callable(add_ob):
+            add_ob(ob)
+
+        transient = getattr(state_obj, 'transient_signals', None)
+        if breakout_t == int(t_values[-1]) and isinstance(transient, dict):
+            if is_bullish:
+                transient['ob_bull_new'] = ob
+            else:
+                transient['ob_bear_new'] = ob
+
+        log_actor = getattr(state_obj, 'log_actor', None)
+        if callable(log_actor):
+            log_actor(breakout_t, {
+                "type": "CHOCH_BREAKOUT",
+                "symbol": symbol,
+                "side": "BULLISH" if is_bullish else "BEARISH",
+                "pivot_t": int(pivot_t),
+                "pivot_price": pivot_price,
+                "ob_t": ob['t_start'],
+                "candle": {
+                    "o": float(o_values[k]),
+                    "h": float(h_values[k]),
+                    "l": float(l_values[k]),
+                    "c": float(c_values[k]),
+                }
+            })
+
+        tag = self.TAG_CHOCH_UP if is_bullish else self.TAG_CHOCH_DN
+        logger.info(f"[t={t_values[k]}] [{symbol}] [choch] CHOCH DETECTED: {tag} @ {pivot_price}")
+        return {
+            "tag": "choch",
+            "t": int(t_values[k]),
+            "value": tag,
+            "data": {
+                "price": pivot_price,
+                "breakout_t": breakout_t,
+                "ob": ob,
+                "pivot_t": int(pivot_t)
+            }
+        }
+
+    def _process_ob_numpy(
+        self,
+        points: List[Dict[str, Any]],
+        pivot_idx: int,
+        is_bullish: bool,
+        t_values: np.ndarray,
+        o_values: np.ndarray,
+        h_values: np.ndarray,
+        l_values: np.ndarray,
+        c_values: np.ndarray,
+        t_map: Dict[int, int],
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            pivot_t = points[pivot_idx]['t']
+            breakout_t = points[pivot_idx].get('breakout_t')
+            if not breakout_t:
+                return None
+
+            pivot_t_int = int(pivot_t)
+            breakout_t_int = int(breakout_t)
+            if pivot_t_int not in t_map or breakout_t_int not in t_map:
+                return None
+
+            pivot_df_idx = t_map[pivot_t_int]
+            breakout_df_idx = t_map[breakout_t_int]
+            if breakout_df_idx < pivot_df_idx:
+                return None
+
+            if not is_bullish:
+                window = h_values[pivot_df_idx: breakout_df_idx + 1]
+                extreme_idx = pivot_df_idx + int(np.argmax(window))
+            else:
+                window = l_values[pivot_df_idx: breakout_df_idx + 1]
+                extreme_idx = pivot_df_idx + int(np.argmin(window))
+
+            candle_h = float(h_values[extreme_idx])
+            candle_l = float(l_values[extreme_idx])
+            candle_o = float(o_values[extreme_idx])
+            candle_c = float(c_values[extreme_idx])
+            candle_t = int(t_values[extreme_idx])
+
+            candle_range = candle_h - candle_l
+            candle_body = abs(candle_c - candle_o)
+            body_ratio = (candle_body / candle_range) if candle_range > 0 else 0
+
+            quality = "HIGH" if body_ratio > 0.8 else "MEDIUM" if body_ratio > 0.5 else "LOW"
+
+            return {
+                "ob_type": "BULLISH" if is_bullish else "BEARISH",
+                "top": candle_h,
+                "bottom": candle_l,
+                "t_start": candle_t,
+                "pivot_t": int(pivot_t),
+                "t_breakout": int(breakout_t),
+                "quality": quality,
+                "status": "PENDING",
+                "break_counter": 0,
+                "body_ratio": round(body_ratio, 2),
+                "ohlc": {
+                    "o": candle_o,
+                    "h": candle_h,
+                    "l": candle_l,
+                    "c": candle_c,
+                }
+            }
+        except Exception as e:
+            logger.error(f"[GLOBAL] [structure] [_process_ob_numpy] Error: Error processing OB: {e}")
+            return None
+
+    def _verify_mitigations_numpy(
+        self,
+        state_obj: Any,
+        t_values: np.ndarray,
+        o_values: np.ndarray,
+        h_values: np.ndarray,
+        l_values: np.ndarray,
+        c_values: np.ndarray,
+    ):
+        if not hasattr(state_obj, 'obs') or not state_obj.obs:
+            return
+
+        latest_t = int(t_values[-1])
+
+        for ob in state_obj.obs:
+            if ob.get('mitigated'):
+                continue
+
+            t_breakout = ob.get('t_breakout', 0)
+            if latest_t <= t_breakout:
+                continue
+
+            start_idx = int(np.searchsorted(t_values, int(t_breakout), side='right'))
+            if start_idx >= len(t_values):
+                continue
+
+            is_bullish = (ob['ob_type'] == 'BULLISH')
+
+            if is_bullish:
+                touch_positions = np.flatnonzero(l_values[start_idx:] <= float(ob['top']))
+            else:
+                touch_positions = np.flatnonzero(h_values[start_idx:] >= float(ob['bottom']))
+
+            if touch_positions.size == 0:
+                continue
+
+            idx = start_idx + int(touch_positions[0])
+            c_t = int(t_values[idx])
+            c_o = float(o_values[idx])
+            c_h = float(h_values[idx])
+            c_l = float(l_values[idx])
+            c_c = float(c_values[idx])
+
+            ob['mitigated'] = True
+            ob['t_mitigation'] = c_t
+
+            ob_zone_height = float(ob['top']) - float(ob['bottom'])
+            if is_bullish:
+                penetration = float(ob['top']) - c_l
+                is_rejection = c_c > float(ob['top'])
+            else:
+                penetration = c_h - float(ob['bottom'])
+                is_rejection = c_c < float(ob['bottom'])
+            pen_ratio = (penetration / ob_zone_height) if ob_zone_height > 0 else 0
+
+            log_actor = getattr(state_obj, "log_actor", None)
+            if callable(log_actor):
+                log_actor(c_t, {
+                    "type": "OB_TOUCH",
+                    "ob_type": ob['ob_type'],
+                    "ob_start": ob['t_start'],
+                    "is_hard_break": c_c < float(ob['bottom']) if is_bullish else c_c > float(ob['top']),
+                    "rejection_quality": "HIGH" if is_rejection and pen_ratio > 0.3 else "NORMAL",
+                    "candle": {"o": c_o, "h": c_h, "l": c_l, "c": c_c},
+                })
 
     def _verify_mitigations(self, df: pd.DataFrame, state_obj: Any):
         """Mirrors MQL5 VerifyMitigation with historical sweep to find exact touch time."""

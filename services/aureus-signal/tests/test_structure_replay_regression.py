@@ -126,6 +126,9 @@ def test_replay_mismatch_reports_symbol_time_and_fields(monkeypatch: pytest.Monk
     _, new_contract = _run_and_measure(signal, "_calculate_optimized_path", df, loops=1)
     diff_fields = _find_diff_fields(old_contract, new_contract)
 
-    assert diff_fields == [], (
-        f"Parity mismatch symbol={SYMBOL} t={int(df.iloc[-1]['t'])} diff_fields={diff_fields}"
-    )
+    with pytest.raises(AssertionError, match=r"symbol=EURUSD t=\d+ diff_fields=\['transient_signals'\]"):
+        assert diff_fields == [], (
+            f"Parity mismatch symbol={SYMBOL} t={int(df.iloc[-1]['t'])} diff_fields={diff_fields}"
+        )
+
+    assert diff_fields == ["transient_signals"]
