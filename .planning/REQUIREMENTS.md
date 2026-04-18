@@ -85,11 +85,73 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 - Không rollback global khi một symbol vi phạm SLO.
 - Không mở rộng scope sang cleanup logic tín hiệu ngoài D-01..D-12.
 
+### PH45 Gap-Closure Architecture Decision Record (2026-04-18)
+
+**Mục tiêu:** đóng 3 gap runtime đã xác nhận ở `45-VERIFICATION.md`:
+1) `PerSymbolWorkerRuntime` chưa nằm trên production path của `run_signal_engine`
+2) FIFO/drop policy chưa là enforcement path runtime thật
+3) health/rollout chưa wire end-to-end cho cả signal + strategy
+
+**Bước 1 — Neutral listing (phương án kỹ thuật):**
+- **PA-A: Main-loop orchestration + per-symbol lock (incremental patch)**
+  - Giữ luồng xử lý chính trong `live_engine.run_signal_engine`
+  - Duy trì lock/guard ở main loop, chỉ gọi helper từ `symbol_runtime`
+  - Không đổi mạnh đường chạy strategy executor
+- **PA-B: PerSymbolWorkerRuntime là execution backbone (in-process actor per symbol)**
+  - `live_engine` chỉ route stream entry -> `PerSymbolWorkerRuntime.enqueue(...)`
+  - FIFO/drop enforcement đặt 1 nguồn sự thật trong worker runtime
+  - `SymbolRuntimeHealthManager` resolve mode per-symbol cho signal và strategy path
+- **PA-C: Tách thành runtime service riêng (out-of-process worker pool / message bus)**
+  - Tách processing runtime khỏi `live_engine` sang service độc lập
+  - Đồng bộ bằng Redis/Kafka/NATS event contracts
+  - Health/rollout điều phối qua control-plane riêng
+
+**Bước 2 — Attribute mapping:**
+- **Mạnh nhất về hiệu năng/throughput ngắn hạn:** PA-B (isolation per symbol, giảm contention trong process hiện tại, không tốn overhead network hop như PA-C)
+- **Mạnh nhất về bảo trì/khả năng mở rộng dài hạn:** PA-C (service boundary rõ, scale độc lập)
+- **Mạnh nhất về tốc độ triển khai an toàn theo codebase hiện tại:** PA-B
+
+**Trade-off chính:**
+- Chọn **PA-B thay PA-A**: mất lợi thế thay đổi siêu nhỏ của PA-A, nhưng đổi lại có enforcement path rõ ràng và giảm dual-path drift.
+- Chọn **PA-B thay PA-C**: mất lợi thế scale độc lập theo service của PA-C, nhưng tránh migration cost lớn, tránh đổi contract/liên dịch vụ trong scope phase 45.
+- Chọn **PA-A thay PA-B**: giữ patch nhỏ nhưng rủi ro cao về policy split-brain (main-loop guard vs worker guard), khó chứng minh runtime truth.
+
+**Bước 3 — Contextual recommendation (khuyến nghị chính thức):**
+- **Chọn PA-B làm chuẩn thực thi cho Phase 45 gap-closure.**
+- Context áp dụng:
+  - Code hiện hữu đã có `PerSymbolWorkerRuntime` + test contracts (45-01..45-03) nhưng chưa wire production
+  - Constraint phase: phải đóng gap nhanh, giữ compatibility, không mở rộng scope sang redesign service
+  - Yêu cầu ổn định: rollback/hysteresis per-symbol phải có hiệu lực runtime thật, không chỉ artifact-level
+- Vì vậy PA-B cho tỷ lệ **đóng gap/chi phí thay đổi** tối ưu nhất trong mốc hiện tại.
+
+**Bước 4 — Adversarial mode (Devil’s Advocate cho PA-B):**
+- **Fail scenario 1:** `live_engine` còn giữ đường xử lý cũ song song với `enqueue`, dẫn đến dual-path execution và duplicate processing.
+- **Fail scenario 2:** health manager chỉ được cập nhật ở signal path nhưng strategy path không consume mode, gây rollback “nửa vời”.
+- **Fail scenario 3:** ack/exception flow trong worker không cân bằng (`task_done`, retry, xack) tạo backlog ảo hoặc deadlock queue accounting.
+- **Rủi ro kiến trúc dễ bị bỏ qua:**
+  - Split-brain state giữa `state.tracking_vars` và worker-local state theo symbol.
+  - Độ trễ mode transition (shadow/canary/full/fallback_serial) không đồng bộ giữa signal và strategy loops.
+  - Test pass ở unit-level nhưng không chứng minh production call path đã đi qua worker runtime thật.
+
+**Tiêu chí bắt buộc để chấp nhận closure 3 gaps (execution gate):**
+- `run_signal_engine` có instantiate + route qua `PerSymbolWorkerRuntime` (không còn nhánh xử lý trực tiếp gây dual-path)
+- Out-of-order guard `ts_unix <= last_executed_candle_t` được enforce từ worker runtime trên production path
+- Strategy executor dùng thật `SymbolRuntimeHealthManager` (không còn unused import), mode enforcement chạy per-symbol
+- Rollback per-symbol được chứng minh cross-path (signal + strategy), không có global rollback
+- Baseline test bundle pass:
+  - `test_per_symbol_worker_runtime.py`
+  - `test_out_of_order_drop_policy.py`
+  - `test_strategy_trigger_lifecycle.py`
+  - `unittest/test_orders_events.py`
+  - `test_symbol_slo_rollback.py`
+  - `test_live_engine_shadow_mode.py`
+  - `test_multi_symbol.py`
+
 **PH45 traceability source:** `.planning/phases/45-h-tr-x-ly-song-song-signal-strategy-cho-nhi-u-symbol-m-t-/45-CONTEXT.md`
 
-**Status:** Planned (chưa execute)
+**Status:** Planned (gap-closure replanned 45-04/45-05)
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-18 (architecture review + gap-closure decision)
 
 ---
 
