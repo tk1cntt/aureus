@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import os
 import sys
 
@@ -6,7 +7,14 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from engine.live_engine import run_signal_engine
 from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime
+
+
+def test_run_signal_engine_wires_worker_runtime_enqueue_path():
+    source = inspect.getsource(run_signal_engine)
+    assert "PerSymbolWorkerRuntime(" in source
+    assert ".enqueue(" in source
 
 
 @pytest.mark.asyncio

@@ -393,6 +393,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     symbol_locks = {}        # symbol -> Lock
     target_streams = {}      # stream_key -> symbol
     symbol_strategies = {}   # symbol -> StrategyRegistry
+    symbol_configs = {}      # symbol -> config
 
     ab_mode = _read_ab_mode()
     ab_target_strategies = _read_ab_target_strategy_names()
@@ -413,6 +414,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
         if not cfg:
             logger.warning(f"[{symbol}] [run_signal_engine] Error: No config found for {symbol}, using defaults.")
             cfg = {"digits": 2, "point": 0.01, "pivots": {"ext_period": 5, "min_amplitude": 100, "min_motion": 1}}
+        symbol_configs[symbol] = cfg
 
         # Instantiate signals with symbol-specific params (via shared factory)
         symbol_signals[symbol] = create_signal_set(symbol, cfg)
@@ -774,6 +776,117 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
 
     asyncio.create_task(daily_gc_loop())
     
+    async def _process_candle_work_item(symbol: str, item: CandleWorkItem) -> None:
+        stream_key = item.stream_key
+        entry_id = item.entry_id
+        data = item.payload
+        signals = symbol_signals[symbol]
+        cfg = symbol_configs[symbol]
+
+        try:
+            ts_unix = int(data.get('t', 0))
+
+            state = window_manager.states.get(symbol)
+            if state:
+                last_executed_t = int(state.tracking_vars.get('last_executed_candle_t', 0) or 0)
+                runtime.set_last_executed_candle_t(symbol, last_executed_t)
+
+            df, state = window_manager.update(symbol, data)
+            state.transient_signals = {}
+
+            remaining = getattr(state, "_warmup_candles_remaining", 0)
+            if remaining > 0:
+                state._warmup_candles_remaining = remaining - 1
+                logger.info(f"[{symbol}] Warmup candle {4 - remaining}/3 — strategy skipped, signals only")
+
+            current_dt = datetime.fromtimestamp(ts_unix, tz=timezone(timedelta(hours=7)))
+            state.news_events = NewsProvider.get_todays_events(current_dt)
+
+            execute_signals_for_candle(
+                signals=signals,
+                df=df,
+                state=state,
+                symbol=symbol,
+                redis_client=r,
+            )
+
+            signals_snapshot = build_normalized_signal_snapshot(signals, state)
+            remaining = getattr(state, "_warmup_candles_remaining", 0)
+            if remaining <= 0:
+                signal_payload = {
+                    "t": ts_unix,
+                    "open": float(data.get("o", 0)),
+                    "high": float(data.get("h", 0)),
+                    "low": float(data.get("l", 0)),
+                    "close": float(data.get("c", 0)),
+                    "volume": int(float(data.get("v", data.get("vol", 0)))),
+                    "log_signal_normalize": [
+                        rec if isinstance(rec, dict) else rec.to_dict()
+                        for rec in (state.log_signal_normalize or [])
+                    ],
+                    "current_signal": state.current_signal or {},
+                    "transient_signals": state.transient_signals or {},
+                    "swing_points": state.swing_points or [],
+                    "signals_snapshot": signals_snapshot,
+                }
+                await r.xadd(
+                    f"aureus:stream:{symbol}:signals",
+                    {"payload": json.dumps(signal_payload, default=str)},
+                    maxlen=1000,
+                )
+                logger.debug(
+                    f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
+                )
+
+                if getattr(state, "transient_signals", None):
+                    triggers = evaluate_ai_trigger_events(state.transient_signals)
+                    if triggers:
+                        from engine.signal_event_publisher import publish_signal_event
+                        from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
+                        signal_event_payload = {"signals": state.transient_signals}
+                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state, m1_df=df)
+                        await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, signal_event_payload)
+
+            has_event = has_structural_event(state, trade_manager)
+            flags_local = FeatureFlags(r)
+            sync_mode = await flags_local.get("redis_sync_mode", "ALWAYS")
+            if sync_mode == "ALWAYS" or has_event:
+                await r.set(f"aureus:state:{symbol}", json.dumps(state.to_dict()))
+
+            snapshot_mode = await flags_local.get("snapshot_mode", "FULL")
+            if snapshot_mode == "FULL" or has_event:
+                try:
+                    snapshot = build_snapshot(
+                        state,
+                        data,
+                        m1_df=df,
+                        digits=cfg.get("digits", 2),
+                    )
+                    asyncio.create_task(_safe_insert_snapshot(db_pool, snapshot))
+                except Exception as e:
+                    logger.warning(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
+
+            trade_manager.last_tick_events = []
+
+            try:
+                checkpoint_payload = json.dumps({
+                    "last_processed_time": int(ts_unix),
+                    "updated_at": int(time.time())
+                })
+                await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
+            except Exception as e:
+                logger.warning(f"[{symbol}] [run_signal_engine] Error: Checkpoint write error: {e}")
+
+            state.tracking_vars['last_executed_candle_t'] = ts_unix
+
+        except Exception as e:
+            logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {entry_id}: {e}")
+        finally:
+            if item.ack:
+                await item.ack(item)
+
+    runtime = PerSymbolWorkerRuntime(worker_handler=_process_candle_work_item)
+
     streams_subscription = {f"aureus:stream:{s}:candle": ">" for s in symbols_list}
     candle_count = 0
 
@@ -827,218 +940,51 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     except Exception as e:
                         logger.error(f"[GLOBAL] [run_signal_engine] Error: Batch DB insert error: {e}")
 
-                # 2. Process logic with per-symbol concurrency protection
-                async with symbol_locks[symbol]:
-                    signals = symbol_signals[symbol]
-                    for entry_id, data in entries:
-                        try:
-                            msg_type = data.get('type')
-                            if not msg_type:
-                                if ':candle' in stream_key:
-                                    msg_type = 'CANDLE'
-                                elif ':tick' in stream_key:
-                                    msg_type = 'TICK'
+                for entry_id, data in entries:
+                    try:
+                        msg_type = data.get('type')
+                        if not msg_type:
+                            if ':candle' in stream_key:
+                                msg_type = 'CANDLE'
+                            elif ':tick' in stream_key:
+                                msg_type = 'TICK'
 
-                            if msg_type == 'CANDLE':
-                                eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                                logger.debug(f"[t={data.get('t')}] [{symbol}] [run_signal_engine] 10... Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
-
-                            if msg_type == 'COMMAND':
-                                if data.get('cmd') == 'RECALCULATE':
-                                    logger.info(f"[{symbol}] [run_signal_engine] 11... Received RECALCULATE for {symbol}.")
-                                    window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_REQUESTED", updated_at=time.time())
-                                    asyncio.create_task(recalculate_all_signals(symbol, db_pool, r, window_manager, signals, symbol_strategies[symbol], symbol_locks[symbol]))
-                                await r.xack(stream_key, group_name, entry_id)
-                                continue
-
-                            if msg_type != 'CANDLE':
-                                # TBD: Currently ignoring TICK (or any other non-candle) events to avoid redundant signal/snapshot processing.
-                                # Future enhancement: Strategy SL/TP hits could be tracked here without full signal re-computation.
-                                await r.xack(stream_key, group_name, entry_id)
-                                continue
-                            
-
-                            ts_ms = int(data.get('t', 0))
-                            ts_unix = ts_ms // 1000 if ts_ms > 1e12 else ts_ms
-                            data['t'] = str(ts_unix)
-
-                            state = window_manager.states.get(symbol)
-                            if state:
-                                last_executed_t = int(state.tracking_vars.get('last_executed_candle_t', 0) or 0)
-                                if ts_unix <= last_executed_t:
-                                    logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] Skip duplicate candle execution: last_executed={last_executed_t}")
-                                    await r.xack(stream_key, group_name, entry_id)
-                                    continue
-
-                            candle_count += 1
-
-                            df, state = window_manager.update(symbol, data)
-                            state.transient_signals = {} # Clear for new candle (Producer-Consumer pattern)
-
-                            # Decrement warmup counter; skip strategy for first 3 real-time candles
-                            remaining = getattr(state, "_warmup_candles_remaining", 0)
-                            if remaining > 0:
-                                state._warmup_candles_remaining = remaining - 1
-                                logger.info(f"[{symbol}] Warmup candle {4 - remaining}/3 — strategy skipped, signals only")
-                            # Update Today's News Events in State
-                            current_dt = datetime.fromtimestamp(ts_unix, tz=timezone(timedelta(hours=7)))
-                            state.news_events = NewsProvider.get_todays_events(current_dt)
-
-                            execute_signals_for_candle(
-                                signals=signals,
-                                df=df,
-                                state=state,
-                                symbol=symbol,
-                                redis_client=r,
-                            )
-
-                            signals_snapshot = build_normalized_signal_snapshot(signals, state)
-                            remaining = getattr(state, "_warmup_candles_remaining", 0)
-                            if remaining <= 0:
-                                # --- Emit signal payload to per-symbol stream for Strategy Executor ---
-                                signal_payload = {
-                                    "t": ts_unix,
-                                    "open": float(data.get("o", 0)),
-                                    "high": float(data.get("h", 0)),
-                                    "low": float(data.get("l", 0)),
-                                    "close": float(data.get("c", 0)),
-                                    "volume": int(float(data.get("v", data.get("vol", 0)))),
-                                    "log_signal_normalize": [
-                                        rec if isinstance(rec, dict) else rec.to_dict()
-                                        for rec in (state.log_signal_normalize or [])
-                                    ],
-                                    "current_signal": state.current_signal or {},
-                                    "transient_signals": state.transient_signals or {},
-                                    "swing_points": state.swing_points or [],
-                                    "signals_snapshot": signals_snapshot,
-                                }
-                                await r.xadd(
-                                    f"aureus:stream:{symbol}:signals",
-                                    {"payload": json.dumps(signal_payload, default=str)},
-                                    maxlen=1000,
-                                )
-                                logger.debug(
-                                    f"{PIPELINE_LOG_PREFIX}{symbol}[AGGREGATOR][signal_emitted] t={ts_unix}"
-                                )
-
-                                # Publish signal event to pub/sub for downstream consumers only if actionable AI triggers exist
-                                if getattr(state, "transient_signals", None):
-                                    triggers = evaluate_ai_trigger_events(state.transient_signals)
-                                    if triggers:
-                                        from engine.signal_event_publisher import publish_signal_event
-                                        from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
-                                        signal_event_payload = {"signals": state.transient_signals}
-                                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state, m1_df=df)
-                                        await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, signal_event_payload)
-
+                        if msg_type == 'COMMAND':
+                            if data.get('cmd') == 'RECALCULATE':
+                                logger.info(f"[{symbol}] [run_signal_engine] 11... Received RECALCULATE for {symbol}.")
+                                window_manager.set_backfill_status(symbol, "NOT_READY", reason="RECALC_REQUESTED", updated_at=time.time())
+                                asyncio.create_task(recalculate_all_signals(symbol, db_pool, r, window_manager, symbol_signals[symbol], symbol_strategies[symbol], symbol_locks[symbol]))
                             await r.xack(stream_key, group_name, entry_id)
+                            continue
 
-                            # --- EVENT EVALUATION ---
-                            has_event = has_structural_event(state, trade_manager)
+                        if msg_type != 'CANDLE':
+                            await r.xack(stream_key, group_name, entry_id)
+                            continue
 
-                            # --- CONDITIONAL REDIS SYNC ---
-                            flags = FeatureFlags(r)
-                            sync_mode = await flags.get("redis_sync_mode", "ALWAYS")
-                            if sync_mode == "ALWAYS" or has_event or (candle_count % 5 == 0):
-                                logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 12... State Saved to Redis (reason: sync_mode={sync_mode}, event={has_event}, count={candle_count})")
-                                await r.set(f"aureus:state:{symbol}", json.dumps(state.to_dict()))
+                        ts_ms = int(data.get('t', 0))
+                        ts_unix = ts_ms // 1000 if ts_ms > 1e12 else ts_ms
+                        data['t'] = str(ts_unix)
 
-                            # --- SPARSE STORAGE LOGIC ---
-                            snapshot_mode = await flags.get("snapshot_mode", "FULL")
-                            
-                            if snapshot_mode == "FULL" or has_event:
-                                # Write signal snapshot (async, fire-and-forget)
-                                try:
-                                    snapshot = build_snapshot(
-                                        state,
-                                        data,
-                                        m1_df=df,
-                                        digits=cfg.get("digits", 2),
-                                    )
-                                    asyncio.create_task(_safe_insert_snapshot(db_pool, snapshot))
-                                except Exception as e:
-                                    logger.warning(f"[{symbol}] [run_signal_engine] Error: Snapshot write error: {e}")
-                            
-                            # Clean up trade events for the next tick
-                            trade_manager.last_tick_events = []
-
-                            # Write checkpoint marker (independent of snapshots)
-                            try:
-                                checkpoint_payload = json.dumps({
-                                    "last_processed_time": int(ts_unix),
-                                    "updated_at": int(time.time())
-                                })
-                                await r.set(f"aureus:checkpoint:{symbol}", checkpoint_payload)
-                            except Exception as e:
-                                logger.warning(f"[{symbol}] [run_signal_engine] Error: Checkpoint write error: {e}")
-
-                            candle_count += 1
-                            if candle_count % 20 == 0:
-                                logger.debug(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 6... Processed {candle_count} units | Last: {symbol} @ {datetime.fromtimestamp(ts_unix).strftime('%H:%M')}")
-
-                            state.tracking_vars['last_executed_candle_t'] = ts_unix
-
-                            # Trigger Event-Driven AI Pulse Analysis (Aggregated for this candle)
-                            for ai_event in evaluate_ai_trigger_events(state.transient_signals):
-                                state.request_ai_update(ai_event)
-
-                            if state.ai_update_pending:
-                                now_pulse = time.time()
-                                is_fresh = ts_unix > (now_pulse - 300) # Only trigger AI if candle is < 5m old (Live context)
-                                last_pulse = state.tracking_vars.get('last_pulse_t', 0)
-
-                                # Process only if FRESH and not in cooldown (60s)
-                                if is_fresh and (now_pulse - last_pulse >= 60):
-                                    event_list = ", ".join(state.ai_trigger_events)
-                                    logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 Event-Driven AI Analysis triggered by: {event_list}")
-
-                                    provider_mode = await flags.get("provider_mode", "redis_primary")
-
-                                    if provider_mode == "redis_primary":
-                                        await queue_periodic_ai_analysis(
-                                            ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
-                                        )
-                                    elif provider_mode == "ta_primary":
-                                        try:
-                                            ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
-                                            decision = await tradingagents_provider.get_decision(symbol, ctx)
-                                            logger.info(f"[t={ts_unix}] [{symbol}] [run_signal_engine] 14... 🤖 TA Primary Decision logic evaluated")
-                                            if decision:
-                                                if state.current_signal:
-                                                    state.current_signal["ta_decision"] = decision.action
-                                                # Write to AI latest namespace
-                                                await r.set(f"aureus:ai:latest:{symbol}", json.dumps({
-                                                    "action": decision.action,
-                                                    "confidence": decision.confidence,
-                                                    "narrative": decision.reasoning,
-                                                    "timestamp": decision.timestamp,
-                                                    "symbol": symbol,
-                                                    "sentiment": "BULLISH" if decision.action == "BUY" else ("BEARISH" if decision.action == "SELL" else "NEUTRAL"),
-                                                    "aci": int(decision.confidence * 100)
-                                                }))
-                                        except asyncio.TimeoutError:
-                                            logger.error(f"[t={ts_unix}] [{symbol}] TA Primary timeout — skipping pulse")
-                                        except Exception as e:
-                                            logger.error(f"[t={ts_unix}] [{symbol}] TA Primary error: {e}", exc_info=True)
-                                    elif provider_mode == "ta_shadow":
-                                        # Queue usual redis_primary job first
-                                        await queue_periodic_ai_analysis(
-                                            ai_queue, ai_validator, symbol, df, state, now_pulse, trigger_events=state.ai_trigger_events
-                                        )
-                                        # Spawn shadow TradingAgents without blocking 
-                                        ctx = ai_validator.builder.build_pulse_context(symbol, df, state, trigger_events=state.ai_trigger_events)
-                                        asyncio.create_task(shadow_execute_pulse(symbol, ctx, now_pulse, r, tradingagents_provider))
-
-                                    state.tracking_vars['last_pulse_t'] = now_pulse
-
-                                # Reset trigger and aggregation list for next candle regardless of pulse firing
-                                state.ai_update_pending = False
-                                state.ai_trigger_events = []
-
-                        except Exception as e:
+                        if msg_type == 'CANDLE':
                             eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
-                            logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {eid_str}: {e}")
-                            await r.xack(stream_key, group_name, entry_id)
+                            logger.debug(f"[t={data.get('t')}] [{symbol}] [run_signal_engine] 10... Read from Redis Stream {symbol} t={data.get('t')} entry_id={eid_str}")
+
+                        async def _ack_item(item: CandleWorkItem) -> None:
+                            await r.xack(item.stream_key, group_name, item.entry_id)
+
+                        work_item = build_symbol_work_item(
+                            entry_id=entry_id,
+                            stream_key=stream_key,
+                            ts_unix=ts_unix,
+                            payload=data,
+                        )
+                        work_item.ack = _ack_item
+                        await runtime.enqueue(symbol, work_item)
+
+                    except Exception as e:
+                        eid_str = entry_id.decode('utf-8') if isinstance(entry_id, bytes) else str(entry_id)
+                        logger.error(f"[{symbol}] [run_signal_engine] Error: Error processing entry {eid_str}: {e}")
+                        await r.xack(stream_key, group_name, entry_id)
 
         except asyncio.CancelledError:
             logger.info("[GLOBAL] Engine loop cancelled, shutting down gracefully")
