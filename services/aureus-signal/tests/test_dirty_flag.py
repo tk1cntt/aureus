@@ -212,6 +212,19 @@ class TestComputeSignalInputHash:
         assert _compute_signal_input_hash("trend", df, state) is not None
         assert _compute_signal_input_hash("cisd", df, state) is not None
 
+    def test_hash_handles_float_ema_state(self):
+        """EMA hash must accept float state format for backward compatibility."""
+        from engine.live_engine import _compute_signal_input_hash
+        from engine.state import SymbolState
+
+        df = _make_df(30)
+        state = SymbolState("TEST")
+        state.emas = {89: 2001.5, 100: 2002.5, 200: 2003.5}
+
+        assert _compute_signal_input_hash("ema_89", df, state) is not None
+        assert _compute_signal_input_hash("ema_100", df, state) is not None
+        assert _compute_signal_input_hash("ema_200", df, state) is not None
+
     def test_same_input_same_hash(self):
         """Same input should produce same hash."""
         from engine.live_engine import _compute_signal_input_hash
