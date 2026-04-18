@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import os
 import sys
 
@@ -6,6 +7,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.live_engine import load_symbols_config
+from engine.strategy_executor import run_strategy_executor
 
 
 def test_symbol_orchestration():
@@ -19,7 +21,7 @@ def test_symbol_orchestration():
         print("Checking config loading...")
         
         from unittest.mock import patch
-        with patch("tests.test_multi_symbol.load_symbols_config") as mock_load:
+        with patch(f"{__name__}.load_symbols_config") as mock_load:
             mock_load.return_value = {"XAUUSD": {"digits": 2}, "EURUSD": {"digits": 5}}
             symbol_config = mock_load(path="services/aureus-signal/symbols.json")
             
@@ -55,6 +57,15 @@ def test_symbol_orchestration():
         print("\n🎉 All Step 1 Orchestration tests passed!")
 
     asyncio.run(_run())
+
+def test_strategy_executor_rollout_wiring_keywords_present():
+    source = inspect.getsource(run_strategy_executor)
+    assert "SymbolRuntimeHealthManager(" in source
+    assert "resolve_strategy_processing_mode(" in source
+    assert "update_symbol_metrics(" in source
+    assert "record_symbol_success(" in source
+    assert "record_symbol_failure(" in source
+
 
 if __name__ == "__main__":
     test_symbol_orchestration()
