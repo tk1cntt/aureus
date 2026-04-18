@@ -199,8 +199,14 @@ def _compute_signal_input_hash(signal_name: str, df: Any, state: Any):
     if signal_name == "trend":
         ema200 = state.emas.get(200, {}).get("current")
         obs = getattr(state, "obs", [])
-        green = sum(1 for ob in obs if not ob.get("mitigated") and ob.get("ob_type") == "BULLISH")
-        red = sum(1 for ob in obs if not ob.get("mitigated") and ob.get("ob_type") == "BEARISH")
+        green = sum(
+            1 for ob in obs
+            if isinstance(ob, dict) and not ob.get("mitigated") and ob.get("ob_type") == "BULLISH"
+        )
+        red = sum(
+            1 for ob in obs
+            if isinstance(ob, dict) and not ob.get("mitigated") and ob.get("ob_type") == "BEARISH"
+        )
         return hash(("trend", candle["c"], ema200, green, red))
 
     # Session: depends only on timestamp
