@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import os
 import sys
 
@@ -6,7 +7,13 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from engine.live_engine import run_signal_engine
 from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime
+
+
+def test_run_signal_engine_does_not_duplicate_out_of_order_guard_in_main_loop():
+    source = inspect.getsource(run_signal_engine)
+    assert "ts_unix <= last_executed_t" not in source
 
 
 @pytest.mark.asyncio
