@@ -393,72 +393,73 @@ class TemplateStrategy(BaseStrategy):
 
                 # Step 2: Try to match sequence signals FIRST (priority over resets)
                 matched_any_signal = False
-                has_reset_signal = False
 
-                for sig in signals_at_time:
-                    sig_tag = sig.get("tag")
-                    sig_time = sig.get("t")
+                # Process all available signals at this timestamp until no further progress.
+                # This allows multi-step strategies (e.g. choch_up -> sweep_bull)
+                # to complete within one candle regardless of incoming event order.
+                pending_signal_items = list(signals_at_time)
+                sequence_completed_in_batch = False
+                while pending_signal_items and current_step_index < len(self.sequence):
+                    progressed_in_round = False
 
-                    # Check if this is a reset signal
-                    current_step = self.sequence[current_step_index] if current_step_index < len(self.sequence) else None
-                    if current_step and sig_tag in current_step.get("reset_signals", []):
-                        has_reset_signal = True
-                        logger.debug(
-                            f"[{symbol}] [{self.name}] [reset_signal_seen] "
-                            f"Reset signal '{sig_tag}' detected at t={sig_time}"
+                    current_step = self.sequence[current_step_index]
+                    step_tag = current_step["tag"]
+                    step_required = current_step.get("required", False)
+
+                    match_idx = next(
+                        (i for i, sig in enumerate(pending_signal_items) if sig.get("tag") == step_tag),
+                        None,
+                    )
+
+                    if match_idx is not None:
+                        sig = pending_signal_items.pop(match_idx)
+                        sig_tag = sig.get("tag")
+                        sig_time = sig.get("t")
+                        logger.info(
+                            f"[{symbol}] [{self.name}] [signal_matched] "
+                            f"Signal '{sig_tag}' matched step {current_step_index} '{step_tag}'"
                         )
+                        if current_step_index == 0:
+                            origin_timestamp = sig_time
+                            triggered_t = 0  # Clear triggered flag — new sequence cycle begins
 
-                    # Try to match with current step
-                    if current_step_index < len(self.sequence):
-                        step = self.sequence[current_step_index]
-                        tag = step["tag"]
-                        required = step.get("required", False)
+                        matched_timestamps.append(sig_time)
+                        last_matched_candle_idx = internal_candle_counter
+                        sequence_progress[current_step_index]["status"] = "matched"
+                        sequence_progress[current_step_index]["time"] = sig_time
+                        current_step_index += 1
+                        if current_step_index >= len(self.sequence):
+                            sequence_completed_in_batch = True
+                        matched_any_signal = True
+                        progressed_in_round = True
+                    elif not step_required:
+                        logger.debug(
+                            f"[{symbol}] [{self.name}] [skip_optional_step] "
+                            f"No signal matched optional step {current_step_index} '{step_tag}' - skipping"
+                        )
+                        sequence_progress[current_step_index]["status"] = "missed"
+                        current_step_index += 1
+                        progressed_in_round = True
 
-                        if sig_tag == tag:
-                            logger.info(
-                                f"[{symbol}] [{self.name}] [signal_matched] "
-                                f"Signal '{sig_tag}' matched step {current_step_index} '{tag}'"
-                            )
-                            if current_step_index == 0:
-                                origin_timestamp = sig_time
-                                triggered_t = 0  # Clear triggered flag — new sequence cycle begins
+                    if not progressed_in_round:
+                        break
 
-                            matched_timestamps.append(sig_time)
-                            last_matched_candle_idx = internal_candle_counter
-                            sequence_progress[current_step_index]["status"] = "matched"
-                            sequence_progress[current_step_index]["time"] = sig_time
-                            current_step_index += 1
-                            matched_any_signal = True
-                            # Continue checking other signals at same timestamp for next steps
-                            if current_step_index < len(self.sequence):
-                                current_step = self.sequence[current_step_index]
-                        elif not required:
-                            # Optional step not matched - auto-skip
+                current_step = self.sequence[current_step_index] if current_step_index < len(self.sequence) else None
+                has_reset_signal = (
+                    current_step is not None
+                    and any(sig.get("tag") in current_step.get("reset_signals", []) for sig in signals_at_time)
+                )
+
+                if has_reset_signal:
+                    for sig in signals_at_time:
+                        sig_tag = sig.get("tag")
+                        sig_time = sig.get("t")
+                        if sig_tag in current_step.get("reset_signals", []):
                             logger.debug(
-                                f"[{symbol}] [{self.name}] [skip_optional_step] "
-                                f"Signal '{sig_tag}' != optional step {current_step_index} '{tag}' - skipping"
+                                f"[{symbol}] [{self.name}] [reset_signal_seen] "
+                                f"Reset signal '{sig_tag}' detected at t={sig_time}"
                             )
-                            sequence_progress[current_step_index]["status"] = "missed"
-                            current_step_index += 1
-                            # Try matching this signal with the NEXT step
-                            if current_step_index < len(self.sequence):
-                                current_step = self.sequence[current_step_index]
-                                next_tag = current_step["tag"]
-                                if sig_tag == next_tag:
-                                    logger.debug(
-                                        f"[{symbol}] [{self.name}] [signal_matched_after_skip] "
-                                        f"Signal '{sig_tag}' matched next step {current_step_index} '{next_tag}'"
-                                    )
-                                    if current_step_index == 0:
-                                        origin_timestamp = sig_time
-                                        triggered_t = 0
-
-                                    matched_timestamps.append(sig_time)
-                                    last_matched_candle_idx = internal_candle_counter
-                                    sequence_progress[current_step_index]["status"] = "matched"
-                                    sequence_progress[current_step_index]["time"] = sig_time
-                                    current_step_index += 1
-                                    matched_any_signal = True
+                            break
 
                 # Step 3: Only reset if NO signals matched AND we have a reset signal
                 if not matched_any_signal and has_reset_signal and current_step_index < len(self.sequence):
@@ -479,7 +480,12 @@ class TemplateStrategy(BaseStrategy):
                     continue
 
             # Handle sequence completion reset: if sequence is done and new step 0 signal arrives
-            if current_step_index >= len(self.sequence) and len(self.sequence) > 0 and signals_at_time:
+            if (
+                current_step_index >= len(self.sequence)
+                and len(self.sequence) > 0
+                and signals_at_time
+                and not sequence_completed_in_batch
+            ):
                 first_step_tag = self.sequence[0]["tag"]
                 for sig in signals_at_time:
                     if sig.get("tag") == first_step_tag:

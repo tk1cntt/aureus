@@ -260,7 +260,7 @@ class OrderStatusReporter:
 
         return "\n".join(parts)[:4095]  # Telegram limit
 
-    def _format_close(self, event: dict, journal: dict | None) -> str:
+    def _format_close(self, event: dict, journal: dict | None = None) -> str:
         """Format single order close notification in HTML with strategy info."""
         symbol = html.escape(str(event.get("symbol", journal.get("symbol") if journal else "?")))
         direction = event.get("direction", journal.get("direction") if journal else "?")

@@ -103,7 +103,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./services/aureus-signal:/app
-      - ./services/aureus-signal/brain:/app/brain
       - ./logs:/app/logs
 
   aureus-strategy-executor-dev:
@@ -131,7 +130,6 @@ services:
     command: ["python", "main_executor.py"]
     volumes:
       - ./services/aureus-signal:/app
-      - ./services/aureus-signal/brain:/app/brain
       - ./logs:/app/logs
 
 
