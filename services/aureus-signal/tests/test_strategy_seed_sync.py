@@ -236,3 +236,4 @@ def test_load_active_only():
     source = inspect.getsource(run_strategy_executor)
     assert "load_from_db" in source
     assert "ss.is_active = true" in inspect.getsource(__import__("engine.strategies.registry", fromlist=["StrategyRegistry"]).StrategyRegistry.load_from_db)
+
