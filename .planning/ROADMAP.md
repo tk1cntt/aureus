@@ -215,11 +215,11 @@ Plans:
 **Goal:** Đồng bộ declarative strategy seed xuống DB theo cấu hình active/inactive để kiểm soát rollout chiến lược nhất quán từ source code.
 **Requirements**: PH46-01, PH46-02, PH46-03, PH46-04, PH46-05
 **Depends on:** Phase 45
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 46-01-PLAN.md — Seed sync contract + active/inactive reconciliation + reload wiring
-- [ ] 46-02-PLAN.md — Verification suite + dry-run/rollback scripts + runbook
+- [x] 46-02-PLAN.md — Verification suite + dry-run/rollback scripts + runbook
 
 
 ## Phase 37: Trade Execution Journal (INSERTED)
