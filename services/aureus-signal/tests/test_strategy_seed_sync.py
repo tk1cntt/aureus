@@ -3,6 +3,7 @@ import inspect
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -236,4 +237,19 @@ def test_load_active_only():
     source = inspect.getsource(run_strategy_executor)
     assert "load_from_db" in source
     assert "ss.is_active = true" in inspect.getsource(__import__("engine.strategies.registry", fromlist=["StrategyRegistry"]).StrategyRegistry.load_from_db)
+
+
+def test_runbook_contract():
+    repo_root = Path(__file__).resolve().parents[3]
+    runbook = repo_root / ".planning/phases/46-strategy-seed-sync/46-ROLLBACK-RUNBOOK.md"
+    assert runbook.exists(), "missing runbook"
+    content = runbook.read_text(encoding="utf-8")
+
+    assert "## Pre-check" in content
+    assert "## Rollout" in content
+    assert "## Rollback" in content
+
+    assert "strategy_seed_sync_dryrun.py" in content
+    assert "strategy_seed_sync_rollback.py --snapshot" in content
+    assert "--apply" in content
 
