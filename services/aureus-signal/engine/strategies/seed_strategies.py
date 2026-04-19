@@ -440,58 +440,100 @@ async def seed_system_strategies(pool):
     ]
 
     async with pool.acquire() as conn:
+        template_upserts = 0
         for strat in strategies:
             try:
-                # UPSERT based on Name
                 query = """
                     INSERT INTO aureus_strategy_templates (name, description, config, min_score)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (name) DO UPDATE 
+                    ON CONFLICT (name) DO UPDATE
                     SET description = EXCLUDED.description,
                         config = EXCLUDED.config,
                         min_score = EXCLUDED.min_score
                 """
                 await conn.execute(
-                    query, 
-                    strat['name'], 
-                    strat['description'], 
-                    json.dumps(strat['config']), 
+                    query,
+                    strat['name'],
+                    strat['description'],
+                    json.dumps(strat['config']),
                     strat['min_score']
                 )
-                logger.info(f"[GLOBAL] [seed_system_strategies] 1... Seeded/Updated strategy: {strat['name']}")
+                template_upserts += 1
             except Exception as e:
                 logger.error(f"[GLOBAL] [seed_system_strategies] Error: Failed to seed strategy {strat['name']}: {e}")
 
-        # --- Auto-assign strategies to symbols if no assignments exist ---
-        try:
-            existing_count = await conn.fetchval("SELECT COUNT(*) FROM aureus_symbol_strategies")
-            if existing_count == 0:
-                symbols_env = os.getenv("SYMBOLS", "XAUUSD")
-                symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]
+        symbols_env = os.getenv("SYMBOLS", "XAUUSD")
+        symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]
+        if not symbols_list:
+            symbols_list = ["XAUUSD"]
 
-                all_templates = await conn.fetch("SELECT id, name FROM aureus_strategy_templates")
-                assigned = 0
-                for tmpl in all_templates:
-                    for symbol in symbols_list:
-                        await conn.execute(
-                            """
-                            INSERT INTO aureus_symbol_strategies (symbol, strategy_id, is_active)
-                            VALUES ($1, $2, true)
-                            ON CONFLICT (symbol, strategy_id) DO NOTHING
-                            """,
-                            symbol, tmpl["id"]
-                        )
-                        assigned += 1
-                logger.info(
-                    f"[GLOBAL] [seed_system_strategies] Auto-assigned {assigned} strategy-symbol pairs "
-                    f"({len(all_templates)} strategies × {len(symbols_list)} symbols)"
+        strategy_names = [item["name"] for item in strategies]
+        template_rows = await conn.fetch(
+            "SELECT id, name FROM aureus_strategy_templates WHERE name = ANY($1::text[])",
+            strategy_names,
+        )
+        name_to_id = {row["name"]: row["id"] for row in template_rows}
+
+        desired_ids = {name_to_id[name] for name in strategy_names if name in name_to_id}
+
+        activated = 0
+        deactivated = 0
+        unchanged = 0
+
+        for symbol in symbols_list:
+            active_rows = await conn.fetch(
+                """
+                SELECT ss.symbol, t.id as strategy_id, t.name as strategy_name
+                FROM aureus_symbol_strategies ss
+                JOIN aureus_strategy_templates t ON t.id = ss.strategy_id
+                WHERE ss.symbol = ANY($1::text[]) AND ss.is_active = true
+                """,
+                [symbol],
+            )
+            active_ids_before = {row["strategy_id"] for row in active_rows}
+
+            for strategy_name in strategy_names:
+                strategy_id = name_to_id.get(strategy_name)
+                if strategy_id is None:
+                    continue
+
+                await conn.execute(
+                    """
+                    INSERT INTO aureus_symbol_strategies (symbol, strategy_id, is_active)
+                    VALUES ($1, $2, true)
+                    ON CONFLICT (symbol, strategy_id) DO UPDATE
+                    SET is_active = true
+                    """,
+                    symbol,
+                    strategy_id,
                 )
-            else:
-                logger.info(
-                    f"[GLOBAL] [seed_system_strategies] {existing_count} existing assignments found, skipping auto-assign"
-                )
-        except Exception as e:
-            logger.error(f"[GLOBAL] [seed_system_strategies] Error during auto-assign: {e}")
+
+                if strategy_id in active_ids_before:
+                    unchanged += 1
+                else:
+                    activated += 1
+
+            result = await conn.execute(
+                """
+                UPDATE aureus_symbol_strategies
+                SET is_active = false
+                WHERE symbol = $1
+                  AND is_active = true
+                  AND NOT (strategy_id = ANY($2::int[]))
+                """,
+                symbol,
+                list(desired_ids),
+            )
+            try:
+                deactivated += int(str(result).split()[-1])
+            except Exception:
+                pass
+
+        logger.info(
+            "[GLOBAL] [seed_system_strategies] sync_summary "
+            f"templates_upserted={template_upserts} symbols={len(symbols_list)} "
+            f"activated={activated} deactivated={deactivated} unchanged={unchanged}"
+        )
 
 if __name__ == "__main__":
     # For manual testing
