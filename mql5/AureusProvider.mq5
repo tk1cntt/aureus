@@ -17,7 +17,7 @@
 input string   InpGatewayHost        = "localhost";              // Gateway Host
 input int      InpGatewayPort        = 5556;                     // Gateway TCP Port
 input string   InpSymbols            = "XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD";  // Symbols (comma-separated)
-input bool     InpSendTicks          = true;                     // Send ticks (chart symbol only)
+input bool     InpSendTicks          = false;                    // Send ticks (chart symbol only)
 input bool     InpSendCandles        = true;                     // Send M1 Candles (all symbols)
 input int      InpHeartbeatSec       = 5;                        // Heartbeat Interval (sec)
 input bool     InpBackfillOnReconnect= false;                    // Auto-backfill on reconnect (Disabled by default, let Server dictate)
