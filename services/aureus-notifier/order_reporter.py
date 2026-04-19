@@ -86,6 +86,27 @@ class OrderStatusReporter:
             logger.warning(f"DB lookup failed for trace_id={trace_id}: {e}")
             return None
 
+    async def _lookup_journal_by_ticket(self, ticket: int) -> dict | None:
+        """Fallback lookup by MT5 ticket when trace_id is missing/mismatched."""
+        try:
+            pool = await self._get_db_pool()
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT strategy_name, score, symbol, direction, status,
+                           active_signals, entry_price, sl_initial, tp_initial, lot_size,
+                           ticket, entry_time
+                    FROM aureus_trade_journal
+                    WHERE ticket = $1
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    ticket,
+                )
+                return dict(row) if row else None
+        except Exception as e:
+            logger.warning(f"DB lookup failed for ticket={ticket}: {e}")
+            return None
+
     async def run(self):
         """Main loop: subscribe to mt5 events and forward ORDER_OPENED/CLOSED to Telegram."""
         pubsub = self.redis.pubsub()
@@ -120,12 +141,37 @@ class OrderStatusReporter:
     async def _handle_order_opened(self, event: dict):
         """Handle ORDER_OPENED: lookup journal for strategy info and send Telegram notification."""
         try:
-            trace_id = event.get("trace_id", "")
+            trace_id = event.get("trace_id") or ""
             journal = None
 
-            # Try DB lookup for full context
+            # Try DB lookup for full context (trace_id first)
             if trace_id:
-                journal = await self._lookup_journal(trace_id)
+                journal = await self._lookup_journal(str(trace_id))
+
+            # Fallback by ticket when trace_id is missing/mismatched
+            if journal is None:
+                ticket = event.get("ticket")
+                if ticket is not None:
+                    try:
+                        journal = await self._lookup_journal_by_ticket(int(ticket))
+                    except (TypeError, ValueError):
+                        pass
+
+            # Retry ngắn để chờ journal writer ghi DB (tránh Strategy=N/A do race timing)
+            if journal is None:
+                for _ in range(2):
+                    await asyncio.sleep(0.2)
+                    if trace_id:
+                        journal = await self._lookup_journal(str(trace_id))
+                    if journal is None:
+                        ticket = event.get("ticket")
+                        if ticket is not None:
+                            try:
+                                journal = await self._lookup_journal_by_ticket(int(ticket))
+                            except (TypeError, ValueError):
+                                pass
+                    if journal is not None:
+                        break
 
             msg = self._format_opened(event, journal)
             if msg:
@@ -143,12 +189,37 @@ class OrderStatusReporter:
     async def _handle_order_closed(self, event: dict):
         """Handle ORDER_CLOSED: lookup journal for strategy info and send Telegram notification."""
         try:
-            trace_id = event.get("trace_id", "")
+            trace_id = event.get("trace_id") or ""
             journal = None
 
-            # Try DB lookup for strategy info and original levels
+            # Try DB lookup for strategy info and original levels (trace_id first)
             if trace_id:
-                journal = await self._lookup_journal(trace_id)
+                journal = await self._lookup_journal(str(trace_id))
+
+            # Fallback by ticket when trace_id is missing/mismatched
+            if journal is None:
+                ticket = event.get("ticket")
+                if ticket is not None:
+                    try:
+                        journal = await self._lookup_journal_by_ticket(int(ticket))
+                    except (TypeError, ValueError):
+                        pass
+
+            # Retry ngắn để chờ journal writer ghi DB (tránh Strategy=N/A do race timing)
+            if journal is None:
+                for _ in range(2):
+                    await asyncio.sleep(0.2)
+                    if trace_id:
+                        journal = await self._lookup_journal(str(trace_id))
+                    if journal is None:
+                        ticket = event.get("ticket")
+                        if ticket is not None:
+                            try:
+                                journal = await self._lookup_journal_by_ticket(int(ticket))
+                            except (TypeError, ValueError):
+                                pass
+                    if journal is not None:
+                        break
 
             msg = self._format_close(event, journal)
             if msg:
@@ -175,8 +246,13 @@ class OrderStatusReporter:
         magic = event.get("magic", 0)
         open_time_ms = event.get("t", 0)
 
-        # Strategy info from journal
-        strategy_name = journal.get("strategy_name", "") if journal else ""
+        # Strategy info: ưu tiên journal, fallback event payload
+        strategy_name = (
+            (journal.get("strategy_name") if journal else None)
+            or event.get("strategy_name")
+            or event.get("strategy")
+            or "N/A"
+        )
         score = journal.get("score") if journal else None
 
         # Active signals summary from journal
@@ -277,8 +353,13 @@ class OrderStatusReporter:
         ticket = event.get("ticket", journal.get("ticket") if journal else 0)
         close_time_ms = event.get("t", 0)
 
-        # Strategy info from journal
-        strategy_name = journal.get("strategy_name", "") if journal else ""
+        # Strategy info: ưu tiên journal, fallback event payload
+        strategy_name = (
+            (journal.get("strategy_name") if journal else None)
+            or event.get("strategy_name")
+            or event.get("strategy")
+            or "N/A"
+        )
         score = journal.get("score") if journal else None
 
         # Pips calculation
