@@ -114,6 +114,55 @@ class TemplateStrategy(BaseStrategy):
                 else:
                     details.append(f"EMA({period}) slope OK: {slope_val}")
 
+            elif f_type == "ema_relation":
+                fast_period = f.get("fast_period", 21)
+                slow_period = f.get("slow_period", 55)
+                operator = str(f.get("operator", ">")).strip()
+
+                emas = getattr(state_obj, "emas", {})
+                fast_data = emas.get(fast_period)
+                slow_data = emas.get(slow_period)
+
+                def _ema_current(val: Any) -> float | None:
+                    if isinstance(val, dict):
+                        cur = val.get("current")
+                        return float(cur) if cur is not None else None
+                    if isinstance(val, (int, float)):
+                        return float(val)
+                    return None
+
+                fast_val = _ema_current(fast_data)
+                slow_val = _ema_current(slow_data)
+
+                if fast_val is None or slow_val is None:
+                    failed.append(f"ema_relation:{fast_period}{operator}{slow_period}")
+                    details.append(
+                        f"EMA relation unavailable: EMA({fast_period})={fast_val}, EMA({slow_period})={slow_val}"
+                    )
+                else:
+                    if operator == ">":
+                        ok = fast_val > slow_val
+                    elif operator == "<":
+                        ok = fast_val < slow_val
+                    elif operator == ">=":
+                        ok = fast_val >= slow_val
+                    elif operator == "<=":
+                        ok = fast_val <= slow_val
+                    else:
+                        failed.append(f"ema_relation:unsupported_operator:{operator}")
+                        details.append(f"EMA relation operator unsupported: {operator}")
+                        ok = False
+
+                    if not ok and operator in {">", "<", ">=", "<="}:
+                        failed.append(f"ema_relation:{fast_period}{operator}{slow_period}")
+                        details.append(
+                            f"EMA relation mismatch: EMA({fast_period})={fast_val} {operator} EMA({slow_period})={slow_val}"
+                        )
+                    elif ok:
+                        details.append(
+                            f"EMA relation OK: EMA({fast_period})={fast_val} {operator} EMA({slow_period})={slow_val}"
+                        )
+
             elif f_type == "cisd_consensus":
                 required_direction = f.get("required_direction", "bullish").lower()
                 required_tfs = f.get("required_tfs", ["m30", "m15", "m5"])
