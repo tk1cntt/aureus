@@ -215,7 +215,7 @@ Plans:
 **Goal:** Đồng bộ declarative strategy seed xuống DB theo cấu hình active/inactive để kiểm soát rollout chiến lược nhất quán từ source code.
 **Requirements**: PH46-01, PH46-02, PH46-03, PH46-04, PH46-05
 **Depends on:** Phase 45
-**Plans:** 2/2 plans complete
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 46-01-PLAN.md — Seed sync contract + active/inactive reconciliation + reload wiring
