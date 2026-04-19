@@ -210,3 +210,50 @@ class TestFormatClose:
         }
         result = reporter._format_close(event)
         assert "+50.0 pips" in result
+
+
+@pytest.mark.asyncio
+async def test_handle_order_opened_fallback_lookup_by_ticket():
+    reporter = OrderStatusReporter(redis_client=None, sender=AsyncMock(), chat_id="test_chat")
+    reporter._lookup_journal = AsyncMock(return_value=None)
+    reporter._lookup_journal_by_ticket = AsyncMock(
+        return_value={"strategy_name": "EMA_PULLBACK_BEAR", "score": 4.5}
+    )
+    reporter._format_opened = MagicMock(return_value="opened_msg")
+
+    event = {
+        "type": "ORDER_OPENED",
+        "symbol": "BTCUSD",
+        "ticket": 1599621451,
+        "trace_id": "abc-123",
+    }
+
+    await reporter._handle_order_opened(event)
+
+    reporter._lookup_journal.assert_awaited_once_with("abc-123")
+    reporter._lookup_journal_by_ticket.assert_awaited_once_with(1599621451)
+    reporter._format_opened.assert_called_once_with(event, {"strategy_name": "EMA_PULLBACK_BEAR", "score": 4.5})
+    reporter.sender.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_order_closed_fallback_lookup_by_ticket_without_trace_id():
+    reporter = OrderStatusReporter(redis_client=None, sender=AsyncMock(), chat_id="test_chat")
+    reporter._lookup_journal = AsyncMock(return_value=None)
+    reporter._lookup_journal_by_ticket = AsyncMock(
+        return_value={"strategy_name": "SESSION_SWEEP_BULL", "score": 5.0}
+    )
+    reporter._format_close = MagicMock(return_value="closed_msg")
+
+    event = {
+        "type": "ORDER_CLOSED",
+        "symbol": "BTCUSD",
+        "ticket": 1599466486,
+    }
+
+    await reporter._handle_order_closed(event)
+
+    reporter._lookup_journal.assert_not_awaited()
+    reporter._lookup_journal_by_ticket.assert_awaited_once_with(1599466486)
+    reporter._format_close.assert_called_once_with(event, {"strategy_name": "SESSION_SWEEP_BULL", "score": 5.0})
+    reporter.sender.send_message.assert_awaited_once()
