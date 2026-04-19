@@ -357,7 +357,7 @@ async def seed_system_strategies(pool=None, conn=None):
                     "entry_method": "OB_EDGE",
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
-                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_up"]
                 }
@@ -366,11 +366,15 @@ async def seed_system_strategies(pool=None, conn=None):
         {
             "name": "LIMIT_EMA_TOUCH_BULL",
             "is_active": True,
-            "description": "Vào lệnh BUY LIMIT khi có CHOCH bullish và EMA 21 cross up (sequence: choch_up → ema_21_up). Entry method EMA_TOUCH period 21.",
+            "description": "BUY LIMIT khi có CHOCH bullish và EMA alignment bullish (ema_21_up + ema_55_up + EMA21>EMA55).",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
-                "context_filters": [],
+                "context_filters": [
+                    {"type": "ema_alignment", "period": 21, "required_slope": "POSITIVE"},
+                    {"type": "ema_alignment", "period": 55, "required_slope": "POSITIVE"},
+                    {"type": "ema_relation", "fast_period": 21, "slow_period": 55, "operator": ">"}
+                ],
                 "sequence": [
                     {"tag": "choch_up", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
                     {"tag": "ema_21_up", "weight": 3.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
@@ -393,11 +397,15 @@ async def seed_system_strategies(pool=None, conn=None):
         {
             "name": "LIMIT_EMA_TOUCH_BEAR",
             "is_active": True,
-            "description": "Vào lệnh SELL LIMIT khi có CHOCH bearish và EMA 21 cross down (sequence: choch_down → ema_21_down   ). Entry method EMA_TOUCH period 21.",
+            "description": "SELL LIMIT khi có CHOCH bearish và EMA alignment bearish (ema_21_down + ema_55_down + EMA21<EMA55).",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
-                "context_filters": [],
+                "context_filters": [
+                    {"type": "ema_alignment", "period": 21, "required_slope": "NEGATIVE"},
+                    {"type": "ema_alignment", "period": 55, "required_slope": "NEGATIVE"},
+                    {"type": "ema_relation", "fast_period": 21, "slow_period": 55, "operator": "<"}
+                ],
                 "sequence": [
                     {"tag": "choch_down", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
                     {"tag": "ema_21_down", "weight": 3.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
@@ -411,7 +419,7 @@ async def seed_system_strategies(pool=None, conn=None):
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
-                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
                     "early_exits": ["choch_up"]
                 }
