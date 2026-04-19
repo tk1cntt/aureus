@@ -365,6 +365,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
     # --- Seed System Strategies ---
     logger.info("[GLOBAL] [run_signal_engine] 5... Seeding system strategies...")
     await seed_system_strategies(db_pool)
+    logger.info("[GLOBAL] [run_signal_engine] strategy seed sync completed at startup")
 
     # --- Shared Components ---
     window_manager = WindowManager(max_window=2000)
