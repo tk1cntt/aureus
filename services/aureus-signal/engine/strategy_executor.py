@@ -307,6 +307,8 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         target_symbol = message['data']
                         if target_symbol == "*" or target_symbol == "ALL" or target_symbol in symbols_list:
                             refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
+                            await seed_system_strategies(db_pool)
+                            logger.info(f"[EXECUTOR] seed sync completed before reload for {refresh_list}")
                             for s in refresh_list:
                                 if s not in symbol_strategies:
                                     symbol_strategies[s] = StrategyRegistry()

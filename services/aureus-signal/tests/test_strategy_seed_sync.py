@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import os
 import sys
@@ -7,6 +8,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from engine.live_engine import run_signal_engine
+from engine.strategy_executor import run_strategy_executor
 from engine.strategies.seed_strategies import seed_system_strategies
 
 
@@ -196,3 +199,40 @@ async def test_seed_sync_reactivate_reintroduced_pair(monkeypatch):
     await seed_system_strategies(pool)
 
     assert conn.assignments[("XAUUSD", 1)]["is_active"] is True
+
+
+def test_startup_reload_order():
+    source_signal = inspect.getsource(run_signal_engine)
+    assert source_signal.index("await seed_system_strategies(db_pool)") < source_signal.index(
+        "await symbol_strategies[symbol].load_from_db(db_pool, symbol)"
+    )
+
+    source_executor = inspect.getsource(run_strategy_executor)
+    assert source_executor.index("await seed_system_strategies(db_pool)") < source_executor.index(
+        "await symbol_strategies[symbol].load_from_db(db_pool, symbol)"
+    )
+    assert source_executor.index("await seed_system_strategies(db_pool)") < source_executor.index(
+        "await symbol_strategies[s].load_from_db(db_pool, s)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_summary_log(monkeypatch, caplog):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    with caplog.at_level("INFO"):
+        await seed_system_strategies(pool)
+
+    logs = "\n".join(record.message for record in caplog.records)
+    assert "sync_summary" in logs
+    assert "activated=" in logs
+    assert "deactivated=" in logs
+    assert "unchanged=" in logs
+
+
+def test_load_active_only():
+    source = inspect.getsource(run_strategy_executor)
+    assert "load_from_db" in source
+    assert "ss.is_active = true" in inspect.getsource(__import__("engine.strategies.registry", fromlist=["StrategyRegistry"]).StrategyRegistry.load_from_db)

@@ -674,6 +674,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                             logger.info(f"[GLOBAL] [listen_for_reload] 2... Strategy refresh requested for {target_symbol}")
                             # Load for specific symbol or all
                             refresh_list = symbols_list if target_symbol in ("*", "ALL") else [target_symbol]
+                            await seed_system_strategies(db_pool)
+                            logger.info(f"[GLOBAL] [listen_for_reload] seed sync completed before reload for {refresh_list}")
                             for s in refresh_list:
                                 if s not in symbol_strategies:
                                     symbol_strategies[s] = StrategyRegistry()
