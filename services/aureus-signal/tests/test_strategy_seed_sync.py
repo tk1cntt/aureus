@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.live_engine import run_signal_engine
 from engine.strategy_executor import run_strategy_executor
 from engine.strategies.seed_strategies import seed_system_strategies
+from scripts.strategy_seed_sync_dryrun import _run
 
 
 class FakeConn:
@@ -96,6 +97,18 @@ class FakeConn:
                     )
             return rows
 
+        if "SELECT symbol, strategy_id, is_active FROM aureus_symbol_strategies" in normalized:
+            rows = []
+            for (symbol, strategy_id), assignment in sorted(self.assignments.items()):
+                rows.append(
+                    {
+                        "symbol": symbol,
+                        "strategy_id": strategy_id,
+                        "is_active": assignment.get("is_active", True),
+                    }
+                )
+            return rows
+
         raise AssertionError(f"Unsupported query for fetch: {normalized}")
 
     async def fetchval(self, query, *args):
@@ -122,6 +135,55 @@ class FakePool:
 
     def acquire(self):
         return FakeAcquire(self.conn)
+
+    async def close(self):
+        return None
+
+
+class GuardedPool(FakePool):
+    def __init__(self, conn):
+        super().__init__(conn)
+        self.acquire_calls = 0
+
+    def acquire(self):
+        self.acquire_calls += 1
+        if self.acquire_calls > 1:
+            raise AssertionError("dry-run must not acquire a second connection")
+        return super().acquire()
+
+
+class FakeTransaction:
+    def __init__(self, conn):
+        self.conn = conn
+        self.started = False
+        self.rolled_back = False
+        self._templates_snapshot = None
+        self._assignments_snapshot = None
+
+    async def start(self):
+        self.started = True
+        self._templates_snapshot = json.loads(json.dumps(self.conn.templates))
+        self._assignments_snapshot = {
+            key: value.copy() for key, value in self.conn.assignments.items()
+        }
+
+    async def rollback(self):
+        self.rolled_back = True
+        if self._templates_snapshot is not None:
+            self.conn.templates = json.loads(json.dumps(self._templates_snapshot))
+        if self._assignments_snapshot is not None:
+            self.conn.assignments = {
+                key: value.copy() for key, value in self._assignments_snapshot.items()
+            }
+
+
+class DryRunConn(FakeConn):
+    def __init__(self, templates=None, assignments=None):
+        super().__init__(templates=templates, assignments=assignments)
+        self.tx = FakeTransaction(self)
+
+    def transaction(self):
+        return self.tx
 
 
 @pytest.mark.asyncio
@@ -237,6 +299,31 @@ def test_load_active_only():
     source = inspect.getsource(run_strategy_executor)
     assert "load_from_db" in source
     assert "ss.is_active = true" in inspect.getsource(__import__("engine.strategies.registry", fromlist=["StrategyRegistry"]).StrategyRegistry.load_from_db)
+
+
+@pytest.mark.asyncio
+async def test_dryrun_transaction_uses_same_connection_and_rolls_back(monkeypatch, tmp_path):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = DryRunConn()
+    guarded_pool = GuardedPool(conn)
+
+    async def fake_create_pool(*args, **kwargs):
+        return guarded_pool
+
+    monkeypatch.setattr("scripts.strategy_seed_sync_dryrun.asyncpg.create_pool", fake_create_pool)
+    monkeypatch.setattr("scripts.strategy_seed_sync_dryrun.load_dotenv", lambda: None)
+
+    baseline_templates = len(conn.templates)
+    baseline_assignments = len(conn.assignments)
+
+    code = await _run(str(tmp_path / "dryrun-report.json"))
+
+    assert code == 0
+    assert guarded_pool.acquire_calls == 1
+    assert conn.tx.started is True
+    assert conn.tx.rolled_back is True
+    assert len(conn.templates) == baseline_templates
+    assert len(conn.assignments) == baseline_assignments
 
 
 def test_runbook_contract():

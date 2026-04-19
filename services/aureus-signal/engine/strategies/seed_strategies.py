@@ -7,11 +7,13 @@ import asyncpg
 from dotenv import load_dotenv
 
 logger = get_logger(__name__)
-async def seed_system_strategies(pool):
+async def seed_system_strategies(pool=None, conn=None):
     """
     Seeds the database with system-default strategy templates.
     Ensures that specialized strategies are always available for assignment.
     """
+    if conn is None and pool is None:
+        raise ValueError("seed_system_strategies requires pool or conn")
     strategies = [
         {
             "name": "TREND_CONT_BULL",
@@ -439,7 +441,7 @@ async def seed_system_strategies(pool):
         }
     ]
 
-    async with pool.acquire() as conn:
+    async def _seed_with_conn(conn):
         template_upserts = 0
         for strat in strategies:
             try:
@@ -534,6 +536,12 @@ async def seed_system_strategies(pool):
             f"templates_upserted={template_upserts} symbols={len(symbols_list)} "
             f"activated={activated} deactivated={deactivated} unchanged={unchanged}"
         )
+
+    if conn is not None:
+        await _seed_with_conn(conn)
+    else:
+        async with pool.acquire() as conn:
+            await _seed_with_conn(conn)
 
 if __name__ == "__main__":
     # For manual testing

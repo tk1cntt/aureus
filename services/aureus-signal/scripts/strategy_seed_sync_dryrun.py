@@ -95,7 +95,7 @@ async def _run(output_path: str | None):
             await tx.start()
             try:
                 before = await _fetch_assignments(conn)
-                await seed_system_strategies(pool)
+                await seed_system_strategies(conn=conn)
                 after = await _fetch_assignments(conn)
                 raise _DryRunRollback()
             except _DryRunRollback:
