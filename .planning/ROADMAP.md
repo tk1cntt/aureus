@@ -210,7 +210,17 @@ Plans:
 - [x] 45-02-PLAN.md — Strategy per-symbol worker + snapshot-cùng-candle + trace_id strict dedupe
 - [x] 45-03-PLAN.md — Circuit-breaker/backlog/SLO per-symbol + rollout Shadow/Canary/Full + auto rollback
 
----
+### Phase 46: strategy-seed-sync
+
+**Goal:** Đồng bộ declarative strategy seed xuống DB theo cấu hình active/inactive để kiểm soát rollout chiến lược nhất quán từ source code.
+**Requirements**: PH46-01, PH46-02, PH46-03, PH46-04, PH46-05
+**Depends on:** Phase 45
+**Plans:** 1/2 plans executed
+
+Plans:
+- [x] 46-01-PLAN.md — Seed sync contract + active/inactive reconciliation + reload wiring
+- [ ] 46-02-PLAN.md — Verification suite + dry-run/rollback scripts + runbook
+
 
 ## Phase 37: Trade Execution Journal (INSERTED)
 
