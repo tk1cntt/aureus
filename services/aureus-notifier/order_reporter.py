@@ -107,6 +107,42 @@ class OrderStatusReporter:
             logger.warning(f"DB lookup failed for ticket={ticket}: {e}")
             return None
 
+    def _normalize_ticket(self, ticket_raw) -> int | None:
+        """Normalize ticket from int/float/string payloads."""
+        if ticket_raw is None:
+            return None
+        try:
+            if isinstance(ticket_raw, str):
+                ticket_raw = ticket_raw.strip()
+                if not ticket_raw:
+                    return None
+            return int(float(ticket_raw))
+        except (TypeError, ValueError):
+            return None
+
+    async def _resolve_journal_context(self, event: dict) -> dict | None:
+        """Resolve journal context by trace_id first, then ticket with short retry."""
+        trace_id = event.get("trace_id") or ""
+        ticket = self._normalize_ticket(event.get("ticket"))
+
+        journal = None
+        if trace_id:
+            journal = await self._lookup_journal(str(trace_id))
+        if journal is None and ticket is not None:
+            journal = await self._lookup_journal_by_ticket(ticket)
+
+        if journal is None:
+            for _ in range(2):
+                await asyncio.sleep(0.2)
+                if trace_id:
+                    journal = await self._lookup_journal(str(trace_id))
+                if journal is None and ticket is not None:
+                    journal = await self._lookup_journal_by_ticket(ticket)
+                if journal is not None:
+                    break
+
+        return journal
+
     async def run(self):
         """Main loop: subscribe to mt5 events and forward ORDER_OPENED/CLOSED to Telegram."""
         pubsub = self.redis.pubsub()
@@ -141,37 +177,7 @@ class OrderStatusReporter:
     async def _handle_order_opened(self, event: dict):
         """Handle ORDER_OPENED: lookup journal for strategy info and send Telegram notification."""
         try:
-            trace_id = event.get("trace_id") or ""
-            journal = None
-
-            # Try DB lookup for full context (trace_id first)
-            if trace_id:
-                journal = await self._lookup_journal(str(trace_id))
-
-            # Fallback by ticket when trace_id is missing/mismatched
-            if journal is None:
-                ticket = event.get("ticket")
-                if ticket is not None:
-                    try:
-                        journal = await self._lookup_journal_by_ticket(int(ticket))
-                    except (TypeError, ValueError):
-                        pass
-
-            # Retry ngắn để chờ journal writer ghi DB (tránh Strategy=N/A do race timing)
-            if journal is None:
-                for _ in range(2):
-                    await asyncio.sleep(0.2)
-                    if trace_id:
-                        journal = await self._lookup_journal(str(trace_id))
-                    if journal is None:
-                        ticket = event.get("ticket")
-                        if ticket is not None:
-                            try:
-                                journal = await self._lookup_journal_by_ticket(int(ticket))
-                            except (TypeError, ValueError):
-                                pass
-                    if journal is not None:
-                        break
+            journal = await self._resolve_journal_context(event)
 
             msg = self._format_opened(event, journal)
             if msg:
@@ -189,37 +195,7 @@ class OrderStatusReporter:
     async def _handle_order_closed(self, event: dict):
         """Handle ORDER_CLOSED: lookup journal for strategy info and send Telegram notification."""
         try:
-            trace_id = event.get("trace_id") or ""
-            journal = None
-
-            # Try DB lookup for strategy info and original levels (trace_id first)
-            if trace_id:
-                journal = await self._lookup_journal(str(trace_id))
-
-            # Fallback by ticket when trace_id is missing/mismatched
-            if journal is None:
-                ticket = event.get("ticket")
-                if ticket is not None:
-                    try:
-                        journal = await self._lookup_journal_by_ticket(int(ticket))
-                    except (TypeError, ValueError):
-                        pass
-
-            # Retry ngắn để chờ journal writer ghi DB (tránh Strategy=N/A do race timing)
-            if journal is None:
-                for _ in range(2):
-                    await asyncio.sleep(0.2)
-                    if trace_id:
-                        journal = await self._lookup_journal(str(trace_id))
-                    if journal is None:
-                        ticket = event.get("ticket")
-                        if ticket is not None:
-                            try:
-                                journal = await self._lookup_journal_by_ticket(int(ticket))
-                            except (TypeError, ValueError):
-                                pass
-                    if journal is not None:
-                        break
+            journal = await self._resolve_journal_context(event)
 
             msg = self._format_close(event, journal)
             if msg:
