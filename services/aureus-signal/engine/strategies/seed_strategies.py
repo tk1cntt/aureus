@@ -17,6 +17,7 @@ async def seed_system_strategies(pool=None, conn=None):
     strategies = [
         {
             "name": "TREND_CONT_BULL",
+            "is_active": True,
             "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
             "min_score": 3.0,
             "config": {
@@ -38,6 +39,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "TREND_CONT_BEAR",
+            "is_active": True,
             "description": "High-probability SMC Trend Continuation. Requires HTF alignment, structural break, and pull-back sweep.",
             "min_score": 3.0,
             "config": {
@@ -59,6 +61,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "ORDER_FLOW_BULL",
+            "is_active": True,
             "description": "BUY khi xuất hiện CHOCH bullish rồi xác nhận thêm sweep_bull (sequence: choch_up → sweep_bull).",
             "min_score": 6.0,
             "config": {
@@ -84,6 +87,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "ORDER_FLOW_BEAR",
+            "is_active": True,
             "description": "SELL khi xuất hiện CHOCH bearish rồi xác nhận thêm sweep_bear (sequence: choch_down → sweep_bear).",
             "min_score": 6.0,
             "config": {
@@ -109,6 +113,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "SESSION_SWEEP_BULL",
+            "is_active": True,
             "description": "BUY chỉ khi có sweep_bull theo session liquidity (sequence: sweep_bull, không dùng CHOCH).",
             "min_score": 6.0,
             "config": {
@@ -131,6 +136,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "SESSION_SWEEP_BEAR",
+            "is_active": True,
             "description": "SELL chỉ khi có sweep_bear theo session liquidity (sequence: sweep_bear, không dùng CHOCH).",
             "min_score": 6.0,
             "config": {
@@ -153,6 +159,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "CHOCH_CISD_BULL",
+            "is_active": True,
             "description": "ChoCH lên xác nhận đảo chiều bullish, sau đó CISD bullish xác nhận break và entry. Sequence: choch_up → cisd_bull.",
             "min_score": 8.0,
             "config": {
@@ -176,6 +183,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "CHOCH_CISD_BEAR",
+            "is_active": True,
             "description": "ChoCH xuống xác nhận đảo chiều bearish, sau đó CISD bearish xác nhận break và entry. Sequence: choch_down → cisd_bear.",
             "min_score": 8.0,
             "config": {
@@ -199,6 +207,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "CISD_CONSENSUS_BULL",
+            "is_active": True,
             "description": "CISD M30 + M15 + M5 đồng thuận bullish, trigger entry khi CISD M1 bullish fire. Multi-frame consensus strategy.",
             "min_score": 4.0,
             "config": {
@@ -227,6 +236,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "CISD_CONSENSUS_BEAR",
+            "is_active": True,
             "description": "CISD M30 + M15 + M5 đồng thuận bearish, trigger entry khi CISD M1 bearish fire. Multi-frame consensus strategy.",
             "min_score": 4.0,
             "config": {
@@ -255,21 +265,22 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "LIMIT_PULLBACK_BULL",
-            "description": "BUY LIMIT pullback 50% chỉ khi có CHOCH bullish rồi sweep_bull (sequence: choch_up → sweep_bull). Entry method PULLBACK_50 (khác FIXED_OFFSET/ORDER_FLOW).",
+            "is_active": True,
+            "description": "BUY LIMIT pullback 50% chỉ khi có CHOCH bullish. Entry method PULLBACK_50.",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
                 "context_filters": [],
                 "sequence": [
-                    {"tag": "choch_up", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
-                    {"tag": "sweep_bull", "weight": 3.0, "required": True, "max_wait": 15, "reset_signals": ["choch_down"]}
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
                     "entry_type": "LIMIT",
                     "entry_method": "PULLBACK_50",
-                    "sl": {"type": "FIXED_PIPS"},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
@@ -278,19 +289,46 @@ async def seed_system_strategies(pool=None, conn=None):
             }
         },
         {
+            "name": "LIMIT_PULLBACK_BEAR",
+            "is_active": True,
+            "description": "SELL LIMIT pullback 50% chỉ khi có CHOCH bearish. Entry method PULLBACK_50.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "entry_type": "LIMIT",
+                    "entry_method": "PULLBACK_50",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
             "name": "LIMIT_OB_EDGE_BULL",
+            "is_active": True,
             "description": "Vào lệnh BUY tại cạnh OB (bottom). Entry type LIMIT, entry_method OB_EDGE.",
             "min_score": 4.0,
             "config": {
                 "min_score_threshold": 4.0,
                 "context_filters": [],
                 "sequence": [
-                    {"tag": "sweep_bull", "weight": 5.0, "required": True, "max_wait": 20, "reset_signals": ["choch_down"]}
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_down"]},
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
                     "entry_type": "LIMIT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
                     "entry_method": "OB_EDGE",
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
@@ -301,7 +339,33 @@ async def seed_system_strategies(pool=None, conn=None):
             }
         },
         {
+            "name": "LIMIT_OB_EDGE_BEAR",
+            "is_active": True,
+            "description": "Vào lệnh SELL tại cạnh OB (top). Entry type LIMIT, entry_method OB_EDGE.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "entry_type": "LIMIT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "entry_method": "OB_EDGE",
+                    "sl": {"type": "FIXED_PIPS"},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
             "name": "LIMIT_EMA_TOUCH_BULL",
+            "is_active": True,
             "description": "Vào lệnh BUY LIMIT khi có CHOCH bullish và EMA 21 cross up (sequence: choch_up → ema_21_up). Entry method EMA_TOUCH period 21.",
             "min_score": 4.0,
             "config": {
@@ -313,11 +377,12 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
-                    "size": 0.01,
                     "entry_type": "LIMIT",
                     "entry_method": "EMA_TOUCH",
                     "entry_value": 21,
-                    "sl": {"type": "FIXED_PIPS"},
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
                     "capital_risk_pct": 1.0,
@@ -326,7 +391,35 @@ async def seed_system_strategies(pool=None, conn=None):
             }
         },
         {
+            "name": "LIMIT_EMA_TOUCH_BEAR",
+            "is_active": True,
+            "description": "Vào lệnh SELL LIMIT khi có CHOCH bearish và EMA 21 cross down (sequence: choch_down → ema_21_down   ). Entry method EMA_TOUCH period 21.",
+            "min_score": 4.0,
+            "config": {
+                "min_score_threshold": 4.0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
+                    {"tag": "ema_21_down", "weight": 3.0, "required": True, "max_wait": 20, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "entry_type": "LIMIT",
+                    "entry_method": "EMA_TOUCH",
+                    "entry_value": 21,
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "capital_risk_pct": 1.0,
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+        {
             "name": "LIMIT_FIXED_OFFSET_BULL",
+            "is_active": False,
             "description": "BUY LIMIT fixed offset 15 pips chỉ khi sweep_bull xuất hiện mà không cần CHOCH step (sequence: sweep_bull). Entry method FIXED_OFFSET (khác PULLBACK_50/ORDER_FLOW).",
             "min_score": 4.0,
             "config": {
@@ -350,31 +443,8 @@ async def seed_system_strategies(pool=None, conn=None):
             }
         },
         {
-            "name": "LIMIT_PULLBACK_BEAR",
-            "description": "SELL LIMIT pullback 50% chỉ khi có CHOCH bearish rồi sweep_bear (sequence: choch_down → sweep_bear). Entry method PULLBACK_50 (khác FIXED_OFFSET/ORDER_FLOW).",
-            "min_score": 4.0,
-            "config": {
-                "min_score_threshold": 4.0,
-                "context_filters": [],
-                "sequence": [
-                    {"tag": "choch_down", "weight": 2.0, "required": True, "max_wait": 30, "reset_signals": ["choch_up"]},
-                    {"tag": "sweep_bear", "weight": 3.0, "required": True, "max_wait": 15, "reset_signals": ["choch_up"]}
-                ],
-                "trade_execution": {
-                    "direction": "SELL",
-                    "size": 0.01,
-                    "entry_type": "LIMIT",
-                    "entry_method": "PULLBACK_50",
-                    "sl": {"type": "FIXED_PIPS"},
-                    "tp": {"type": "RR_RATIO", "value": 1.5},
-                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
-                    "capital_risk_pct": 1.0,
-                    "early_exits": ["choch_up"]
-                }
-            }
-        },
-        {
             "name": "LIMIT_FIXED_OFFSET_BEAR",
+            "is_active": False,
             "description": "SELL LIMIT fixed offset 15 pips chỉ khi sweep_bear xuất hiện mà không cần CHOCH step (sequence: sweep_bear). Entry method FIXED_OFFSET (khác PULLBACK_50/ORDER_FLOW).",
             "min_score": 4.0,
             "config": {
@@ -399,6 +469,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "FIXED_BUDGET_BULL",
+            "is_active": False,
             "description": "Vào lệnh BUY với budget cố định $50. SL dựa trên pivot point, MT5 tự tính lot size.",
             "min_score": 4.0,
             "config": {
@@ -420,6 +491,7 @@ async def seed_system_strategies(pool=None, conn=None):
         },
         {
             "name": "FIXED_BUDGET_BEAR",
+            "is_active": False,
             "description": "Vào lệnh SELL với budget cố định $50. SL dựa trên pivot point, MT5 tự tính lot size.",
             "min_score": 4.0,
             "config": {
@@ -440,6 +512,9 @@ async def seed_system_strategies(pool=None, conn=None):
             }
         }
     ]
+
+    for strat in strategies:
+        strat.setdefault("is_active", True)
 
     async def _seed_with_conn(conn):
         template_upserts = 0
@@ -470,13 +545,14 @@ async def seed_system_strategies(pool=None, conn=None):
             symbols_list = ["XAUUSD"]
 
         strategy_names = [item["name"] for item in strategies]
+        active_strategy_names = [item["name"] for item in strategies if item.get("is_active", True)]
         template_rows = await conn.fetch(
             "SELECT id, name FROM aureus_strategy_templates WHERE name = ANY($1::text[])",
             strategy_names,
         )
         name_to_id = {row["name"]: row["id"] for row in template_rows}
 
-        desired_ids = {name_to_id[name] for name in strategy_names if name in name_to_id}
+        desired_ids = {name_to_id[name] for name in active_strategy_names if name in name_to_id}
 
         activated = 0
         deactivated = 0
@@ -494,7 +570,7 @@ async def seed_system_strategies(pool=None, conn=None):
             )
             active_ids_before = {row["strategy_id"] for row in active_rows}
 
-            for strategy_name in strategy_names:
+            for strategy_name in active_strategy_names:
                 strategy_id = name_to_id.get(strategy_name)
                 if strategy_id is None:
                     continue
