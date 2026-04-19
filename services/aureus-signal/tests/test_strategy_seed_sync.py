@@ -1,4 +1,5 @@
 import asyncio
+import ast
 import inspect
 import json
 import os
@@ -324,6 +325,148 @@ async def test_dryrun_transaction_uses_same_connection_and_rolls_back(monkeypatc
     assert conn.tx.rolled_back is True
     assert len(conn.templates) == baseline_templates
     assert len(conn.assignments) == baseline_assignments
+
+
+@pytest.mark.asyncio
+async def test_seed_sync_requires_pool_or_conn():
+    with pytest.raises(ValueError, match="requires pool or conn"):
+        await seed_system_strategies()
+
+
+def test_seed_catalog_declares_is_active_flags():
+    source = inspect.getsource(seed_system_strategies)
+    total_names = source.count('"name":')
+    total_is_active = source.count('"is_active": True') + source.count('"is_active": False')
+
+    assert total_names >= 10
+    assert source.count('"is_active": True') >= 10
+    assert total_names == total_is_active
+
+
+def test_seed_sync_assignments_use_active_strategy_names():
+    source = inspect.getsource(seed_system_strategies)
+    assert 'active_strategy_names = [item["name"] for item in strategies if item.get("is_active", True)]' in source
+    assert 'for strategy_name in active_strategy_names:' in source
+
+
+@pytest.mark.asyncio
+async def test_seed_sync_empty_symbols_env_defaults_to_xauusd(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    await seed_system_strategies(pool)
+
+    assert conn.assignments
+    assert all(symbol == "XAUUSD" for symbol, _ in conn.assignments.keys())
+
+
+@pytest.mark.asyncio
+async def test_limit_ema_touch_bull_filters_normal_case(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    await seed_system_strategies(pool)
+
+    bull = conn.templates["LIMIT_EMA_TOUCH_BULL"]
+    filters = bull["config"]["context_filters"]
+
+    assert len(filters) == 3
+    assert {f["type"] for f in filters} == {"ema_alignment", "ema_relation"}
+    assert {f["period"] for f in filters if f["type"] == "ema_alignment"} == {21, 55}
+    assert all(
+        f.get("required_slope") == "POSITIVE"
+        for f in filters
+        if f["type"] == "ema_alignment"
+    )
+    relation = next(f for f in filters if f["type"] == "ema_relation")
+    assert relation["fast_period"] == 21
+    assert relation["slow_period"] == 55
+    assert relation["operator"] == ">"
+
+
+@pytest.mark.asyncio
+async def test_limit_ema_touch_bear_filters_abnormal_guard(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    await seed_system_strategies(pool)
+
+    bear = conn.templates["LIMIT_EMA_TOUCH_BEAR"]
+    filters = bear["config"]["context_filters"]
+
+    assert len(filters) == 3
+    assert {f["period"] for f in filters if f["type"] == "ema_alignment"} == {21, 55}
+    assert all(
+        f.get("required_slope") == "NEGATIVE"
+        for f in filters
+        if f["type"] == "ema_alignment"
+    )
+    relation = next(f for f in filters if f["type"] == "ema_relation")
+    assert relation["fast_period"] == 21
+    assert relation["slow_period"] == 55
+    assert relation["operator"] == "<"
+
+    # Abnormal guard: không cho cấu hình ngược chiều
+    assert relation["operator"] != ">"
+    assert not any(
+        f.get("required_slope") == "POSITIVE"
+        for f in filters
+        if f["type"] == "ema_alignment"
+    )
+
+
+def test_seed_catalog_buy_sell_symmetry_lint():
+    seed_file = Path(__file__).resolve().parents[1] / "engine/strategies/seed_strategies.py"
+    module = ast.parse(seed_file.read_text(encoding="utf-8"))
+
+    strategies = None
+    for node in ast.walk(module):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "strategies":
+                    strategies = ast.literal_eval(node.value)
+                    break
+        if strategies is not None:
+            break
+
+    assert strategies is not None, "Cannot parse strategies list from seed_strategies.py"
+
+    by_name = {item["name"]: item for item in strategies}
+    pairs = []
+    for name in sorted(by_name):
+        if name.endswith("_BULL"):
+            bear_name = name[:-5] + "_BEAR"
+            if bear_name in by_name:
+                pairs.append((name, bear_name))
+
+    assert pairs, "No _BULL/_BEAR strategy pairs found"
+
+    for bull_name, bear_name in pairs:
+        bull = by_name[bull_name]
+        bear = by_name[bear_name]
+
+        bull_exec = bull.get("config", {}).get("trade_execution", {})
+        bear_exec = bear.get("config", {}).get("trade_execution", {})
+
+        assert bull_exec.get("direction") == "BUY", f"{bull_name}: direction must be BUY"
+        assert bear_exec.get("direction") == "SELL", f"{bear_name}: direction must be SELL"
+
+        bull_trailing = (bull_exec.get("trailing") or {}).get("type")
+        bear_trailing = (bear_exec.get("trailing") or {}).get("type")
+        if bull_trailing == "SWING_LOW":
+            assert bear_trailing == "SWING_HIGH", (
+                f"{bull_name}/{bear_name}: trailing mismatch, expected SWING_HIGH for bear"
+            )
+
+        bull_exits = set(bull_exec.get("early_exits", []))
+        bear_exits = set(bear_exec.get("early_exits", []))
+        if "choch_down" in bull_exits:
+            assert "choch_up" in bear_exits, (
+                f"{bull_name}/{bear_name}: bear must contain choch_up in early_exits"
+            )
 
 
 def test_runbook_contract():
