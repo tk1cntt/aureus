@@ -85,6 +85,14 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 - Không rollback global khi một symbol vi phạm SLO.
 - Không mở rộng scope sang cleanup logic tín hiệu ngoài D-01..D-12.
 
+### Phase 46: Strategy Seed Sync (PH46)
+
+- [x] **PH46-01**: Seed chiến lược từ source code được đồng bộ deterministic vào `aureus_strategy_templates` bằng upsert theo `name`
+- [x] **PH46-02**: Assignment `symbol↔strategy` reconcile theo `is_active` (không delete cứng) để rollback nhanh
+- [x] **PH46-03**: Runtime startup/reload luôn sync trước khi load strategy active-only
+- [x] **PH46-04**: Dry-run seed sync chạy trong cùng transaction boundary và không persist mutation sau rollback
+- [x] **PH46-05**: Có rollback script + runbook vận hành để khôi phục trạng thái `is_active` từ snapshot
+
 ### PH45 Gap-Closure Architecture Decision Record (2026-04-18)
 
 **Mục tiêu:** đóng 3 gap runtime đã xác nhận ở `45-VERIFICATION.md`:
@@ -219,6 +227,11 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 | PH45-05 | Phase 45 | Planned |
 | PH45-06 | Phase 45 | Planned |
 | PH45-07 | Phase 45 | Planned |
+| PH46-01 | Phase 46 | Complete |
+| PH46-02 | Phase 46 | Complete |
+| PH46-03 | Phase 46 | Complete |
+| PH46-04 | Phase 46 | Complete |
+| PH46-05 | Phase 46 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 37 total
