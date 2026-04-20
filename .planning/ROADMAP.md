@@ -42,7 +42,7 @@
 | 49 | Order Execution Contract Multi-Symbol | ORDER-01→03, PH45-05→07 | ✅ DONE (gaps found) |
 | 50 | Nyquist Reaudit Closure | v1.5 closure requirements | ✅ DONE (gaps found) |
 | 51 | 1/1 | Complete   | 2026-04-20 |
-| 52 | MT5 Live Runtime Verification Gate | ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04 | Planned |
+| 52 | 1/1 | Complete   | 2026-04-20 |
 | 53 | Nyquist Validation Backfill v1.5 | milestone nyquist compliance | Planned |
 
 ---
@@ -297,10 +297,10 @@ Plans:
 **Requirements**: ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04
 **Depends on:** Phase 51
 **Gap Closure:** Closes flow gap `MT5 order events -> trade history reconciliation` và các requirement `human_needed`.
-**Plans:** 0 plans
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 52 to break down)
+- [x] TBD (run /gsd-plan-phase 52 to break down) (completed 2026-04-20)
 
 ### Phase 53: nyquist-validation-backfill-v1-5
 
