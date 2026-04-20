@@ -60,7 +60,7 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 - [x] **PH45-04**: Strategy executor chỉ xử lý khi snapshot cùng candle (strict consistency)
 - [x] **PH45-05**: Idempotency strict theo `trace_id` cho `symbol + strategy + origin_timestamp`
 - [x] **PH45-06**: Circuit-breaker + backlog threshold hoạt động độc lập theo từng symbol
-- [x] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
+- [ ] **PH45-07**: Rollout Shadow -> Canary -> Full với auto-rollback theo SLO per-symbol
 
 **PH45 verification baseline (execution gate):**
 - `python3 -m pytest /d/Aureus/services/aureus-signal/tests/test_per_symbol_worker_runtime.py -q`
@@ -200,17 +200,17 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 | STRAT-02 | Phase 47 | passed — `.planning/phases/26-signal-event-pipeline-strategy-contract/26-VERIFICATION.md` |
 | STRAT-03 | Phase 47 | passed — `.planning/phases/26-signal-event-pipeline-strategy-contract/26-VERIFICATION.md` |
 | STRAT-04 | Phase 47 | passed — `.planning/phases/26-signal-event-pipeline-strategy-contract/26-VERIFICATION.md` |
-| ORDER-01 | Phase 49 | Pending |
-| ORDER-02 | Phase 49 | Pending |
-| ORDER-03 | Phase 49 | Pending |
-| ORDER-04 | Phase 47 | human_needed — `.planning/phases/28-aureusprovider-mq5-bidirectional-extension/28-VERIFICATION.md` (cần MT5 live verification) |
-| ORDER-05 | Phase 47 | human_needed — `.planning/phases/28-aureusprovider-mq5-bidirectional-extension/28-VERIFICATION.md` (cần MT5 live verification) |
-| ORDER-06 | Phase 47 | human_needed — `.planning/phases/28-aureusprovider-mq5-bidirectional-extension/28-VERIFICATION.md` (cần MT5 live verification) |
+| ORDER-01 | Phase 51 | Pending |
+| ORDER-02 | Phase 51 | Pending |
+| ORDER-03 | Phase 51 | Pending |
+| ORDER-04 | Phase 52 | Pending |
+| ORDER-05 | Phase 52 | Pending |
+| ORDER-06 | Phase 52 | Pending |
 | ORDER-07 | Phase 47 | passed — `.planning/phases/29-mt5-order-execution-service/29-VERIFICATION.md` |
 | TRADE-01 | Phase 30 | Complete |
 | TRADE-02 | Phase 30 | Complete |
-| TRADE-03 | Phase 47 | human_needed — `.planning/phases/31-mt5-history-sync/31-VERIFICATION.md` (cần MT5 runtime verification) |
-| TRADE-04 | Phase 47 | human_needed — `.planning/phases/31-mt5-history-sync/31-VERIFICATION.md` (cần MT5 runtime verification) |
+| TRADE-03 | Phase 52 | Pending |
+| TRADE-04 | Phase 52 | Pending |
 | TRADE-05 | Phase 30 | Complete |
 | PERF-01 | Phase 48 | Complete |
 | PERF-02 | Phase 48 | Complete |
@@ -226,7 +226,7 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 | PH45-04 | Phase 45 | Planned |
 | PH45-05 | Phase 45 | Planned |
 | PH45-06 | Phase 45 | Planned |
-| PH45-07 | Phase 45 | Planned |
+| PH45-07 | Phase 51 | Pending |
 | PH46-01 | Phase 46 | Complete |
 | PH46-02 | Phase 46 | Complete |
 | PH46-03 | Phase 46 | Complete |

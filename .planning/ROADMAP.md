@@ -15,7 +15,7 @@
 
 **Goal:** Xây dựng pipeline hoàn chỉnh từ signal → notification → order execution → result tracking, với dashboard thống kê performance.
 
-**Phases:** 8
+**Phases:** 25
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
@@ -35,6 +35,15 @@
 | 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
 | 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | ✅ DONE 2026-04-14 |
 | 44.0 | Profiling Baseline Performance — đo CPU/memory per signal | — | Not planned |
+| 45 | Parallel Runtime Per-Symbol | PH45-01→07 | ✅ DONE |
+| 46 | Strategy Seed Sync | PH46-01→05 | ✅ DONE |
+| 47 | Verification Backfill v1.5 | NOTIF-01, STRAT-01→04, ORDER-04→07, TRADE-03→04 | ✅ DONE |
+| 48 | Performance Backtest API Wiring | PERF-01→08 | ✅ DONE |
+| 49 | Order Execution Contract Multi-Symbol | ORDER-01→03, PH45-05→07 | ✅ DONE (gaps found) |
+| 50 | Nyquist Reaudit Closure | v1.5 closure requirements | ✅ DONE (gaps found) |
+| 51 | Order Execution Contract Hardening | ORDER-01, ORDER-02, ORDER-03, PH45-07 | Planned |
+| 52 | MT5 Live Runtime Verification Gate | ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04 | Planned |
+| 53 | Nyquist Validation Backfill v1.5 | milestone nyquist compliance | Planned |
 
 ---
 
@@ -253,10 +262,12 @@ Plans:
 **Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-05, PH45-06, PH45-07
 **Depends on:** Phase 48
 **Gap Closure:** Closes integration gaps `orders.py -> execution_client.py`, `multi-symbol streams -> _poll_loop`, và flow gap `Live ORDER_OPEN -> execution`
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 49 to break down)
+- [x] 49-01-PLAN.md — Khóa ORDER_OPEN contract-first validation + idempotency strict tại execution consume boundary
+- [x] 49-02-PLAN.md — Loại hardcode XAUUSD và khóa multi-symbol poll/discovery + mismatch guard
+- [x] 49-03-PLAN.md — Đồng bộ bridge mapper/lifecycle lineage cho qty alias + strategy traceability
 
 ### Phase 50: nyquist-reaudit-closure
 
@@ -264,10 +275,43 @@ Plans:
 **Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-01, ORDER-02, ORDER-03, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04, PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
 **Depends on:** Phase 49
 **Gap Closure:** Closes Nyquist missing/partial coverage + milestone re-audit blockers
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] TBD (run /gsd-plan-phase 50 to break down) (completed 2026-04-20)
+
+### Phase 51: order-execution-contract-hardening
+
+**Goal:** Khóa chặt contract execution boundary để loại reject sai ở ORDER_OPEN market/pending và đóng rollback gate PH45-07 ở runtime path.
+**Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-07
+**Depends on:** Phase 50
+**Gap Closure:** Closes audit gaps `ORDER-01..03`, `PH45-07`, integration `orders.py -> execution_client.py`, `bridge lifecycle publish`, `multi-symbol streams -> _poll_loop`.
 **Plans:** 0 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 50 to break down)
+- [ ] TBD (run /gsd-plan-phase 51 to break down)
+
+### Phase 52: mt5-live-runtime-verification-gate
+
+**Goal:** Chốt human gate bằng live MT5 verification cho ORDER-04..06 và TRADE-03..04 với evidence runtime end-to-end.
+**Requirements**: ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04
+**Depends on:** Phase 51
+**Gap Closure:** Closes flow gap `MT5 order events -> trade history reconciliation` và các requirement `human_needed`.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 52 to break down)
+
+### Phase 53: nyquist-validation-backfill-v1-5
+
+**Goal:** Bổ sung/hoàn tất VALIDATION.md cho các phase còn missing/partial trong v1.5 và re-audit milestone đến khi PASS.
+**Requirements**: v1.5 nyquist validation coverage
+**Depends on:** Phase 52
+**Gap Closure:** Closes audit nyquist gaps cho 27, 28, 29, 32, 33, 44, 46, 47, 48, 49, 50.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 53 to break down)
 
 ## Phase 37: Trade Execution Journal (INSERTED)
 
@@ -369,46 +413,6 @@ Plans:
 Plans:
 - [x] 40.3-01-PLAN.md — Executed: suppress flag set in both warmup paths, guards added, reset on first gateway candle
 
-### Phase 40.2: Fix stale signal trigger on service restart with suppress flag (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 40
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 40.2 to break down)
-
-### Phase 40.1: Fix stale signal trigger on service restart with suppress flag (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 40
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 40.1 to break down)
-
-### Phase 40.2: CISD multi-frame support với status giống EMA trên M5 M15 M30 H1 (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 40
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 40.2 to break down)
-
-### Phase 40.1: Tạo signal CISD dựa theo mẫu code sẽ cung cấp (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 40
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 40.1 to break down)
-
 ### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
 
 **Goal:** [Urgent work - to be planned]
@@ -471,15 +475,6 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 38 to break down)
-
-### Phase 999.1: Sync MT5 Symbol Metadata Digits (BACKLOG)
-
-**Goal:** Fetch real `SymbolInfoInteger(SYMBOL_DIGITS)` and `SYMBOL_POINT` dynamically from the MT5 broker when initializing the connection, sending it to the backend so the signal engine uses 100% accurate point-size multipliers instead of hardcoded Python fallbacks per symbol.
-**Requirements**: TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
 
 ### Phase 44.0: Profiling Baseline Performance
 
