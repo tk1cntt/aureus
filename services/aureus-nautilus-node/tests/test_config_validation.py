@@ -50,3 +50,30 @@ def test_valid_settings_pass_validation():
         settings = NautilusNodeSettings.from_env()
         assert settings.symbol_whitelist == ["XAUUSD", "EURUSD"]
         assert settings.risk_mode == "STRICT"
+
+
+def test_from_env_requires_non_empty_symbol_whitelist_env():
+    with patch.dict(
+        "os.environ",
+        {
+            "NAUTILUS_SYMBOL_WHITELIST": "",
+            "NAUTILUS_RISK_MODE": "STRICT",
+            "NAUTILUS_REQUIRE_SL_TP": "1",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="NAUTILUS_SYMBOL_WHITELIST must not be empty"):
+            NautilusNodeSettings.from_env()
+
+
+def test_from_env_without_symbol_whitelist_env_is_rejected():
+    with patch.dict(
+        "os.environ",
+        {
+            "NAUTILUS_RISK_MODE": "STRICT",
+            "NAUTILUS_REQUIRE_SL_TP": "1",
+        },
+        clear=True,
+    ):
+        with pytest.raises(ValueError, match="NAUTILUS_SYMBOL_WHITELIST must not be empty"):
+            NautilusNodeSettings.from_env()
