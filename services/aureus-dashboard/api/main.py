@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -746,6 +747,15 @@ async def compute_complex_metrics(pool, symbol, strategy_id, start_dt, end_dt):
 
 VALID_STATUSES = ['CLOSED', 'FILLED', 'FAILED', 'CANCELLED', 'PENDING', 'SENT']
 VALID_PAGE_SIZES = [10, 20, 50, 100]
+VALID_TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
+
+
+def _error_envelope(code: str, message: str, details: Optional[dict] = None):
+    return {
+        "error": message,
+        "code": code,
+        "details": details or {}
+    }
 
 
 def _parse_date_param(date_str: Optional[str]) -> tuple:
@@ -758,7 +768,114 @@ def _parse_date_param(date_str: Optional[str]) -> tuple:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt, None
     except (ValueError, TypeError):
-        return None, {"error": f"Invalid ISO 8601 date format: {date_str}"}
+        return None, _error_envelope(
+            "INVALID_DATE",
+            f"Invalid ISO 8601 date format: {date_str}",
+            {"field": "date", "value": date_str}
+        )
+
+
+def _normalize_performance_filters(
+    symbol: Optional[str],
+    strategy_id: Optional[int],
+    start: Optional[str],
+    end: Optional[str],
+    timeframe: Optional[str] = None,
+    status: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
+):
+    start_dt, err = _parse_date_param(start)
+    if err:
+        return None, err
+    end_dt, err = _parse_date_param(end)
+    if err:
+        return None, err
+
+    if start_dt and end_dt and start_dt > end_dt:
+        return None, _error_envelope(
+            "INVALID_DATE_RANGE",
+            "start must be less than or equal to end",
+            {"start": start, "end": end}
+        )
+
+    normalized_timeframe = timeframe
+    if normalized_timeframe is not None and normalized_timeframe not in VALID_TIMEFRAMES:
+        return None, _error_envelope(
+            "INVALID_TIMEFRAME",
+            f"Unsupported timeframe: {normalized_timeframe}",
+            {"field": "timeframe", "value": normalized_timeframe, "allowed": VALID_TIMEFRAMES}
+        )
+
+    normalized_status = status
+    if normalized_status is not None and normalized_status not in VALID_STATUSES:
+        return None, _error_envelope(
+            "INVALID_STATUS",
+            f"Unsupported status: {normalized_status}",
+            {"field": "status", "value": normalized_status, "allowed": VALID_STATUSES}
+        )
+
+    normalized_page = page
+    if normalized_page is not None and normalized_page < 1:
+        return None, _error_envelope(
+            "INVALID_PAGE",
+            "page must be >= 1",
+            {"field": "page", "value": page}
+        )
+
+    normalized_page_size = page_size
+    if normalized_page_size is not None and normalized_page_size not in VALID_PAGE_SIZES:
+        return None, _error_envelope(
+            "INVALID_PAGE_SIZE",
+            f"page_size must be one of {VALID_PAGE_SIZES}",
+            {"field": "page_size", "value": page_size, "allowed": VALID_PAGE_SIZES}
+        )
+
+    filters = {
+        "symbol": symbol,
+        "strategy_id": strategy_id,
+        "timeframe": normalized_timeframe,
+        "start": start_dt.isoformat() if start_dt else None,
+        "end": end_dt.isoformat() if end_dt else None,
+        "status": normalized_status,
+    }
+
+    return {
+        "filters": filters,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "status": normalized_status,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }, None
+
+
+def _performance_cache_key(prefix: str, filters: dict):
+    return (
+        f"perf:{prefix}:"
+        f"symbol={filters.get('symbol') or 'all'}:"
+        f"strategy={filters.get('strategy_id') or 'all'}:"
+        f"timeframe={filters.get('timeframe') or 'all'}:"
+        f"start={filters.get('start') or 'none'}:"
+        f"end={filters.get('end') or 'none'}:"
+        f"status={filters.get('status') or 'all'}"
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    if isinstance(exc.detail, dict) and {"error", "code", "details"}.issubset(exc.detail.keys()):
+        payload = exc.detail
+    else:
+        payload = _error_envelope("HTTP_ERROR", str(exc.detail), {})
+    return JSONResponse(status_code=exc.status_code, content=payload)
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc: Exception):
+    logger.error(f"[GLOBAL] [exception] Error: {exc}")
+    payload = _error_envelope("INTERNAL_ERROR", "Internal server error", {})
+    return JSONResponse(status_code=500, content=payload)
 
 
 @app.get("/api/v1/performance/trades")
@@ -767,284 +884,257 @@ async def get_trades(
     strategy_id: Optional[int] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    timeframe: Optional[str] = None,
     status: Optional[str] = "CLOSED",
     page: int = 1,
     page_size: int = 20,
 ):
     """Get paginated trade list with filtering."""
-    try:
-        # Validate pagination
-        if page < 1:
-            page = 1
-        if page_size not in VALID_PAGE_SIZES:
-            page_size = 20
+    normalized, err = _normalize_performance_filters(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        start=start,
+        end=end,
+        timeframe=timeframe,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
-        # Validate status
-        if status not in VALID_STATUSES:
-            status = "CLOSED"
+    status = normalized["status"]
+    start_dt = normalized["start_dt"]
+    end_dt = normalized["end_dt"]
+    page = normalized["page"]
+    page_size = normalized["page_size"]
+    filters = normalized["filters"]
 
-        # Validate date params
-        start_dt, err = _parse_date_param(start)
-        if err:
-            raise HTTPException(status_code=400, detail=err["error"])
-        end_dt, err = _parse_date_param(end)
-        if err:
-            raise HTTPException(status_code=400, detail=err["error"])
+    # COUNT query
+    count_query = """
+    SELECT COUNT(*) FROM aureus_trades
+    WHERE status = $1
+      AND ($2::TEXT IS NULL OR symbol = $2)
+      AND ($3::BIGINT IS NULL OR strategy_id = $3)
+      AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
+      AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
+    """
 
-        # COUNT query
-        count_query = """
-        SELECT COUNT(*) FROM aureus_trades
-        WHERE status = $1
-          AND ($2::TEXT IS NULL OR symbol = $2)
-          AND ($3::BIGINT IS NULL OR strategy_id = $3)
-          AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
-          AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
-        """
+    # DATA query
+    data_query = """
+    SELECT id, trace_id, ticket, symbol, strategy_name, direction,
+           entry_price, exit_price, sl, tp, volume,
+           profit, commission, swap,
+           filled_at, closed_at
+    FROM aureus_trades
+    WHERE status = $1
+      AND ($2::TEXT IS NULL OR symbol = $2)
+      AND ($3::BIGINT IS NULL OR strategy_id = $3)
+      AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
+      AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
+    ORDER BY filled_at DESC, id DESC
+    LIMIT $6 OFFSET ($7 - 1) * $6
+    """
 
-        # DATA query
-        data_query = """
-        SELECT id, trace_id, ticket, symbol, strategy_name, direction,
-               entry_price, exit_price, sl, tp, volume,
-               profit, commission, swap,
-               filled_at, closed_at
-        FROM aureus_trades
-        WHERE status = $1
-          AND ($2::TEXT IS NULL OR symbol = $2)
-          AND ($3::BIGINT IS NULL OR strategy_id = $3)
-          AND ($4::TIMESTAMPTZ IS NULL OR filled_at >= $4)
-          AND ($5::TIMESTAMPTZ IS NULL OR filled_at <= $5)
-        ORDER BY filled_at DESC
-        LIMIT $6 OFFSET ($7 - 1) * $6
-        """
+    async with app.state.pg_pool.acquire() as conn:
+        total = await conn.fetchval(count_query, status, symbol, strategy_id, start_dt, end_dt)
+        rows = await conn.fetch(data_query, status, symbol, strategy_id, start_dt, end_dt, page_size, page)
 
-        async with app.state.pg_pool.acquire() as conn:
-            total = await conn.fetchval(count_query, status, symbol, strategy_id, start_dt, end_dt)
-            rows = await conn.fetch(data_query, status, symbol, strategy_id, start_dt, end_dt, page_size, page)
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
 
-        total_pages = math.ceil(total / page_size) if total > 0 else 0
+    trades = []
+    for row in rows:
+        trades.append({
+            "id": row["id"],
+            "trace_id": row["trace_id"],
+            "ticket": row["ticket"],
+            "symbol": row["symbol"],
+            "strategy_name": row["strategy_name"],
+            "direction": row["direction"],
+            "entry_price": row["entry_price"],
+            "exit_price": row["exit_price"],
+            "sl": row["sl"],
+            "tp": row["tp"],
+            "volume": row["volume"],
+            "profit": row["profit"],
+            "commission": row["commission"],
+            "swap": row["swap"],
+            "filled_at": row["filled_at"].isoformat() if row["filled_at"] else None,
+            "closed_at": row["closed_at"].isoformat() if row["closed_at"] else None,
+        })
 
-        trades = []
-        for row in rows:
-            trades.append({
-                "id": row["id"],
-                "trace_id": row["trace_id"],
-                "ticket": row["ticket"],
-                "symbol": row["symbol"],
-                "strategy_name": row["strategy_name"],
-                "direction": row["direction"],
-                "entry_price": row["entry_price"],
-                "exit_price": row["exit_price"],
-                "sl": row["sl"],
-                "tp": row["tp"],
-                "volume": row["volume"],
-                "profit": row["profit"],
-                "commission": row["commission"],
-                "swap": row["swap"],
-                "filled_at": row["filled_at"].isoformat() if row["filled_at"] else None,
-                "closed_at": row["closed_at"].isoformat() if row["closed_at"] else None,
-            })
-
-        return {
-            "data": trades,
-            "meta": {
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": total_pages,
-                "filters": {
-                    "symbol": symbol,
-                    "strategy_id": strategy_id,
-                    "start": start,
-                    "end": end,
-                    "status": status,
-                }
-            }
+    return {
+        "data": trades,
+        "meta": {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "filters": filters,
         }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[GLOBAL] [get_trades] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    }
 
 @app.get("/api/v1/performance/metrics")
 async def get_metrics(
     symbol: Optional[str] = None,
     strategy_id: Optional[int] = None,
+    timeframe: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
 ):
     """Get computed performance metrics with Redis caching (60s TTL)."""
-    try:
-        # Validate date params
-        start_dt, err = _parse_date_param(start)
-        if err:
-            raise HTTPException(status_code=400, detail=err["error"])
-        end_dt, err = _parse_date_param(end)
-        if err:
-            raise HTTPException(status_code=400, detail=err["error"])
+    normalized, err = _normalize_performance_filters(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+        status="CLOSED",
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
-        # Build cache key
-        cache_key = f"perf:metrics:s={symbol or 'all'}:st={strategy_id or 'all'}:{start}:{end}"
+    filters = normalized["filters"]
+    start_dt = normalized["start_dt"]
+    end_dt = normalized["end_dt"]
 
-        # Check cache
-        cached = await redis_client.get(cache_key)
-        if cached:
-            logger.info(f"[GLOBAL] [get_metrics] Cache HIT for {cache_key}")
-            return json.loads(cached)
+    cache_key = _performance_cache_key("metrics", filters)
 
-        t0 = time.time()
+    cached = await redis_client.get(cache_key)
+    if cached:
+        logger.info(f"[GLOBAL] [get_metrics] Cache HIT for {cache_key}")
+        return json.loads(cached)
 
-        # Compute basic metrics
-        basic = await compute_basic_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
-        if basic is None:
-            result = {
-                "metrics": {},
-                "meta": {
-                    "symbol": symbol,
-                    "strategy_id": strategy_id,
-                    "start": start,
-                    "end": end,
-                    "source": "live_trades",
-                    "note": "No closed trades found"
-                }
-            }
-            return result
+    t0 = time.time()
 
-        # Compute complex metrics
-        complex_m = await compute_complex_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
-        metrics = {**basic, **complex_m}
-
-        elapsed = time.time() - t0
-        logger.info(f"[GLOBAL] [get_metrics] Computed in {elapsed:.3f}s")
-
+    basic = await compute_basic_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
+    if basic is None:
         result = {
-            "metrics": metrics,
+            "metrics": {},
             "meta": {
-                "symbol": symbol,
-                "strategy_id": strategy_id,
-                "start": start,
-                "end": end,
+                "filters": filters,
                 "source": "live_trades",
+                "note": "No closed trades found"
             }
         }
-
-        # Cache result (60s TTL)
-        await redis_client.setex(cache_key, 60, json.dumps(result, default=str))
-
         return result
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[GLOBAL] [get_metrics] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    complex_m = await compute_complex_metrics(app.state.pg_pool, symbol, strategy_id, start_dt, end_dt)
+    metrics = {**basic, **complex_m}
+
+    elapsed = time.time() - t0
+    logger.info(f"[GLOBAL] [get_metrics] Computed in {elapsed:.3f}s")
+
+    result = {
+        "metrics": metrics,
+        "meta": {
+            "filters": filters,
+            "source": "live_trades",
+        }
+    }
+
+    await redis_client.setex(cache_key, 30, json.dumps(result, default=str))
+
+    return result
 
 
 @app.get("/api/v1/performance/equity-curve")
 async def get_equity_curve(
+    symbol: Optional[str] = None,
+    strategy_id: Optional[int] = None,
+    timeframe: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     interval: Optional[str] = None,
 ):
     """Get equity curve time series with Redis caching (30s TTL)."""
-    try:
-        # Default to last 7 days if not provided
-        if start is None:
-            start_dt = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-            start = start_dt.isoformat()
-        else:
-            start_dt, err = _parse_date_param(start)
-            if err:
-                raise HTTPException(status_code=400, detail=err["error"])
+    normalized, err = _normalize_performance_filters(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+        status="CLOSED",
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
 
-        if end is None:
-            end_dt = datetime.now(timezone.utc)
-            end = end_dt.isoformat()
-        else:
-            end_dt, err = _parse_date_param(end)
-            if err:
-                raise HTTPException(status_code=400, detail=err["error"])
+    filters = normalized["filters"]
+    start_dt = normalized["start_dt"]
+    end_dt = normalized["end_dt"]
 
-        # Build cache key
-        cache_key = f"perf:equity:{start}:{end}:{interval}"
+    cache_key = f"{_performance_cache_key('equity', filters)}:interval={interval or 'none'}"
 
-        # Check cache
-        cached = await redis_client.get(cache_key)
-        if cached:
-            logger.info(f"[GLOBAL] [get_equity_curve] Cache HIT for {cache_key}")
-            return json.loads(cached)
+    cached = await redis_client.get(cache_key)
+    if cached:
+        logger.info(f"[GLOBAL] [get_equity_curve] Cache HIT for {cache_key}")
+        return json.loads(cached)
 
-        t0 = time.time()
+    t0 = time.time()
 
-        # Primary query — aureus_account_snapshots
-        snapshot_query = """
-        SELECT event_time AS time, equity, realized_pnl, unrealized_pnl
-        FROM aureus_account_snapshots
-        WHERE ($1::TIMESTAMPTZ IS NULL OR event_time >= $1)
-          AND ($2::TIMESTAMPTZ IS NULL OR event_time <= $2)
-        ORDER BY event_time ASC
-        """
+    snapshot_query = """
+    SELECT event_time AS time, equity, realized_pnl, unrealized_pnl
+    FROM aureus_account_snapshots
+    WHERE ($1::TIMESTAMPTZ IS NULL OR event_time >= $1)
+      AND ($2::TIMESTAMPTZ IS NULL OR event_time <= $2)
+    ORDER BY event_time ASC
+    """
 
-        async with app.state.pg_pool.acquire() as conn:
-            rows = await conn.fetch(snapshot_query, start_dt, end_dt)
+    async with app.state.pg_pool.acquire() as conn:
+        rows = await conn.fetch(snapshot_query, start_dt, end_dt)
 
-        if rows:
-            data = [
-                {
-                    "time": r["time"].isoformat(),
-                    "equity": r["equity"],
-                    "pnl": r["realized_pnl"],
-                }
-                for r in rows
-            ]
-            source = "account_snapshots"
-        else:
-            # Fallback query — cumulative profit from aureus_trades
-            fallback_query = """
-            SELECT filled_at AS time,
-                   SUM(profit) OVER (ORDER BY filled_at ASC) AS cumulative_pnl
-            FROM aureus_trades
-            WHERE status = 'CLOSED'
-              AND ($1::TIMESTAMPTZ IS NULL OR filled_at >= $1)
-              AND ($2::TIMESTAMPTZ IS NULL OR filled_at <= $2)
-            ORDER BY filled_at ASC
-            """
-            async with app.state.pg_pool.acquire() as conn:
-                rows = await conn.fetch(fallback_query, start_dt, end_dt)
-
-            data = [
-                {
-                    "time": r["time"].isoformat(),
-                    "equity": r["cumulative_pnl"],
-                    "pnl": r["cumulative_pnl"],
-                }
-                for r in rows
-            ]
-            source = "trades_cumulative"
-
-        elapsed = time.time() - t0
-        logger.info(f"[GLOBAL] [get_equity_curve] Fetched {len(data)} points from {source} in {elapsed:.3f}s")
-
-        result = {
-            "data": data,
-            "meta": {
-                "source": source,
-                "points": len(data),
+    if rows:
+        data = [
+            {
+                "time": (r.get("time") or r.get("event_time")).isoformat(),
+                "equity": r["equity"],
+                "pnl": r["realized_pnl"],
             }
+            for r in rows
+        ]
+        source = "account_snapshots"
+    else:
+        fallback_query = """
+        SELECT filled_at AS time,
+               SUM(profit) OVER (ORDER BY filled_at ASC) AS cumulative_pnl
+        FROM aureus_trades
+        WHERE status = 'CLOSED'
+          AND ($1::TIMESTAMPTZ IS NULL OR filled_at >= $1)
+          AND ($2::TIMESTAMPTZ IS NULL OR filled_at <= $2)
+        ORDER BY filled_at ASC
+        """
+        async with app.state.pg_pool.acquire() as conn:
+            rows = await conn.fetch(fallback_query, start_dt, end_dt)
+
+        data = [
+            {
+                "time": r["time"].isoformat(),
+                "equity": r["cumulative_pnl"],
+                "pnl": r["cumulative_pnl"],
+            }
+            for r in rows
+        ]
+        source = "trades_cumulative"
+
+    elapsed = time.time() - t0
+    logger.info(f"[GLOBAL] [get_equity_curve] Fetched {len(data)} points from {source} in {elapsed:.3f}s")
+
+    result = {
+        "data": data,
+        "meta": {
+            "filters": filters,
+            "source": source,
+            "points": len(data),
+            "interval": interval,
         }
+    }
 
-        # Cache result (30s TTL)
-        await redis_client.setex(cache_key, 30, json.dumps(result, default=str))
+    await redis_client.setex(cache_key, 30, json.dumps(result, default=str))
 
-        return result
+    return result
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[GLOBAL] [get_equity_curve] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+# legacy block removed
 
 
 if __name__ == "__main__":
