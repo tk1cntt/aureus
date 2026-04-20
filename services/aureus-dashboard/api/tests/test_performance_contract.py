@@ -29,7 +29,7 @@ def test_trades_contract_envelope_and_order_deterministic(client):
     assert ids_1 == ids_2
 
 
-def test_win_rate_and_profit_factor_numeric_contract(client):
+def test_win_rate_numeric_contract(client):
     response = client.get(
         "/api/v1/performance/metrics",
         params={
@@ -47,9 +47,38 @@ def test_win_rate_and_profit_factor_numeric_contract(client):
     metrics = body["metrics"]
 
     assert isinstance(metrics.get("win_rate"), (int, float))
-    assert isinstance(metrics.get("profit_factor"), (int, float))
-    assert isinstance(metrics.get("max_drawdown"), (int, float))
 
+
+def test_profit_factor_numeric_contract(client):
+    response = client.get(
+        "/api/v1/performance/metrics",
+        params={
+            "symbol": "XAUUSD",
+            "strategy_id": 10,
+            "start": "2026-01-01T00:00:00+00:00",
+            "end": "2026-01-02T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    metrics = response.json()["metrics"]
+    assert isinstance(metrics.get("profit_factor"), (int, float))
+
+
+def test_max_drawdown_numeric_contract(client):
+    response = client.get(
+        "/api/v1/performance/metrics",
+        params={
+            "symbol": "XAUUSD",
+            "strategy_id": 10,
+            "start": "2026-01-01T00:00:00+00:00",
+            "end": "2026-01-02T00:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    metrics = response.json()["metrics"]
+    assert isinstance(metrics.get("max_drawdown"), (int, float))
 
 
 def test_avg_rr_nullability_explicit(client):
