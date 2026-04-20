@@ -240,10 +240,12 @@ Plans:
 **Requirements**: PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
 **Depends on:** Phase 47
 **Gap Closure:** Closes integration gap `dashboard/web -> dashboard/api` và flow gap `Backtest/Performance dashboard E2E`
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 48 to break down)
+- [x] 48-01-PLAN.md — Chuẩn hóa contract/filter/pagination/cache cho performance API + contract tests PERF-01..PERF-07
+- [x] 48-02-PLAN.md — Wire web `/performance` theo contract API mới + error-state tests PERF-08
+- [x] 48-03-PLAN.md — Gap closure: align equity filter semantics + web error-envelope contract for PERF-06/07/08
 
 ### Phase 49: order-execution-contract-multi-symbol
 

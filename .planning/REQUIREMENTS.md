@@ -43,14 +43,14 @@ Requirements for Signal Delivery & Trade Management milestone. Each maps to road
 
 ### Performance Dashboard (PERF)
 
-- [ ] **PERF-01**: API endpoint trả danh sách trades với entry/exit details
-- [ ] **PERF-02**: Tính toán Win rate
-- [ ] **PERF-03**: Tính toán Profit factor
-- [ ] **PERF-04**: Tính toán Max drawdown
-- [ ] **PERF-05**: Tính toán Average R:R (Risk-Reward ratio)
-- [ ] **PERF-06**: Equity curve chart
-- [ ] **PERF-07**: Filter theo symbol, strategy, timeframe
-- [ ] **PERF-08**: Trang trade history trên aureus-dashboard
+- [x] **PERF-01**: API endpoint trả danh sách trades với entry/exit details
+- [x] **PERF-02**: Tính toán Win rate
+- [x] **PERF-03**: Tính toán Profit factor
+- [x] **PERF-04**: Tính toán Max drawdown
+- [x] **PERF-05**: Tính toán Average R:R (Risk-Reward ratio)
+- [x] **PERF-06**: Equity curve chart
+- [x] **PERF-07**: Filter theo symbol, strategy, timeframe
+- [x] **PERF-08**: Trang trade history trên aureus-dashboard
 
 ### Runtime Parallelization (PH45)
 
@@ -212,14 +212,14 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 | TRADE-03 | Phase 47 | human_needed — `.planning/phases/31-mt5-history-sync/31-VERIFICATION.md` (cần MT5 runtime verification) |
 | TRADE-04 | Phase 47 | human_needed — `.planning/phases/31-mt5-history-sync/31-VERIFICATION.md` (cần MT5 runtime verification) |
 | TRADE-05 | Phase 30 | Complete |
-| PERF-01 | Phase 48 | Pending |
-| PERF-02 | Phase 48 | Pending |
-| PERF-03 | Phase 48 | Pending |
-| PERF-04 | Phase 48 | Pending |
-| PERF-05 | Phase 48 | Pending |
-| PERF-06 | Phase 48 | Pending |
-| PERF-07 | Phase 48 | Pending |
-| PERF-08 | Phase 48 | Pending |
+| PERF-01 | Phase 48 | Complete |
+| PERF-02 | Phase 48 | Complete |
+| PERF-03 | Phase 48 | Complete |
+| PERF-04 | Phase 48 | Complete |
+| PERF-05 | Phase 48 | Complete |
+| PERF-06 | Phase 48 | Complete |
+| PERF-07 | Phase 48 | Complete |
+| PERF-08 | Phase 48 | Complete |
 | PH45-01 | Phase 45 | Planned |
 | PH45-02 | Phase 45 | Planned |
 | PH45-03 | Phase 45 | Planned |
