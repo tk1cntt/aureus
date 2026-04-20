@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSymbols } from "@/context/SymbolsContext";
 import { Sidebar } from "@/components/Sidebar";
@@ -17,18 +17,18 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v
 
 interface MetricsResponse {
   metrics: {
-    total_trades: number;
-    win_rate: number;
-    profit_factor: number;
-    max_drawdown: number;
-    avg_rr: number;
-    sharpe_ratio: number;
-    total_profit: number;
-    total_loss: number;
-    avg_win: number;
-    avg_loss: number;
-    best_trade: number;
-    worst_trade: number;
+    total_trades: number | null;
+    win_rate: number | null;
+    profit_factor: number | null;
+    max_drawdown: number | null;
+    avg_rr: number | null;
+    sharpe_ratio: number | null;
+    total_profit: number | null;
+    total_loss: number | null;
+    avg_win: number | null;
+    avg_loss: number | null;
+    best_trade: number | null;
+    worst_trade: number | null;
   };
   meta: {
     symbol: string | null;
@@ -89,7 +89,35 @@ interface EquityCurveResponse {
   };
 }
 
-export default function PerformancePage() {
+interface ApiErrorEnvelope {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  message?: string;
+}
+
+const toFiniteNumber = (value: number | null | undefined, fallback = 0): number => {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return value;
+};
+
+const formatMetric = (value: number | null | undefined, digits: number): string => {
+  return toFiniteNumber(value, 0).toFixed(digits);
+};
+
+const parseErrorMessage = (status: number, body: ApiErrorEnvelope): string => {
+  const code = body.error?.code;
+  const message = body.error?.message || body.message || "Unknown error";
+  if (code === "invalid_filter") {
+    return `Invalid filter: ${message}`;
+  }
+  return `API error (${status}): ${message}`;
+};
+
+function PerformancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { symbols } = useSymbols();
@@ -119,6 +147,7 @@ export default function PerformancePage() {
   const [equityData, setEquityData] = useState<EquityCurveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Default dates: end = now, start = 7 days ago
   const now = useMemo(() => new Date(), []);
@@ -149,19 +178,32 @@ export default function PerformancePage() {
   // Parallel data fetching
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
-      const params = new URLSearchParams();
-      if (selectedSymbol) params.set("symbol", selectedSymbol);
-      if (strategyId) params.set("strategy_id", String(strategyId));
-      if (startDate) params.set("start", startDate);
-      if (endDate) params.set("end", endDate);
-      const qs = params.toString();
+      const sharedParams = new URLSearchParams();
+      if (selectedSymbol) sharedParams.set("symbol", selectedSymbol);
+      if (strategyId) sharedParams.set("strategy_id", String(strategyId));
+      if (startDate) sharedParams.set("start", startDate);
+      if (endDate) sharedParams.set("end", endDate);
+
+      const metricsUrl = `${API_BASE}/performance/metrics?${sharedParams.toString()}`;
+      const tradesParams = new URLSearchParams(sharedParams);
+      tradesParams.set("page", String(currentPage));
+      tradesParams.set("page_size", "20");
+      const tradesUrl = `${API_BASE}/performance/trades?${tradesParams.toString()}`;
+      const equityUrl = `${API_BASE}/performance/equity-curve?${sharedParams.toString()}`;
 
       const [metricsRes, tradesRes, equityRes] = await Promise.all([
-        fetch(`${API_BASE}/performance/metrics?${qs}`),
-        fetch(`${API_BASE}/performance/trades?page=${currentPage}&page_size=20&${qs}`),
-        fetch(`${API_BASE}/performance/equity-curve?${qs}`),
+        fetch(metricsUrl),
+        fetch(tradesUrl),
+        fetch(equityUrl),
       ]);
+
+      if (!metricsRes.ok || !tradesRes.ok || !equityRes.ok) {
+        const firstFailed = !metricsRes.ok ? metricsRes : !tradesRes.ok ? tradesRes : equityRes;
+        const errorBody = (await firstFailed.json()) as ApiErrorEnvelope;
+        throw new Error(parseErrorMessage(firstFailed.status, errorBody));
+      }
 
       const metricsData = (await metricsRes.json()) as MetricsResponse;
       const tradesData = (await tradesRes.json()) as TradesResponse;
@@ -171,6 +213,11 @@ export default function PerformancePage() {
       setTrades(tradesData);
       setEquityData(equityDataRes);
     } catch (err) {
+      const nextError = err instanceof Error ? err.message : "Failed to fetch performance data";
+      setMetrics(null);
+      setTrades(null);
+      setEquityData(null);
+      setErrorMessage(nextError);
       console.error("Failed to fetch performance data:", err);
     } finally {
       setLoading(false);
@@ -252,6 +299,12 @@ export default function PerformancePage() {
             onApply={handleApplyFilters}
           />
 
+          {errorMessage ? (
+            <div className="bg-[#1E222D] border border-red-500/40 rounded-xl p-4 text-sm text-red-300">
+              {errorMessage}
+            </div>
+          ) : null}
+
           {/* Metric Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {loading || !metrics?.metrics ? (
@@ -268,76 +321,88 @@ export default function PerformancePage() {
                 {/* Row 1: Win Rate, Net PnL, Profit Factor */}
                 <MetricCard
                   label="Win Rate"
-                  value={`${metrics.metrics.win_rate.toFixed(1)}%`}
-                  color={metrics.metrics.win_rate >= 50 ? "text-green-400" : "text-red-400"}
+                  value={`${formatMetric(metrics.metrics.win_rate, 1)}%`}
+                  color={toFiniteNumber(metrics.metrics.win_rate) >= 50 ? "text-green-400" : "text-red-400"}
                 />
                 <MetricCard
                   label="Net PnL"
                   value={
-                    metrics.metrics.total_profit >= 0
-                      ? `+${metrics.metrics.total_profit.toFixed(2)}`
-                      : `-${Math.abs(metrics.metrics.total_profit).toFixed(2)}`
+                    toFiniteNumber(metrics.metrics.total_profit) >= 0
+                      ? `+${formatMetric(metrics.metrics.total_profit, 2)}`
+                      : `-${Math.abs(toFiniteNumber(metrics.metrics.total_profit)).toFixed(2)}`
                   }
-                  color={metrics.metrics.total_profit >= 0 ? "text-green-400" : "text-red-400"}
+                  color={toFiniteNumber(metrics.metrics.total_profit) >= 0 ? "text-green-400" : "text-red-400"}
                 />
                 <MetricCard
                   label="Profit Factor"
-                  value={metrics.metrics.profit_factor.toFixed(2)}
-                  color={metrics.metrics.profit_factor >= 1.5 ? "text-green-400" : "text-yellow-400"}
+                  value={formatMetric(metrics.metrics.profit_factor, 2)}
+                  color={toFiniteNumber(metrics.metrics.profit_factor) >= 1.5 ? "text-green-400" : "text-yellow-400"}
                 />
                 {/* Row 2: Max Drawdown, Avg R:R, Sharpe Ratio */}
                 <MetricCard
                   label="Max Drawdown"
-                  value={metrics.metrics.max_drawdown.toFixed(2)}
+                  value={formatMetric(metrics.metrics.max_drawdown, 2)}
                   color="text-red-400"
                 />
                 <MetricCard
                   label="Avg R:R"
-                  value={metrics.metrics.avg_rr.toFixed(2)}
-                  color={metrics.metrics.avg_rr >= 1 ? "text-green-400" : "text-yellow-400"}
+                  value={formatMetric(metrics.metrics.avg_rr, 2)}
+                  color={toFiniteNumber(metrics.metrics.avg_rr) >= 1 ? "text-green-400" : "text-yellow-400"}
                 />
                 <MetricCard
                   label="Sharpe Ratio"
-                  value={metrics.metrics.sharpe_ratio.toFixed(2)}
-                  color={metrics.metrics.sharpe_ratio >= 1 ? "text-green-400" : "text-yellow-400"}
+                  value={formatMetric(metrics.metrics.sharpe_ratio, 2)}
+                  color={toFiniteNumber(metrics.metrics.sharpe_ratio) >= 1 ? "text-green-400" : "text-yellow-400"}
                 />
               </>
             )}
           </div>
 
           {/* Equity Chart */}
-          {loading ? (
-            <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-2 h-[350px] flex items-center justify-center">
-              <div className="text-gray-500 text-sm">Loading chart...</div>
-            </div>
-          ) : equityData?.data && equityData.data.length > 0 ? (
-            <EquityChart data={equityData.data} />
-          ) : (
-            <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-2 h-[350px] flex items-center justify-center">
-              <div className="text-gray-500 text-sm">No equity data available</div>
-            </div>
-          )}
+          {!errorMessage ? (
+            loading ? (
+              <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-2 h-[350px] flex items-center justify-center">
+                <div className="text-gray-500 text-sm">Loading chart...</div>
+              </div>
+            ) : equityData?.data && equityData.data.length > 0 ? (
+              <EquityChart data={equityData.data} />
+            ) : (
+              <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-2 h-[350px] flex items-center justify-center">
+                <div className="text-gray-500 text-sm">No equity data available</div>
+              </div>
+            )
+          ) : null}
 
           {/* Trade History Table */}
-          {loading ? (
-            <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-8 text-center">
-              <div className="text-gray-500 text-sm">Loading trades...</div>
-            </div>
-          ) : trades?.data && trades.data.length > 0 ? (
-            <PerformanceTable
-              trades={trades.data}
-              meta={trades.meta}
-              onPageChange={handlePageChange}
-            />
-          ) : (
-            <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-8 text-center">
-              <div className="text-gray-500 text-sm">
-                No trades found — adjust filters or wait for live trades
+          {!errorMessage ? (
+            loading ? (
+              <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-8 text-center">
+                <div className="text-gray-500 text-sm">Loading trades...</div>
               </div>
-            </div>
-          )}
+            ) : trades?.data && trades.data.length > 0 ? (
+              <PerformanceTable
+                trades={trades.data}
+                meta={trades.meta}
+                onPageChange={handlePageChange}
+              />
+            ) : (
+              <div className="bg-[#1E222D] border border-gray-800 rounded-xl p-8 text-center">
+                <div className="text-gray-500 text-sm">
+                  No trades found — adjust filters or wait for live trades
+                </div>
+              </div>
+            )
+          ) : null}
         </main>
       </div>
     </ClientOnly>
+  );
+}
+
+export default function PerformancePage() {
+  return (
+    <Suspense fallback={null}>
+      <PerformancePageContent />
+    </Suspense>
   );
 }

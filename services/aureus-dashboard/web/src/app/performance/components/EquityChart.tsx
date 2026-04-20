@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, AreaSeries } from "lightweight-charts";
+import { createChart, ColorType, AreaSeries, type UTCTimestamp } from "lightweight-charts";
 
 interface EquityPoint {
   time: string;
@@ -54,7 +54,7 @@ export function EquityChart({ data }: EquityChartProps) {
 
     // Convert ISO datetime to Unix timestamp (seconds)
     const chartData = data.map((point) => ({
-      time: Math.floor(new Date(point.time).getTime() / 1000) as unknown as number,
+      time: Math.floor(new Date(point.time).getTime() / 1000) as UTCTimestamp,
       value: point.equity,
     }));
 
