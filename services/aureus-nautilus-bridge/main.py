@@ -197,7 +197,13 @@ class AureusNautilusBridge:
         symbol = symbol_value
 
         order_payload = self.pending_intents.get(trace_id)
-        if not order_payload:
+        if order_payload:
+            order_payload = dict(order_payload)
+        else:
+            fallback_quantity = report.get("quantity")
+            if fallback_quantity in (None, ""):
+                fallback_quantity = report.get("qty", 1.0)
+
             order_payload = {
                 "trace_id": trace_id,
                 "correlation_id": report.get("correlation_id"),
@@ -207,10 +213,13 @@ class AureusNautilusBridge:
                 "event_time": report.get("event_time"),
                 "side": report.get("side", "BUY"),
                 "type": report.get("type", "MARKET"),
-                "quantity": report.get("quantity", 1.0),
+                "quantity": fallback_quantity,
                 "entry_price": report.get("entry_price", report.get("fill_price", 0.0)),
                 "sl": report.get("sl"),
                 "tp": report.get("tp"),
+                "correlation_id": report.get("correlation_id"),
+                "strategy_id": report.get("strategy_id"),
+                "strategy_name": report.get("strategy_name"),
                 "execution_mode": "nautilus",
             }
         else:

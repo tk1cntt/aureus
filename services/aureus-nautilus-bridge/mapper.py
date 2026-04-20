@@ -96,7 +96,6 @@ def map_order_intent(order_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     intent = {
         "trace_id": trace_id,
-        "correlation_id": order_payload.get("correlation_id"),
         "symbol": symbol,
         "event_time": _to_unix_seconds(event_time_raw),
         "side": SIDE_MAP.get(str(order_payload.get("side", "BUY")).upper(), "BUY"),
@@ -106,7 +105,8 @@ def map_order_intent(order_payload: Dict[str, Any]) -> Dict[str, Any]:
         "sl": _to_optional_float(order_payload.get("sl")),
         "tp": _to_optional_float(order_payload.get("tp")),
         "strategy_id": order_payload.get("strategy_id"),
-        "strategy_version": order_payload.get("strategy_version"),
+        "strategy_name": order_payload.get("strategy_name"),
+        "correlation_id": order_payload.get("correlation_id"),
         "execution_mode": order_payload.get("execution_mode", "simulated"),
     }
 
@@ -119,7 +119,6 @@ def build_execution_event(intent: Dict[str, Any], adapter_report: Dict[str, Any]
 
     execution_event = {
         "trace_id": intent["trace_id"],
-        "correlation_id": adapter_report.get("correlation_id", intent.get("correlation_id")),
         "symbol": intent["symbol"],
         "event_time": _to_unix_seconds(adapter_report.get("event_time", intent["event_time"])),
         "status": status,
@@ -135,8 +134,9 @@ def build_execution_event(intent: Dict[str, Any], adapter_report: Dict[str, Any]
         "position_id": adapter_report.get("position_id"),
         "adapter_order_id": adapter_report.get("adapter_order_id"),
         "rejection_reason": adapter_report.get("rejection_reason"),
+        "correlation_id": adapter_report.get("correlation_id", intent.get("correlation_id")),
         "strategy_id": adapter_report.get("strategy_id", intent.get("strategy_id")),
-        "strategy_version": adapter_report.get("strategy_version", intent.get("strategy_version")),
+        "strategy_name": adapter_report.get("strategy_name", intent.get("strategy_name")),
         "execution_mode": intent.get("execution_mode", "simulated"),
         "raw_status": adapter_report.get("status"),
         "event_version": 2,
