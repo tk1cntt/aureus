@@ -45,9 +45,16 @@ class FakeConn:
             return rows[offset:offset + page_size]
 
         if "from aureus_trades" in q and "sum(profit) over" in q:
-            start_dt, end_dt = args
+            start_dt, end_dt, symbol, strategy_id, timeframe = args
             rows = [r for r in self.trades if r["status"] == "CLOSED"]
-            rows = [r for r in rows if (start_dt is None or r["filled_at"] >= start_dt) and (end_dt is None or r["filled_at"] <= end_dt)]
+            rows = [
+                r for r in rows
+                if (start_dt is None or r["filled_at"] >= start_dt)
+                and (end_dt is None or r["filled_at"] <= end_dt)
+                and (symbol is None or r["symbol"] == symbol)
+                and (strategy_id is None or r["strategy_id"] == strategy_id)
+                and (timeframe is None or r.get("timeframe") == timeframe)
+            ]
             rows = sorted(rows, key=lambda x: x["filled_at"])
             cumulative = 0.0
             out = []
@@ -63,12 +70,15 @@ class FakeConn:
             return [{"profit": r["profit"], "filled_at": r["filled_at"]} for r in rows]
 
         if "from aureus_account_snapshots" in q:
-            start_dt, end_dt = args
+            start_dt, end_dt, symbol, strategy_id, timeframe = args
             return [
                 r
                 for r in self.snapshots
                 if (start_dt is None or r["event_time"] >= start_dt)
                 and (end_dt is None or r["event_time"] <= end_dt)
+                and (symbol is None or r.get("symbol") == symbol)
+                and (strategy_id is None or r.get("strategy_id") == strategy_id)
+                and (timeframe is None or r.get("timeframe") == timeframe)
             ]
 
         return []
@@ -172,6 +182,7 @@ def deterministic_data():
             "filled_at": datetime(2026, 1, 1, 10, 0, tzinfo=tz),
             "closed_at": datetime(2026, 1, 1, 11, 0, tzinfo=tz),
             "status": "CLOSED",
+            "timeframe": "M15",
         },
         {
             "id": 2,
@@ -192,6 +203,7 @@ def deterministic_data():
             "filled_at": datetime(2026, 1, 1, 12, 0, tzinfo=tz),
             "closed_at": datetime(2026, 1, 1, 13, 0, tzinfo=tz),
             "status": "CLOSED",
+            "timeframe": "M15",
         },
         {
             "id": 3,
@@ -212,6 +224,7 @@ def deterministic_data():
             "filled_at": datetime(2026, 1, 2, 9, 0, tzinfo=tz),
             "closed_at": datetime(2026, 1, 2, 10, 0, tzinfo=tz),
             "status": "CLOSED",
+            "timeframe": "M15",
         },
     ]
 
@@ -221,18 +234,27 @@ def deterministic_data():
             "equity": 10020.0,
             "realized_pnl": 20.0,
             "unrealized_pnl": 0.0,
+            "symbol": "XAUUSD",
+            "strategy_id": 10,
+            "timeframe": "M15",
         },
         {
             "event_time": datetime(2026, 1, 1, 12, 0, tzinfo=tz),
             "equity": 10005.0,
             "realized_pnl": 5.0,
             "unrealized_pnl": 0.0,
+            "symbol": "XAUUSD",
+            "strategy_id": 10,
+            "timeframe": "M15",
         },
         {
             "event_time": datetime(2026, 1, 2, 9, 0, tzinfo=tz),
             "equity": 10035.0,
             "realized_pnl": 35.0,
             "unrealized_pnl": 0.0,
+            "symbol": "XAUUSD",
+            "strategy_id": 20,
+            "timeframe": "M15",
         },
     ]
 

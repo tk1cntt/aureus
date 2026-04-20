@@ -1077,11 +1077,14 @@ async def get_equity_curve(
     FROM aureus_account_snapshots
     WHERE ($1::TIMESTAMPTZ IS NULL OR event_time >= $1)
       AND ($2::TIMESTAMPTZ IS NULL OR event_time <= $2)
+      AND ($3::TEXT IS NULL OR symbol = $3)
+      AND ($4::BIGINT IS NULL OR strategy_id = $4)
+      AND ($5::TEXT IS NULL OR timeframe = $5)
     ORDER BY event_time ASC
     """
 
     async with app.state.pg_pool.acquire() as conn:
-        rows = await conn.fetch(snapshot_query, start_dt, end_dt)
+        rows = await conn.fetch(snapshot_query, start_dt, end_dt, symbol, strategy_id, timeframe)
 
     if rows:
         data = [
@@ -1101,10 +1104,13 @@ async def get_equity_curve(
         WHERE status = 'CLOSED'
           AND ($1::TIMESTAMPTZ IS NULL OR filled_at >= $1)
           AND ($2::TIMESTAMPTZ IS NULL OR filled_at <= $2)
+          AND ($3::TEXT IS NULL OR symbol = $3)
+          AND ($4::BIGINT IS NULL OR strategy_id = $4)
+          AND ($5::TEXT IS NULL OR timeframe = $5)
         ORDER BY filled_at ASC
         """
         async with app.state.pg_pool.acquire() as conn:
-            rows = await conn.fetch(fallback_query, start_dt, end_dt)
+            rows = await conn.fetch(fallback_query, start_dt, end_dt, symbol, strategy_id, timeframe)
 
         data = [
             {
