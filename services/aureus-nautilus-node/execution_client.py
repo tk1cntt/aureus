@@ -53,13 +53,13 @@ class AureusExecutionClient(LiveExecutionClient):
     def _build_policy(settings: Any) -> ExecutionRiskPolicy:
         if settings is None:
             settings = SimpleNamespace(
-                symbol_whitelist=["XAUUSD"],
+                symbol_whitelist=[],
                 require_sl_tp=True,
                 max_order_notional=10_000.0,
             )
 
         return ExecutionRiskPolicy(
-            symbol_whitelist=[str(s).upper() for s in getattr(settings, "symbol_whitelist", ["XAUUSD"])],
+            symbol_whitelist=[str(s).upper() for s in getattr(settings, "symbol_whitelist", [])],
             require_sl_tp=bool(getattr(settings, "require_sl_tp", True)),
             max_order_notional=float(getattr(settings, "max_order_notional", 10_000.0)),
         )
