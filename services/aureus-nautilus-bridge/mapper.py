@@ -90,6 +90,10 @@ def map_order_intent(order_payload: Dict[str, Any]) -> Dict[str, Any]:
     symbol = order_payload.get("symbol")
     event_time_raw = order_payload.get("event_time", order_payload.get("open_time"))
 
+    quantity_value = order_payload.get("quantity")
+    if quantity_value in (None, ""):
+        quantity_value = order_payload.get("qty", 1.0)
+
     intent = {
         "trace_id": trace_id,
         "correlation_id": order_payload.get("correlation_id"),
@@ -97,7 +101,7 @@ def map_order_intent(order_payload: Dict[str, Any]) -> Dict[str, Any]:
         "event_time": _to_unix_seconds(event_time_raw),
         "side": SIDE_MAP.get(str(order_payload.get("side", "BUY")).upper(), "BUY"),
         "type": TYPE_MAP.get(str(order_payload.get("type", "MARKET")).upper(), "MARKET"),
-        "quantity": float(order_payload.get("quantity", 1.0)),
+        "quantity": float(quantity_value),
         "entry_price": float(order_payload.get("entry_price", 0.0)),
         "sl": _to_optional_float(order_payload.get("sl")),
         "tp": _to_optional_float(order_payload.get("tp")),
