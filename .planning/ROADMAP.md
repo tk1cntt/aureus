@@ -41,7 +41,7 @@
 | 48 | Performance Backtest API Wiring | PERF-01→08 | ✅ DONE |
 | 49 | Order Execution Contract Multi-Symbol | ORDER-01→03, PH45-05→07 | ✅ DONE (gaps found) |
 | 50 | Nyquist Reaudit Closure | v1.5 closure requirements | ✅ DONE (gaps found) |
-| 51 | Order Execution Contract Hardening | ORDER-01, ORDER-02, ORDER-03, PH45-07 | Planned |
+| 51 | 1/1 | Complete   | 2026-04-20 |
 | 52 | MT5 Live Runtime Verification Gate | ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04 | Planned |
 | 53 | Nyquist Validation Backfill v1.5 | milestone nyquist compliance | Planned |
 
@@ -286,10 +286,10 @@ Plans:
 **Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-07
 **Depends on:** Phase 50
 **Gap Closure:** Closes audit gaps `ORDER-01..03`, `PH45-07`, integration `orders.py -> execution_client.py`, `bridge lifecycle publish`, `multi-symbol streams -> _poll_loop`.
-**Plans:** 0 plans
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 51 to break down)
+- [x] TBD (run /gsd-plan-phase 51 to break down) (completed 2026-04-20)
 
 ### Phase 52: mt5-live-runtime-verification-gate
 
