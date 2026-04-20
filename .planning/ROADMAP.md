@@ -227,10 +227,12 @@ Plans:
 **Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04
 **Depends on:** Phase 46
 **Gap Closure:** Closes requirement orphan gaps from `v1.5-MILESTONE-AUDIT.md`
-**Plans:** 0 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 47 to break down)
+- [x] 47-01-PLAN.md — Backfill verification artifacts for phases 26/28/29 with requirement-level evidence
+- [x] 47-02-PLAN.md — Backfill verification artifacts for phases 31/32/33 with deferred-gap cross-links
+- [x] 47-03-PLAN.md — Sync REQUIREMENTS traceability and milestone audit baseline after backfill
 
 ### Phase 48: performance-backtest-api-wiring
 
