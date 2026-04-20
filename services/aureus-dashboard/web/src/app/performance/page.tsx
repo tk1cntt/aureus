@@ -90,10 +90,12 @@ interface EquityCurveResponse {
 }
 
 interface ApiErrorEnvelope {
-  error?: {
+  error?: string | {
     code?: string;
     message?: string;
   };
+  code?: string;
+  details?: Record<string, unknown>;
   message?: string;
 }
 
@@ -109,11 +111,23 @@ const formatMetric = (value: number | null | undefined, digits: number): string 
 };
 
 const parseErrorMessage = (status: number, body: ApiErrorEnvelope): string => {
-  const code = body.error?.code;
-  const message = body.error?.message || body.message || "Unknown error";
-  if (code === "invalid_filter") {
+  const nestedCode = typeof body.error === "object" ? body.error?.code : undefined;
+  const nestedMessage = typeof body.error === "object" ? body.error?.message : undefined;
+  const topLevelCode = body.code;
+  const topLevelMessage = typeof body.error === "string" ? body.error : undefined;
+
+  const code = topLevelCode || nestedCode;
+  const message = topLevelMessage || nestedMessage || body.message || "Unknown error";
+  const normalizedCode = typeof code === "string" ? code.toLowerCase() : "";
+
+  if (normalizedCode.includes("invalid") && normalizedCode.includes("date")) {
     return `Invalid filter: ${message}`;
   }
+
+  if (normalizedCode === "invalid_filter") {
+    return `Invalid filter: ${message}`;
+  }
+
   return `API error (${status}): ${message}`;
 };
 

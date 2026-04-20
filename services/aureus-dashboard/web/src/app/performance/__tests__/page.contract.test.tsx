@@ -187,11 +187,13 @@ describe("/performance contract", () => {
       if (url.includes("/performance/metrics")) {
         return {
           ok: false,
-          status: 422,
+          status: 400,
           json: async () => ({
-            error: {
-              code: "invalid_filter",
-              message: "start must be before end",
+            error: "start must be less than or equal to end",
+            code: "INVALID_DATE_RANGE",
+            details: {
+              start: "2026-04-07T00:00",
+              end: "2026-04-01T00:00",
             },
           }),
         } as Response;
@@ -208,7 +210,7 @@ describe("/performance contract", () => {
 
     render(<PerformancePage />);
 
-    expect(await screen.findByText("Invalid filter: start must be before end")).toBeTruthy();
+    expect(await screen.findByText("Invalid filter: start must be less than or equal to end")).toBeTruthy();
 
     expect(screen.queryByText("No trades found — adjust filters or wait for live trades")).toBeNull();
   });
