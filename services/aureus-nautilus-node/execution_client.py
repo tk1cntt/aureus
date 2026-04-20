@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 try:
     from nautilus_trader.live.execution_client import LiveExecutionClient
@@ -46,11 +46,7 @@ class AureusExecutionClient(LiveExecutionClient):
             "missing_sl_tp_total": 0,
             "invalid_symbol_total": 0,
             "invalid_notional_total": 0,
-            "trace_completeness_failures_total": 0,
-            "missing_backfill_status_total": 0,
-            "missing_entry_policy_total": 0,
-            "missing_expiry_policy_total": 0,
-            "order_open_optional_fallback_total": 0,
+            "symbol_stream_mismatch_total": 0,
         }
 
     @staticmethod
@@ -77,14 +73,43 @@ class AureusExecutionClient(LiveExecutionClient):
 
     async def _poll_loop(self):
         self.log.info("AureusExecutionClient started polling orders")
-        streams = {"aureus:stream:XAUUSD:orders": self._last_ids.get("aureus:stream:XAUUSD:orders", "0-0")}
         while self._running:
+            streams = await self._discover_order_streams()
             await self._poll_orders_once(streams)
             await asyncio.sleep(0.1)
 
+    async def _discover_order_streams(self) -> Dict[str, str]:
+        discovered: Dict[str, str] = {}
+        stream_keys = await self.redis_client.keys("aureus:stream:*:orders")
+        for raw_stream in stream_keys:
+            stream = raw_stream.decode() if isinstance(raw_stream, bytes) else str(raw_stream)
+            symbol = self._extract_stream_symbol(stream)
+            if not symbol:
+                continue
+            if symbol not in self._symbol_whitelist:
+                continue
+            discovered[stream] = self._last_ids.get(stream, "0-0")
+        return dict(sorted(discovered.items(), key=lambda item: item[0]))
+
+    @staticmethod
+    def _extract_stream_symbol(stream_str: str) -> str:
+        parts = stream_str.split(":")
+        if len(parts) != 4:
+            return ""
+        if parts[0] != "aureus" or parts[1] != "stream" or parts[3] != "orders":
+            return ""
+        return parts[2].upper().strip()
+
+    @staticmethod
+    def _extract_stream_symbol_from_message(data: Dict[str, Any]) -> str:
+        stream_symbol = data.pop("_stream_symbol", "")
+        if stream_symbol is None:
+            return ""
+        return str(stream_symbol).upper().strip()
+
     async def _poll_orders_once(self, streams=None):
         if not streams:
-            streams = {"aureus:stream:XAUUSD:orders": self._last_ids.get("aureus:stream:XAUUSD:orders", "0-0")}
+            return
 
         try:
             result = await self.redis_client.xread(streams, count=10, block=1000)
@@ -93,13 +118,14 @@ class AureusExecutionClient(LiveExecutionClient):
 
             for stream, messages in result:
                 stream_str = stream.decode() if isinstance(stream, bytes) else stream
+                stream_symbol = self._extract_stream_symbol(stream_str)
                 for idx, message in messages:
                     self._last_ids[stream_str] = idx.decode() if isinstance(idx, bytes) else str(idx)
-                    self._handle_message(message)
+                    self._handle_message(message, stream_symbol=stream_symbol)
         except Exception as exc:
             self.log.error(f"Error polling execution data: {exc}")
 
-    def _handle_message(self, message: Dict[Any, Any]):
+    def _handle_message(self, message: Dict[Any, Any], stream_symbol: str = ""):
         msg_type = self._decode_value(message.get(b"type", message.get("type", "")))
         if msg_type != "ORDER_OPEN":
             return
@@ -110,6 +136,9 @@ class AureusExecutionClient(LiveExecutionClient):
         except Exception:
             self._reject("MALFORMED_PAYLOAD")
             return
+
+        if stream_symbol:
+            payload["_stream_symbol"] = stream_symbol
 
         valid, reason, orders = self._validate_and_build_orders(payload)
         if not valid:
@@ -124,23 +153,14 @@ class AureusExecutionClient(LiveExecutionClient):
         trace_id = str(data.get("trace_id", "")).strip()
         symbol = str(data.get("symbol", "")).upper().strip()
         side = str(data.get("side", "")).upper().strip()
+        stream_symbol = self._extract_stream_symbol_from_message(data)
 
-        qty_raw = data.get("qty")
-        if qty_raw is None:
-            qty_raw = data.get("quantity")
+        if stream_symbol and stream_symbol != symbol:
+            self.metrics["symbol_stream_mismatch_total"] += 1
+            return False, "SYMBOL_STREAM_MISMATCH", []
 
-        missing_critical_fields: List[str] = []
         if not trace_id:
-            missing_critical_fields.append("trace_id")
-        if not symbol:
-            missing_critical_fields.append("symbol")
-        if not side:
-            missing_critical_fields.append("side")
-        if qty_raw is None or (isinstance(qty_raw, str) and not qty_raw.strip()):
-            missing_critical_fields.append("qty")
-
-        if missing_critical_fields:
-            return False, "ORDER_OPEN_MISSING_CRITICAL_FIELD", []
+            return False, "MISSING_TRACE_ID", []
 
         if trace_id in self._seen_trace_ids:
             self.metrics["duplicate_trace_id_total"] += 1
@@ -152,6 +172,10 @@ class AureusExecutionClient(LiveExecutionClient):
 
         if side not in {"BUY", "SELL"}:
             return False, "INVALID_SIDE", []
+
+        qty_raw = data.get("qty")
+        if qty_raw is None:
+            return False, "INVALID_QTY", []
 
         try:
             qty = float(qty_raw)
@@ -174,28 +198,7 @@ class AureusExecutionClient(LiveExecutionClient):
 
         if self._require_sl_tp and ("sl" not in data or "tp" not in data):
             self.metrics["missing_sl_tp_total"] += 1
-            return False, "ORDER_OPEN_SLTP_REQUIRED_MISSING", []
-
-        entry_policy = str(data.get("entry_policy", "")).strip()
-        if not entry_policy:
-            entry_policy = "IMMEDIATE"
-            self.metrics["missing_entry_policy_total"] += 1
-            self.metrics["trace_completeness_failures_total"] += 1
-            self.metrics["order_open_optional_fallback_total"] += 1
-
-        expiry_policy = str(data.get("expiry_policy", "")).strip()
-        if not expiry_policy:
-            expiry_policy = "GTC"
-            self.metrics["missing_expiry_policy_total"] += 1
-            self.metrics["trace_completeness_failures_total"] += 1
-            self.metrics["order_open_optional_fallback_total"] += 1
-
-        backfill_status = str(data.get("backfill_status", "")).upper().strip()
-        if not backfill_status:
-            backfill_status = "UNKNOWN"
-            self.metrics["missing_backfill_status_total"] += 1
-            self.metrics["trace_completeness_failures_total"] += 1
-            self.metrics["order_open_optional_fallback_total"] += 1
+            return False, "MISSING_SL_TP", []
 
         sl = data.get("sl")
         tp = data.get("tp")
@@ -211,9 +214,6 @@ class AureusExecutionClient(LiveExecutionClient):
                 "instrument_id": f"{symbol}.AUREUS_VIRTUAL",
                 "side": side,
                 "qty": qty,
-                "entry_policy": entry_policy,
-                "expiry_policy": expiry_policy,
-                "backfill_status": backfill_status,
             }
         ]
 

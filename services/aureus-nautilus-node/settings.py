@@ -24,7 +24,7 @@ class NautilusNodeSettings:
 
     @classmethod
     def from_env(cls) -> "NautilusNodeSettings":
-        symbols = cls._parse_csv(os.getenv("NAUTILUS_SYMBOL_WHITELIST", "XAUUSD"))
+        symbols = cls._parse_csv(os.getenv("NAUTILUS_SYMBOL_WHITELIST", ""))
         candle_pattern = os.getenv("NAUTILUS_CANDLE_STREAM_PATTERN", "aureus:stream:{symbol}:candle")
         order_pattern = os.getenv("NAUTILUS_ORDER_STREAM_PATTERN", "aureus:stream:{symbol}:orders")
         risk_mode = os.getenv("NAUTILUS_RISK_MODE", "STRICT").strip().upper()
