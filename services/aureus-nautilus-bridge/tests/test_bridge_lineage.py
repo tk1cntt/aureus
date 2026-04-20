@@ -1,21 +1,11 @@
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from main import BridgeProcessor
-
-
-class StaticAdapter:
-    async def submit_order(self, intent):
-        return {
-            "status": "ORDER_ACCEPTED",
-            "event_time": intent["event_time"],
-            "fill_price": intent.get("entry_price", 0.0),
-            "quantity": intent.get("quantity", 1.0),
-            "adapter_order_id": "adapter-1",
-        }
+from main import AureusNautilusBridge
 
 
 def run(coro):
@@ -26,72 +16,69 @@ def run(coro):
         loop.close()
 
 
-def _order_payload_with_lineage():
+def _lifecycle_payload(report):
     return {
-        "trace_id": "XAUUSD:9:1709300200",
-        "correlation_id": "corr-xyz-001",
-        "strategy_id": "strat-breakout",
-        "strategy_version": "2.4.1",
-        "symbol": "XAUUSD",
-        "event_time": 1709300200,
+        "type": "NAUTILUS_EXECUTION_REPORT",
+        "data": report,
+    }
+
+
+def test_lifecycle_keeps_strategy_and_correlation_from_pending_intent():
+    bridge = AureusNautilusBridge()
+    bridge._publish_execution_event = AsyncMock()
+
+    trace_id = "EURUSD:11:1709300400"
+    bridge.pending_intents[trace_id] = {
+        "trace_id": trace_id,
+        "symbol": "EURUSD",
+        "event_time": 1709300400,
         "side": "BUY",
         "type": "MARKET",
-        "quantity": 1.0,
-        "entry_price": 2003.0,
-        "sl": 1998.0,
-        "tp": 2015.0,
+        "quantity": 0.5,
+        "entry_price": 1.081,
+        "strategy_id": "strat-eur-breakout",
+        "strategy_name": "EUR Breakout",
+        "correlation_id": "corr-eur-11",
         "execution_mode": "nautilus",
     }
 
-
-def test_process_order_event_propagates_lineage_fields_into_execution_event():
-    processor = BridgeProcessor(adapter=StaticAdapter())
-
-    event = run(processor.process_order_event("ORDER_OPEN", _order_payload_with_lineage()))
-
-    assert event is not None
-    assert event["trace_id"] == "XAUUSD:9:1709300200"
-    assert event["correlation_id"] == "corr-xyz-001"
-    assert event["strategy_id"] == "strat-breakout"
-    assert event["strategy_version"] == "2.4.1"
-
-
-def test_lifecycle_fallback_payload_carries_correlation_and_strategy_lineage():
-    from main import AureusNautilusBridge
-
-    bridge = AureusNautilusBridge()
-    bridge.processor = BridgeProcessor(adapter=StaticAdapter())
-
     report = {
-        "trace_id": "XAUUSD:10:1709300300",
-        "correlation_id": "corr-lifecycle-1",
-        "strategy_id": "strat-meanrev",
-        "strategy_version": "1.9.0",
-        "symbol": "XAUUSD",
+        "trace_id": trace_id,
+        "symbol": "EURUSD",
         "status": "PARTIAL_FILL",
-        "event_time": 1709300302,
-        "quantity": 1.0,
-        "fill_price": 2004.0,
+        "event_time": 1709300402,
+        "quantity": 0.5,
+        "fill_price": 1.0812,
     }
 
-    event = run(bridge.processor.process_lifecycle_report(
-        {
-            "trace_id": report["trace_id"],
-            "correlation_id": report["correlation_id"],
-            "strategy_id": report["strategy_id"],
-            "strategy_version": report["strategy_version"],
-            "symbol": report["symbol"],
-            "event_time": report["event_time"],
-            "side": "BUY",
-            "type": "MARKET",
-            "quantity": report["quantity"],
-            "entry_price": report["fill_price"],
-            "execution_mode": "nautilus",
-        },
-        report,
-    ))
+    run(bridge._handle_lifecycle_message("1-0", _lifecycle_payload(report)))
 
-    assert event is not None
-    assert event["correlation_id"] == "corr-lifecycle-1"
-    assert event["strategy_id"] == "strat-meanrev"
-    assert event["strategy_version"] == "1.9.0"
+    event = bridge._publish_execution_event.await_args.args[0]
+    assert event["strategy_id"] == "strat-eur-breakout"
+    assert event["strategy_name"] == "EUR Breakout"
+    assert event["correlation_id"] == "corr-eur-11"
+
+
+def test_lifecycle_fallback_synthesizes_minimal_valid_intent_when_missing_pending():
+    bridge = AureusNautilusBridge()
+    bridge._publish_execution_event = AsyncMock()
+
+    report = {
+        "trace_id": "GBPUSD:12:1709300500",
+        "symbol": "GBPUSD",
+        "status": "ORDER_ACCEPTED",
+        "event_time": 1709300501,
+        "side": "SELL",
+        "type": "LIMIT",
+        "qty": 0.2,
+        "fill_price": 1.262,
+    }
+
+    run(bridge._handle_lifecycle_message("2-0", _lifecycle_payload(report)))
+
+    event = bridge._publish_execution_event.await_args.args[0]
+    assert event["trace_id"] == report["trace_id"]
+    assert event["symbol"] == report["symbol"]
+    assert event["side"] == "SELL"
+    assert event["type"] == "LIMIT"
+    assert event["quantity"] == 0.2
