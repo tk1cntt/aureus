@@ -190,36 +190,36 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NOTIF-01 | Phase 26 | Pending |
+| NOTIF-01 | Phase 47 | Pending |
 | NOTIF-02 | Phase 27 | ✅ Done |
 | NOTIF-03 | Phase 27 | ✅ Done |
 | NOTIF-04 | Phase 27 | ✅ Done |
 | NOTIF-05 | Phase 27 | ✅ Done |
 | NOTIF-06 | Phase 27 | ✅ Done |
-| STRAT-01 | Phase 26 | Pending |
-| STRAT-02 | Phase 26 | Pending |
-| STRAT-03 | Phase 26 | Pending |
-| STRAT-04 | Phase 26 | Pending |
-| ORDER-01 | Phase 29 | Pending |
-| ORDER-02 | Phase 29 | Pending |
-| ORDER-03 | Phase 29 | Pending |
-| ORDER-04 | Phase 28 | Pending |
-| ORDER-05 | Phase 28 | Pending |
-| ORDER-06 | Phase 28 | Pending |
-| ORDER-07 | Phase 29 | Pending |
+| STRAT-01 | Phase 47 | Pending |
+| STRAT-02 | Phase 47 | Pending |
+| STRAT-03 | Phase 47 | Pending |
+| STRAT-04 | Phase 47 | Pending |
+| ORDER-01 | Phase 49 | Pending |
+| ORDER-02 | Phase 49 | Pending |
+| ORDER-03 | Phase 49 | Pending |
+| ORDER-04 | Phase 47 | Pending |
+| ORDER-05 | Phase 47 | Pending |
+| ORDER-06 | Phase 47 | Pending |
+| ORDER-07 | Phase 47 | Pending |
 | TRADE-01 | Phase 30 | Complete |
 | TRADE-02 | Phase 30 | Complete |
-| TRADE-03 | Phase 31 | Pending |
-| TRADE-04 | Phase 31 | Pending |
+| TRADE-03 | Phase 47 | Pending |
+| TRADE-04 | Phase 47 | Pending |
 | TRADE-05 | Phase 30 | Complete |
-| PERF-01 | Phase 32 | Pending |
-| PERF-02 | Phase 32 | Pending |
-| PERF-03 | Phase 32 | Pending |
-| PERF-04 | Phase 32 | Pending |
-| PERF-05 | Phase 32 | Pending |
-| PERF-06 | Phase 32 | Pending |
-| PERF-07 | Phase 32 | Pending |
-| PERF-08 | Phase 33 | Pending |
+| PERF-01 | Phase 48 | Pending |
+| PERF-02 | Phase 48 | Pending |
+| PERF-03 | Phase 48 | Pending |
+| PERF-04 | Phase 48 | Pending |
+| PERF-05 | Phase 48 | Pending |
+| PERF-06 | Phase 48 | Pending |
+| PERF-07 | Phase 48 | Pending |
+| PERF-08 | Phase 48 | Pending |
 | PH45-01 | Phase 45 | Planned |
 | PH45-02 | Phase 45 | Planned |
 | PH45-03 | Phase 45 | Planned |
@@ -240,4 +240,4 @@ Thoát fallback khi cả 3 chỉ số dưới 50% ngưỡng trong 5 phút liên 
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-18 after Phase 45 planning review*
+*Last updated: 2026-04-20 after milestone gap-closure planning*

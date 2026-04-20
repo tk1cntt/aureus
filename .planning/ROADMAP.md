@@ -221,6 +221,49 @@ Plans:
 - [x] 46-01-PLAN.md — Seed sync contract + active/inactive reconciliation + reload wiring
 - [x] 46-02-PLAN.md — Verification suite + dry-run/rollback scripts + runbook
 
+### Phase 47: verification-backfill-v1-5
+
+**Goal:** Bổ sung verification artifacts cho các phase v1.5 còn thiếu để đóng orphan requirements và chuẩn hóa evidence theo requirement-level.
+**Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04
+**Depends on:** Phase 46
+**Gap Closure:** Closes requirement orphan gaps from `v1.5-MILESTONE-AUDIT.md`
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 47 to break down)
+
+### Phase 48: performance-backtest-api-wiring
+
+**Goal:** Khôi phục luồng E2E Performance Dashboard bằng cách wire đầy đủ backtest API routes với web consumer contract.
+**Requirements**: PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
+**Depends on:** Phase 47
+**Gap Closure:** Closes integration gap `dashboard/web -> dashboard/api` và flow gap `Backtest/Performance dashboard E2E`
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 48 to break down)
+
+### Phase 49: order-execution-contract-multi-symbol
+
+**Goal:** Chuẩn hóa ORDER_OPEN payload contract và execution consume path multi-symbol để loại bỏ reject sai và hardcode XAUUSD.
+**Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-05, PH45-06, PH45-07
+**Depends on:** Phase 48
+**Gap Closure:** Closes integration gaps `orders.py -> execution_client.py`, `multi-symbol streams -> _poll_loop`, và flow gap `Live ORDER_OPEN -> execution`
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 49 to break down)
+
+### Phase 50: nyquist-reaudit-closure
+
+**Goal:** Đóng các validation gaps (missing/partial Nyquist) và re-audit milestone để đạt điều kiện complete v1.5.
+**Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-01, ORDER-02, ORDER-03, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04, PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
+**Depends on:** Phase 49
+**Gap Closure:** Closes Nyquist missing/partial coverage + milestone re-audit blockers
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 50 to break down)
 
 ## Phase 37: Trade Execution Journal (INSERTED)
 
