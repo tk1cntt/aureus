@@ -83,6 +83,8 @@ class OrderOpenedEvent(BaseModel):
     sl: float
     tp: float
     magic: int
+    strategy_name: Optional[str] = None
+    trace_id: Optional[str] = None
     t: int
 
 class OrderClosedEvent(BaseModel):
@@ -97,6 +99,8 @@ class OrderClosedEvent(BaseModel):
     commission: float
     swap: float
     magic: int
+    strategy_name: Optional[str] = None
+    trace_id: Optional[str] = None
     t: int
 
 class OrderFailedEvent(BaseModel):

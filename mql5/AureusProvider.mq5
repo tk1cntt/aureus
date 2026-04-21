@@ -855,16 +855,16 @@ string RetcodeToReason(int retcode)
 //+------------------------------------------------------------------+
 void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
                      string orderType, double volume, double openPrice,
-                     double sl, double tp, long magic)
+                     double sl, double tp, long magic, string strategyName = "", string traceId = "")
   {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
-                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"t\":%lld}",
-                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, timeMs);
+                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
+                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, strategyName, traceId, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s", ticket, symbol);
+   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s strategy=%s", ticket, symbol, strategyName);
   }
 
 //+------------------------------------------------------------------+
@@ -887,17 +887,18 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
 //+------------------------------------------------------------------+
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
-                     double commission, double swap, long magic)
+                     double commission, double swap, long magic,
+                     string strategyName = "", string traceId = "")
   {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
-                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"t\":%lld}",
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
                     symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
-                    magic, timeMs);
+                    magic, strategyName, traceId, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f", ticket, profit);
+   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s", ticket, profit, strategyName);
   }
 
 
@@ -1077,6 +1078,11 @@ void ExecuteOpenOrder(const string &raw)
    string sizeMode  = ParseJSONString(raw, "size_mode");
    double riskAmount = ParseJSONDouble(raw, "risk_amount");
    double tpRRRatio  = ParseJSONDouble(raw, "tp_rr_ratio");
+   string traceId    = ParseJSONString(raw, "trace_id");
+   string strategyName = comment;
+   int commentSep = StringFind(comment, "|");
+   if(commentSep > 0)
+      strategyName = StringSubstr(comment, 0, commentSep);
 
    if(tpRRRatio == 0)
       tpRRRatio = 1.5;
@@ -1335,7 +1341,7 @@ void ExecuteOpenOrder(const string &raw)
             if(!terminalEventSent)
               {
                PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                               volume, result.price, request.sl, request.tp, magic);
+                               volume, result.price, request.sl, request.tp, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1383,7 +1389,7 @@ void ExecuteOpenOrder(const string &raw)
             if(!terminalEventSent)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1412,7 +1418,7 @@ void ExecuteOpenOrder(const string &raw)
             if(!terminalEventSent)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1422,7 +1428,7 @@ void ExecuteOpenOrder(const string &raw)
          if(!terminalEventSent)
            {
             PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                            volume, filledEntry, slFinal, tpAfter, magic);
+                            volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1432,7 +1438,7 @@ void ExecuteOpenOrder(const string &raw)
          if(!terminalEventSent)
            {
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                            volume, result.price, sl, tp, magic);
+                            volume, result.price, sl, tp, magic, strategyName, traceId);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1826,8 +1832,19 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
                "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
                symbol, ticket, direction, profit, magic);
 
+   string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
+   string strategyName = dealComment;
+   string traceId = "";
+   int commentSep = StringFind(dealComment, "|");
+   if(commentSep > 0)
+     {
+      strategyName = StringSubstr(dealComment, 0, commentSep);
+      traceId = StringSubstr(dealComment, commentSep + 1);
+     }
+
    PushOrderClosed(symbol, ticket, direction, volume,
-                   openPrice, closePrice, profit, commission, swap, magic);
+                   openPrice, closePrice, profit, commission, swap, magic,
+                   strategyName, traceId);
   }
 
 //+------------------------------------------------------------------+
