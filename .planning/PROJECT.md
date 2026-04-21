@@ -9,25 +9,28 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - Leverage Nautilus execution infrastructure while minimizing custom execution complexity.
 - Preserve clear milestone auditability (plans, summaries, and known gaps).
 
-## Current Milestone: v1.5 Signal Delivery & Trade Management
+## Current Milestone: v1.6 Strategy Evaluation & Insight Delivery
 
-**Goal:** Xây dựng pipeline hoàn chỉnh từ signal → notification → order execution → result tracking, với dashboard thống kê performance.
+**Goal:** Nâng cấp hệ thống để đánh giá strategy đa tiêu chí (không chỉ lợi nhuận), lưu đầy đủ dữ liệu ngữ cảnh vào DB, xuất report nhiều chiều và gửi Telegram insight chính xác.
 
 **Target features:**
-- Service `aureus-notifier`: Telegram notification cho signals và strategy matches, cấu hình filter signal.
-- Service `aureus-trader`: MT5 order management (market/pending), order state tracking, hybrid history sync (push + poll).
-- Mở rộng `AureusProvider.mq5` để nhận order commands và push order events.
-- Cải tiến strategy contract để quy định loại order (entry type, SL, TP).
-- Performance dashboard tích hợp `aureus-dashboard`: win rate, profit factor, drawdown, Sharpe ratio.
+- Xây scoring framework đánh giá strategy theo profit, signal quality, timing, market session và volatility regime.
+- Chấm điểm ở cả hai mức: per-trade và aggregate theo strategy/symbol/timeframe.
+- Chuẩn hóa schema + pipeline lưu evaluation criteria vào DB để truy vấn và thống kê.
+- Tạo report engine lọc/so sánh theo nhiều tiêu chí (strategy, symbol, timeframe, session, volatility).
+- Gửi Telegram summary/insight dựa trên dữ liệu đánh giá đã chuẩn hóa.
 
 ## Current State
-**Latest shipped:** v1.4 TradingAgents Market Data Integration (Closed with known testing gaps, 2026-04-05)
-- Included Phase 21 to 25.
-- Milestone archived into `.planning/milestones/v1.4-ROADMAP.md` and `.planning/milestones/v1.4-REQUIREMENTS.md`.
-- Legacy signal behavior successfully extracted into Provider Abstraction.
-- TradingAgents integration implemented with symbol mapping, connection fallback, and asynchronous TimescaleDB telemetry offloading.
-- CircuitBreaker pattern embedded for safe evaluation paths.
-- Pending tests and shadow-mode evidence checklist remain open for next iterations.
+**Latest shipped:** v1.5 Signal Delivery & Trade Management (Shipped 2026-04-21)
+- Included Phase 26 to 53.
+- Milestone archived into `.planning/milestones/v1.5-ROADMAP.md` and `.planning/milestones/v1.5-REQUIREMENTS.md`.
+- Signal → order execution runtime đã được chuẩn hóa và đóng vòng verification artifacts.
+- Nyquist validation backfill cho v1.5 đã hoàn tất ở milestone closure.
+
+**Current milestone status:** v1.6 Strategy Evaluation & Insight Delivery (Planning)
+- Scope active: Phase 54 → 57.
+- Trọng tâm: scoring framework đa tiêu chí, evaluation data model/pipeline, reporting engine, Telegram insight.
+- Chưa có phase nào của v1.6 được execute tại thời điểm cập nhật này.
 
 **Existing infra (live):**
 - `aureus-signal` — signal engine with provider abstraction, strategy evaluation, CircuitBreaker
@@ -47,12 +50,11 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - ✓ CircuitBreaker and telemetry offloading implementation *(v1.4)*
 
 ### Active
-- [ ] Telegram notification service cho signal events và strategy matches.
-- [ ] MT5 order execution pipeline (strategy → order → MT5).
-- [ ] Order state management và MT5 history sync.
-- [ ] Performance dashboard thống kê (win rate, profit factor, drawdown, ...).
-- [ ] Strategy contract enhancement (entry type, SL, TP specification).
-- [ ] Mở rộng AureusProvider.mq5 cho bidirectional communication.
+- [ ] Build strategy scoring framework đa tiêu chí (SCOR-01→04).
+- [ ] Chuẩn hóa evaluation data model + pipeline persist/recompute (EVAL-01→04).
+- [ ] Xây report engine đa chiều cho per-trade + aggregate analytics (RPT-01→05).
+- [ ] Hoàn thiện Telegram insight delivery có context/traceability (TEL-EVAL-01→04).
+- [ ] Đạt acceptance bắt buộc của v1.6 (ACC-01→03).
 
 ### Out of Scope
 - Direct cutover to TradingAgents as production primary before shadow validation gates pass.
@@ -82,4 +84,4 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-_Last updated: 2026-04-05 after v1.5 milestone start_
+_Last updated: 2026-04-21 after v1.6 milestone rebaseline_

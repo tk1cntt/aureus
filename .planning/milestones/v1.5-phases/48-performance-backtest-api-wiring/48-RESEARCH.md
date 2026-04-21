@@ -217,17 +217,15 @@ const qs = params.toString();
 | A1 | “timeframe” hiện chưa có trong API performance params dù đã là locked decision D-04 cần chuẩn hóa | Architecture Patterns / Pitfalls | Có thể plan thiếu task nếu timeframe thực ra đã được xử lý ở layer khác ngoài file đã đọc |
 | A2 | Không có test suite chuyên biệt cho dashboard performance trong repo hiện tại | Validation Architecture | Có thể bỏ sót test command sẵn có nếu nằm ngoài đường dẫn đã scan |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Filter `timeframe` sẽ map vào nguồn dữ liệu nào cho metrics/trades/equity?**
-   - What we know: D-04 yêu cầu timeframe trong shared params; endpoint hiện chưa nhận timeframe. [VERIFIED: codebase Read `48-CONTEXT.md`, `api/main.py`]
-   - What's unclear: Có cần derive theo timeframe từ candle/snapshot hay chỉ apply trên trade timestamps. [ASSUMED]
-   - Recommendation: Chốt semantics ngay trong PLAN-01 để tránh đổi contract giữa chừng.
+1. **Filter `timeframe` sẽ map vào nguồn dữ liệu nào cho metrics/trades/equity?** — **RESOLVED**
+   - Resolution: `timeframe` được chuẩn hóa như dimension filter logic-level áp dụng đồng nhất cho metrics/trades/equity, map theo trade timestamp window (không introduce candle datasource mới trong phase 48 để giữ surgical scope per D-09).
+   - Plan impact: PLAN 48-01 Task 2 phải triển khai shared normalized filter parser dùng chung cho cả 3 endpoint, gồm `symbol`, `strategy`, `timeframe`, `date-range` per D-04.
 
-2. **Error envelope chuẩn cho invalid filter là gì?**
-   - What we know: D-05 yêu cầu structured error ổn định. [VERIFIED: codebase Read `48-CONTEXT.md`]
-   - What's unclear: Format exact (`code/message/details`) nào để web xử lý thống nhất. [ASSUMED]
-   - Recommendation: Chọn 1 schema tối giản và wire cả API + web error-state cùng lượt.
+2. **Error envelope chuẩn cho invalid filter là gì?** — **RESOLVED**
+   - Resolution: dùng một structured envelope ổn định dạng `{ "error": { "code": "INVALID_FILTER", "message": string, "details": object } }` cho các lỗi filter 4xx để web có contract parse nhất quán.
+   - Plan impact: PLAN 48-01 Task 2 phải chuẩn hóa response lỗi API; PLAN 48-02 Task 1/2 phải test + render đúng error state theo cùng envelope, không silent fallback per D-05.
 
 ## Environment Availability
 

@@ -8,490 +8,76 @@
 | v1.2 | Strategy Sequence Engine | 14-15 | ✅ Shipped 2026-03-22 |
 | v1.3 | Backtesting & Measurement Engine | 15.5-20 | ✅ Closed 2026-04-03 (known gaps logged) |
 | v1.4 | TradingAgents Market Data Integration | 21-25 | ✅ Closed 2026-04-05 (known gaps logged) |
+| v1.5 | Signal Delivery & Trade Management | 26-53 | ✅ Shipped 2026-04-21 |
 
 ---
 
-## Current Milestone: v1.5 Signal Delivery & Trade Management
+## Current Milestone: v1.6 Strategy Evaluation & Insight Delivery
 
-**Goal:** Xây dựng pipeline hoàn chỉnh từ signal → notification → order execution → result tracking, với dashboard thống kê performance.
+**Goal:** Xây hệ thống đánh giá hiệu quả strategy đa tiêu chí, có scoring framework chuẩn, lưu dữ liệu chuẩn hóa vào DB, hỗ trợ report nhiều chiều và gửi Telegram insight đầy đủ ngữ cảnh.
 
-**Phases:** 25
+**Phases:** 4 (planned)
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
-| 26 | Signal Event Pipeline & Strategy Contract | NOTIF-01, STRAT-01→04 | ✅ DONE |
-| 27 | Telegram Notification Service | NOTIF-02→06 | ✅ DONE |
-| 28 | AureusProvider.mq5 Bidirectional Extension | ORDER-04→06 | ✅ DONE |
-| 29 | MT5 Order Execution Service | ORDER-01→03, ORDER-07 | ✅ DONE |
-| 30 | Trade State Management | TRADE-01→02, TRADE-05 | ✅ DONE 2026-04-06 |
-| 31 | MT5 History Sync | TRADE-03→04 | ✅ DONE 2026-04-07 |
-| 32 | Trade Performance API | PERF-01→07 | ✅ DONE 2026-04-07 |
-| 33 | Performance Dashboard UI | PERF-08 | ✅ DONE 2026-04-07 |
-| 35 | MT5 Order Status Reporter | PERF-09 | ✅ DONE 2026-04-07 |
-| 36.1 | Fix BUY/SELL Direction from Strategy Settings | — | ✅ DONE 2026-04-08 |
-| 37 | Trade Execution Journal (INSERTED) | TBJ-01→05 | Not planned |
-| 39 | Fix strategy service crash from unhandled exceptions | — | Not planned |
-| 40 | Signal Classification: Indicator + Event-based with Telegram snapshot | SIG-01→04 | ✅ DONE 2026-04-12 |
-| 40.3 | Fix stale signal trigger on service restart with suppress flag | SIG-SAFETY-01→04 | ✅ DONE 2026-04-13 |
-| 41 | SL theo pivot point HH/LL gần nhất cho strategy | SL-01→02 | ✅ DONE 2026-04-14 |
-| 44.0 | Profiling Baseline Performance — đo CPU/memory per signal | — | Not planned |
-| 45 | Parallel Runtime Per-Symbol | PH45-01→07 | ✅ DONE |
-| 46 | Strategy Seed Sync | PH46-01→05 | ✅ DONE |
-| 47 | Verification Backfill v1.5 | NOTIF-01, STRAT-01→04, ORDER-04→07, TRADE-03→04 | ✅ DONE |
-| 48 | Performance Backtest API Wiring | PERF-01→08 | ✅ DONE |
-| 49 | Order Execution Contract Multi-Symbol | ORDER-01→03, PH45-05→07 | ✅ DONE (gaps found) |
-| 50 | Nyquist Reaudit Closure | v1.5 closure requirements | ✅ DONE (gaps found) |
-| 51 | 1/1 | Complete   | 2026-04-20 |
-| 52 | 1/1 | Complete   | 2026-04-20 |
-| 53 | 1/1 | Complete   | 2026-04-20 |
+| 54 | Strategy Scoring Framework | SCOR-01→04, ACC-01 | Planned |
+| 55 | Evaluation Data Model & Pipeline | EVAL-01→04 | Planned |
+| 56 | Multi-Dimensional Reporting Engine | RPT-01→05, ACC-03 | Planned |
+| 57 | Telegram Insight Delivery | TEL-EVAL-01→04, ACC-02 | Planned |
 
 ---
 
-## Phase 26: Signal Event Pipeline & Strategy Contract
+## Phase 54: Strategy Scoring Framework
 
-**Requirements:** NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04
-**Goal:** Thiết lập foundation: signal engine publish events qua Redis pub/sub và mở rộng strategy contract với trade parameters.
-
-**Success Criteria:**
-1. Signal engine phát signal events lên Redis pub/sub channel khi có signal mới
-2. Strategy output chứa entry_type (market/limit/stop), SL, TP, lot_size
-3. Existing strategies tiếp tục hoạt động bình thường (backward compatible)
-4. Magic number được assign per strategy trong config
-5. Unit tests xác nhận contract mới và backward compatibility
-
----
-
-## Phase 27: Telegram Notification Service
-
-**Requirements:** NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06
-**Goal:** Xây dựng aureus-notifier service nhận events từ Redis và gửi thông báo lên Telegram.
-
-**Success Criteria:**
-1. ✅ Service aureus-notifier chạy trong Docker, subscribe Redis channels
-2. ✅ Signal alerts gửi lên Telegram với format đầy đủ (symbol, signal type, value)
-3. ✅ Strategy match alerts gửi với entry details (direction, entry, SL/TP)
-4. ✅ Filter config cho phép bật/tắt từng loại signal
-5. ✅ Rate limiting hoạt động (1 msg/2s per chat, queue max 100)
-6. ✅ Multi-channel support hoạt động
-
-**Implementation:**
-- 6 source files + 3 test files (34 tests, all passing)
-- `aureus-notifier-dev` service in docker-compose.dev.yml
-- HTML-formatted messages with emoji (📊 SIGNAL ALERT, 🎯 STRATEGY MATCH)
-- Per-chat rate limiting via asyncio.Queue, exponential backoff retry
-- Runtime config reload via Redis pub/sub
-
----
-
-## Phase 28: AureusProvider.mq5 Bidirectional Extension
-
-**Requirements:** ORDER-04, ORDER-05, ORDER-06
-**Status:** ✅ DONE
-
-**Results:**
-- EA nhận và parse order commands (OPEN_ORDER, CLOSE_ORDER) qua TCP
-- EA execute OrderSend() cho market và pending orders
-- EA push order events (ORDER_OPENED, ORDER_CLOSED, ORDER_FAILED) về server
-- ACK/NACK protocol hoạt động cho mỗi command
-- Heartbeat và reconnect logic vẫn hoạt động bình thường
-
----
-
-## Phase 29: MT5 Order Execution Service
-
-**Requirements:** ORDER-01, ORDER-02, ORDER-03, ORDER-07
-**Status:** ✅ DONE
-
-**Results:**
-- Service aureus-trader chạy trong Docker, subscribe Redis strategy:matches channel
-- Tạo và gửi market order/pending order xuống MT5 qua TCP
-- Idempotency key chống duplicate execution
-- Order queue persist pending orders khi MT5 disconnect
-
----
-
-## Phase 30: Trade State Management
-
-**Requirements:** TRADE-01, TRADE-02, TRADE-05
-**Status:** ✅ DONE 2026-04-06
-
-**Plans:**
-- [x] 30-01-PLAN.md — Trade state management: aureus_trades hypertable, 6-state machine, order_buffer, magic number filters
-- [x] 30-01-SUMMARY.md — 66 tests passed, 3 commits: 2b6b0f6, 428bc20, f21447d
-
-**Results:**
-- State machine 6 states: PENDING→SENT→FILLED→CLOSED/FAILED/CANCELLED
-- order_buffer trong DB writer với Redis stream consumer
-- Magic number filter SQL queries phân biệt bot vs manual trades
-- Validation direction BUI/SELL, entry_type MARKET/LIMIT/STOP
-
----
-
-## Phase 31: MT5 History Sync
-
-**Requirements:** TRADE-03, TRADE-04
-**Status:** ✅ DONE 2026-04-07
-
-**Plans:**
-- [x] 31-01-PLAN.md — Hybrid sync: XPENDING recovery, REQUEST_TRADE_HISTORY, reconciliation loop
-- [x] 31-01-SUMMARY.md — 3 commits: 484e1c0, 000a66d, 98bd363
-
-**Results:**
-- REQUEST_TRADE_HISTORY command handler trong MT5 EA
-- XPENDING recovery trên startup của DB writer
-- Reconciliation loop (configurable interval, default 30s) phát hiện và tự sửa missing trades
-- `aureus_reconciliation_log` table cho audit
-
----
-
-## Phase 32: Trade Performance API
-
-**Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07
-**Status:** ✅ DONE 2026-04-07
-
-**Results:**
-- 3 endpoints: /trades (paginated), /metrics (Redis cache 60s), /equity-curve (Redis cache 30s)
-- PostgreSQL connection pooling (asyncpg, min=2, max=10)
-- Hybrid metrics: SQL aggregation + numpy (drawdown, sharpe)
-- Consistent filtering: symbol, strategy_id, start, end
-- Commit: 98781cd
-
----
-
-## Phase 33: Performance Dashboard UI
-
-**Requirements:** PERF-08
-**Status:** ✅ DONE 2026-04-07
-
-**Results:**
-- Trang `/performance` với 6 metric cards, FilterBar, EquityChart, PerformanceTable
-- lightweight-charts v5.1.0 AreaSeries cho equity curve
-- URL search params cho filter state
-- 5 component files mới + Sidebar navigation
-- TypeScript zero errors, Commit: 4f0633c
-
----
-
-## Phase 35: MT5 Order Status Reporter
-
-**Goal:** Gửi thông tin order MT5 hiện tại lên Telegram mỗi phút qua bot. Bao gồm open positions và recently closed trades.
-**Status:** ✅ DONE 2026-04-07
-
-**Results:**
-- REQUEST_POSITIONS command trong MT5 EA
-- BuildPositionsJSON() với pips calculation từ SYMBOL_DIGITS
-- OrderStatusReporter class trong aureus-notifier
-- Polling mỗi 60s, gửi báo cáo open positions + closed trades lên Telegram
-- 19 tests pass (9 gateway + 10 notifier)
-
-Plans:
-- [x] 35-01-PLAN.md — Executed
-- [x] 35-02-PLAN.md — Pips accuracy fix
-- [x] 35-VERIFICATION.md — ✅ PASS
-
----
-
-## Phase 36: Fix BUY/SELL Direction from Strategy Settings (Not Name)
-
-**Goal:** Bỏ fallback direction từ tên strategy, bắt buộc cấu hình rõ ràng trong trade_execution.
-**Status:** ✅ DONE 2026-04-08
-
-**Results:**
-- TemplateStrategy.__init__ validate direction từ trade_execution (line 39-45)
-- Không còn fallback "BEAR"/"BULL" vào tên strategy
-- Raise ValueError nếu thiếu hoặc sai direction
-- 6 seed strategies đều có direction trong trade_execution
-- DB xác nhận 6 rows đều có direction đúng
-- 16 tests pass (có 3 tests mới: direction_required, invalid_value, case_insensitive)
-
-Plans:
-- [x] 36-01-PLAN.md — Executed
-
-### Phase 45: Hỗ trợ xử lý song song signal, strategy cho nhiều symbol một lúc chứ k tuần tự như hiện tại
-
-**Goal:** Triển khai runtime song song per-symbol cho cả signal và strategy với FIFO strict theo symbol, drop out-of-order candle, idempotency trace_id per symbol+candle, cùng cơ chế rollout an toàn Shadow→Canary→Full kèm auto-rollback theo SLO per-symbol.
-**Requirements**: PH45-01, PH45-02, PH45-03, PH45-04, PH45-05, PH45-06, PH45-07
-**Depends on:** Phase 44
-**Plans:** 5/5 plans complete
-
-Plans:
-- [x] 45-01-PLAN.md — Per-symbol worker runtime cho signal + FIFO/drop out-of-order contracts
-- [x] 45-02-PLAN.md — Strategy per-symbol worker + snapshot-cùng-candle + trace_id strict dedupe
-- [x] 45-03-PLAN.md — Circuit-breaker/backlog/SLO per-symbol + rollout Shadow/Canary/Full + auto rollback
-
-### Phase 46: strategy-seed-sync
-
-**Goal:** Đồng bộ declarative strategy seed xuống DB theo cấu hình active/inactive để kiểm soát rollout chiến lược nhất quán từ source code.
-**Requirements**: PH46-01, PH46-02, PH46-03, PH46-04, PH46-05
-**Depends on:** Phase 45
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 46-01-PLAN.md — Seed sync contract + active/inactive reconciliation + reload wiring
-- [x] 46-02-PLAN.md — Verification suite + dry-run/rollback scripts + runbook
-
-### Phase 47: verification-backfill-v1-5
-
-**Goal:** Bổ sung verification artifacts cho các phase v1.5 còn thiếu để đóng orphan requirements và chuẩn hóa evidence theo requirement-level.
-**Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04
-**Depends on:** Phase 46
-**Gap Closure:** Closes requirement orphan gaps from `v1.5-MILESTONE-AUDIT.md`
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 47-01-PLAN.md — Backfill verification artifacts for phases 26/28/29 with requirement-level evidence
-- [x] 47-02-PLAN.md — Backfill verification artifacts for phases 31/32/33 with deferred-gap cross-links
-- [x] 47-03-PLAN.md — Sync REQUIREMENTS traceability and milestone audit baseline after backfill
-
-### Phase 48: performance-backtest-api-wiring
-
-**Goal:** Khôi phục luồng E2E Performance Dashboard bằng cách wire đầy đủ backtest API routes với web consumer contract.
-**Requirements**: PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
-**Depends on:** Phase 47
-**Gap Closure:** Closes integration gap `dashboard/web -> dashboard/api` và flow gap `Backtest/Performance dashboard E2E`
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 48-01-PLAN.md — Chuẩn hóa contract/filter/pagination/cache cho performance API + contract tests PERF-01..PERF-07
-- [x] 48-02-PLAN.md — Wire web `/performance` theo contract API mới + error-state tests PERF-08
-- [x] 48-03-PLAN.md — Gap closure: align equity filter semantics + web error-envelope contract for PERF-06/07/08
-
-### Phase 49: order-execution-contract-multi-symbol
-
-**Goal:** Chuẩn hóa ORDER_OPEN payload contract và execution consume path multi-symbol để loại bỏ reject sai và hardcode XAUUSD.
-**Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-05, PH45-06, PH45-07
-**Depends on:** Phase 48
-**Gap Closure:** Closes integration gaps `orders.py -> execution_client.py`, `multi-symbol streams -> _poll_loop`, và flow gap `Live ORDER_OPEN -> execution`
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 49-01-PLAN.md — Khóa ORDER_OPEN contract-first validation + idempotency strict tại execution consume boundary
-- [x] 49-02-PLAN.md — Loại hardcode XAUUSD và khóa multi-symbol poll/discovery + mismatch guard
-- [x] 49-03-PLAN.md — Đồng bộ bridge mapper/lifecycle lineage cho qty alias + strategy traceability
-
-### Phase 50: nyquist-reaudit-closure
-
-**Goal:** Đóng các validation gaps (missing/partial Nyquist) và re-audit milestone để đạt điều kiện complete v1.5.
-**Requirements**: NOTIF-01, STRAT-01, STRAT-02, STRAT-03, STRAT-04, ORDER-01, ORDER-02, ORDER-03, ORDER-04, ORDER-05, ORDER-06, ORDER-07, TRADE-03, TRADE-04, PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-07, PERF-08
-**Depends on:** Phase 49
-**Gap Closure:** Closes Nyquist missing/partial coverage + milestone re-audit blockers
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 50 to break down) (completed 2026-04-20)
-
-### Phase 51: order-execution-contract-hardening
-
-**Goal:** Khóa chặt contract execution boundary để loại reject sai ở ORDER_OPEN market/pending và đóng rollback gate PH45-07 ở runtime path.
-**Requirements**: ORDER-01, ORDER-02, ORDER-03, PH45-07
-**Depends on:** Phase 50
-**Gap Closure:** Closes audit gaps `ORDER-01..03`, `PH45-07`, integration `orders.py -> execution_client.py`, `bridge lifecycle publish`, `multi-symbol streams -> _poll_loop`.
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 51 to break down) (completed 2026-04-20)
-
-### Phase 52: mt5-live-runtime-verification-gate
-
-**Goal:** Chốt human gate bằng live MT5 verification cho ORDER-04..06 và TRADE-03..04 với evidence runtime end-to-end.
-**Requirements**: ORDER-04, ORDER-05, ORDER-06, TRADE-03, TRADE-04
-**Depends on:** Phase 51
-**Gap Closure:** Closes flow gap `MT5 order events -> trade history reconciliation` và các requirement `human_needed`.
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 52 to break down) (completed 2026-04-20)
-
-### Phase 53: nyquist-validation-backfill-v1-5
-
-**Goal:** Bổ sung/hoàn tất VALIDATION.md cho các phase còn missing/partial trong v1.5 và re-audit milestone đến khi PASS.
-**Requirements**: v1.5 nyquist validation coverage
-**Depends on:** Phase 52
-**Gap Closure:** Closes audit nyquist gaps cho 27, 28, 29, 32, 33, 44, 46, 47, 48, 49, 50.
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] TBD (run /gsd-plan-phase 53 to break down) (completed 2026-04-20)
-
-## Phase 37: Trade Execution Journal (INSERTED)
-
-**Goal:** Lưu nhật ký thực thi trade từ lúc strategy trigger → order tạo → order close trên MT5. Bảng ghi đủ thông tin để phân tích hiệu quả strategy, lý do vào lệnh, signal active, kết quả PnL.
-
-**Requirements:**
-- **TBJ-01:** Bảng `aureus_trade_journal` với schema đầy đủ
-- **TBJ-02:** Signal Service ghi entry khi trade plan được generate (strategy, direction, score, active signals, context)
-- **TBJ-03:** Trader Service update order_id, position_id, entry_price, entry_time khi MT5 execute
-- **TBJ-04:** Gateway/EA update exit_price, exit_time, exit_reason, pnl, duration khi MT5 close
-- **TBJ-05:** API endpoint `/api/v1/journal` để query, filter, phân tích
-
-**Schema proposed:**
-```sql
-CREATE TABLE aureus_trade_journal (
-    id SERIAL PRIMARY KEY,
-    -- Strategy context
-    strategy_name VARCHAR(100),
-    strategy_id INT,
-    direction VARCHAR(4),
-    score NUMERIC,
-    -- Entry details
-    order_id VARCHAR(50),
-    position_id BIGINT,
-    entry_price NUMERIC,
-    entry_time TIMESTAMPTZ,
-    sl NUMERIC,
-    tp NUMERIC,
-    lot_size NUMERIC,
-    -- Exit details
-    exit_price NUMERIC,
-    exit_time TIMESTAMPTZ,
-    exit_reason VARCHAR(50),
-    pnl NUMERIC,
-    pnl_pips NUMERIC,
-    duration_seconds INT,
-    -- Signal context
-    active_signals JSONB,
-    context_filters JSONB,
-    magic_number INT,
-    comment VARCHAR(255),
-    -- Meta
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-**Depends on:** Phase 26 (Signal Contract), Phase 29 (Order Execution), Phase 30 (Trade State)
-**All:** ✅ DONE
-
-Plans:
-- [ ] 37-01-PLAN.md — Trade journal DB + signal service integration + trader service update + API
-
-### Phase 39: Fix strategy service crash from unhandled exceptions
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 38
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 39 to break down)
-
-### Phase 40: Signal Classification — Indicator vs Event-based với Telegram Snapshot
-
-**Goal:** Phân loại signal thành 2 loại: (1) indicator-based signal (EMA, RSI, v.v.) có giá trị liên tục theo từng nến, (2) event-based signal cần trigger/event mới xảy ra. Khi có event trigger, bổ sung snapshot giá trị của các indicator signal vào thông báo Telegram.
-
-**Requirements:**
-- **SIG-01:** Phân loại signal thành indicator vs event-based trong hệ thống
-- **SIG-02:** Khi có event trigger, thu thập giá trị hiện tại của tất cả indicator signals
-- **SIG-03:** Tích hợp snapshot giá trị indicator vào message Telegram notification
-- **SIG-04:** Đảm bảo backward compatible với notification format hiện tại
-
-**Depends on:** Phase 26 (Signal Contract), Phase 27 (Telegram Notification)
-**Status:** ✅ DONE 2026-04-12
-
-**Results:**
-- SignalType enum (INDICATOR/EVENT) on BaseSignal with get_signal_type() classmethod
-- 6 indicators classified: EMA, ATR, VolumeSMA, Trend, Session, Pivot
-- 9 events classified: Structure, Sweep, FVG, FVGUp, FVGDown, CHOCHUp, CHOCHDown, SweepBull, SweepBear
-- indicator_snapshot.py helper extracts EMA values, ATR, VolSMA, HTF Trend from state
-- live_engine.py hook attaches snapshot to pub/sub payload when AI triggers fire
-- Telegram formatter renders "📈 Indicator Snapshot:" section with EMA grouping
-- Safety truncation at 4095 chars, backward compatible with old payloads
-- 45 tests total (19 signal type + 12 snapshot + 14 formatter)
-
-Plans:
-- [x] 40-01-PLAN.md — SignalType enum + classify all 15 signal classes (SIG-01)
-- [x] 40-02-PLAN.md — indicator_snapshot.py helper + tests (SIG-02)
-- [x] 40-03-PLAN.md — live_engine hook + Telegram formatter + tests (SIG-03, SIG-04)
-
-### Phase 40.3: Fix stale signal trigger on service restart with suppress flag (INSERTED)
-
-**Goal:** Thêm `_signal_suppressed` flag vào live_engine.py để chặn signals và strategies trigger trên stale data khi service restart. Flag set True sau snapshot restore hoặc full warmup, reset False khi nhận candle real-time đầu tiên từ gateway.
-**Requirements**: SIG-SAFETY-01, SIG-SAFETY-02, SIG-SAFETY-03, SIG-SAFETY-04
-**Depends on:** Phase 40
-**Status:** ✅ DONE 2026-04-13 (Commit: 47ad1de)
-
-Plans:
-- [x] 40.3-01-PLAN.md — Executed: suppress flag set in both warmup paths, guards added, reset on first gateway candle
-
-### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
-
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
-**Depends on:** Phase 37
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 38 to break down)
-
-### Phase 34: Fix SL TP calculation decimals and MT5 comment strategy name
-
-**Goal:** Sửa lỗi tính toán SL/TP bị sai decimal và thêm tên strategy vào MT5 comment.
-**Status:** ✅ DONE 2026-04-07
-
-**Plans:**
-- [ ] 34-01-PLAN.md — Fix SL/TP decimal precision and MT5 comment strategy name
-
-### Phase 41: Bổ sung cơ chế SL theo điểm pivot point HH/LL gần nhất cho strategy
-
-**Goal:** Bổ sung cơ chế SL PIVOT_POINT (dựa trên swing point HH/LL gần nhất) bên cạnh FIXED_PIPS. Áp dụng cho các strategy đã có và mới.
-**Requirements**: SL-01, SL-02
-**Depends on:** Phase 40
-**Plans:** 1 plan
-**Status:** ✅ DONE 2026-04-14
-
-Plans:
-- [x] 41-01-PLAN.md — PIVOT_POINT SL: method, branch, seed, tests
-
-### Phase 42: Giảm RR ratio xuống 1.5 và bổ sung FIXED_BUDGET entry (50$)
-
-**Goal:** Chuyển TP RR ratio mặc định của tất cả strategy xuống 1.5. Bổ sung cơ chế FIXED_BUDGET ($50) tự tính lot size dựa trên SL distance và entry price khi gửi lệnh sang MT5.
-**Requirements**: RR-01, ORDER-02, ORDER-03, ORDER-04, STRAT-03
-**Depends on:** Phase 41
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 42-01-PLAN.md — Backtest RR ratio fix: simulated_orders.py default 2.0 → 1.5
-- [x] 42-02-PLAN.md — RISK_FIXED_AMOUNT propagation: snapshot_utils, registry, signal_event_publisher
-- [x] 42-03-PLAN.md — RISK_FIXED_AMOUNT handling: orders.py + order_builder.py volume=0 + risk_amount forwarding
-- [x] 42-04-PLAN.md — MT5 lot calculation: CalculateLotFromBudget with auto-adjust and guards
-
-### Phase 43: Bổ sung signal màu của nến sau vào db: 1D H1 M30 M15 M5 theo từng nến M1
-
-**Goal:** Mở rộng signal snapshot/persistence để ghi màu nến đa khung thời gian (D1/H1/M30/M15/M5) và Bollinger Bands đa khung thời gian (M1/M5/M15/M30/H1) vào DB theo từng nến M1, theo rule last-closed + null-first và giữ additive compatibility.
-**Requirements**: PH43-01, PH43-02, PH43-03, PH43-04
-**Depends on:** Phase 42
+**Requirements:** SCOR-01, SCOR-02, SCOR-03, SCOR-04, ACC-01  
+**Goal:** Chốt scoring framework đa tiêu chí cho strategy và chạy được end-to-end trước các phần mở rộng khác.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 43-01-PLAN.md — TDD helper MTF candle-color/BB + last-closed/null-first contracts
-- [ ] 43-02-PLAN.md — Wire snapshot persistence + schema additive columns + regression tests
+- [ ] 54-01-PLAN.md — Xây two-stage scoring core (gate + weighted-sum), score versioning immutable và breakdown contract có missing-data policy.
+- [ ] 54-02-PLAN.md — Wiring scoring vào strategy executor để tạo per-trade + aggregate output theo strategy/symbol/timeframe và khóa e2e verification.
 
-### Phase 38: Fix DB writer order payload parsing for wrapped data to unblock trade journal FK (INSERTED)
+**Success Criteria:**
+1. Có công thức scoring đa tiêu chí rõ ràng (profit, signal quality, timing, volatility/session context).
+2. Có hỗ trợ trọng số theo version để tái lập kết quả.
+3. Tính được cả per-trade score và aggregate score.
+4. Persist được breakdown từng tiêu chí (không chỉ final score).
 
-**Goal:** Sửa aureus-db-writer để parse đúng order events dạng wrapped payload (`type` + `data`) từ Redis stream, đảm bảo ghi dữ liệu trade nhất quán cho trade journal FK.
-**Requirements**: TBD
-**Depends on:** Phase 37
-**Plans:** 0 plans
+---
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 38 to break down)
+## Phase 55: Evaluation Data Model & Pipeline
 
-### Phase 44.0: Profiling Baseline Performance
+**Requirements:** EVAL-01, EVAL-02, EVAL-03, EVAL-04  
+**Goal:** Chuẩn hóa schema và pipeline lưu dữ liệu đánh giá strategy vào DB để truy vấn thống kê ổn định.
 
-**Goal:** Instrument signal engine để đo CPU/memory/time per signal, per symbol, per candle trong 24h. Output: profiling data thực tế để ưu tiên optimization phases (44.1-44.5) dựa trên measurement, không phải assumptions.
-**Requirements**: PROF-01 (instrument timing), PROF-02 (log aggregation), PROF-03 (bottleneck identification)
-**Depends on:** None — can run on current codebase
-**Plans:** 2/2 plans complete
+**Success Criteria:**
+1. Schema DB chuẩn hóa cho evaluation records được áp dụng.
+2. Pipeline compute/persist tạo đầy đủ evaluation record theo từng trade.
+3. Có backfill/recompute theo score version, không mất lịch sử cũ.
+4. Có guardrails dữ liệu (idempotency, uniqueness, null/constraint checks).
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 44.0 to break down)
+---
 
-### Phase 44: Tối ưu cách tính toán khi có nhiều signal với nhiều symbol
+## Phase 56: Multi-Dimensional Reporting Engine
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 43, Phase 44.0
-**Plans:** 0 plans
+**Requirements:** RPT-01, RPT-02, RPT-03, RPT-04, RPT-05, ACC-03  
+**Goal:** Cung cấp report engine vừa drill-down per-trade vừa aggregate đa chiều để hỗ trợ quyết định.
 
-Plans:
-- [x] TBD (run /gsd-plan-phase 44 to break down) (completed 2026-04-18)
+**Success Criteria:**
+1. Report per-trade hiển thị score breakdown + context đầy đủ.
+2. Report aggregate theo strategy/symbol/timeframe.
+3. Lọc được theo market session và volatility regime.
+4. Hỗ trợ thêm tiêu chí mở rộng mà không phá schema hiện tại.
+
+---
+
+## Phase 57: Telegram Insight Delivery
+
+**Requirements:** TEL-EVAL-01, TEL-EVAL-02, TEL-EVAL-03, TEL-EVAL-04, ACC-02  
+**Goal:** Gửi Telegram insight đánh giá chính xác và đủ ngữ cảnh dựa trên dữ liệu chuẩn hóa trong DB.
+
+**Success Criteria:**
+1. Telegram per-trade insight có score tổng + breakdown tiêu chí chính.
+2. Telegram aggregate insight theo strategy/symbol/timeframe hoạt động định kỳ.
+3. Insight có market session + volatility regime + quality/confidence flags.
+4. Insight tham chiếu được evaluation record id/version để traceability.
