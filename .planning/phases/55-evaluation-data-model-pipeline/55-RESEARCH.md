@@ -232,7 +232,7 @@ decision["weights_snapshot"] = scoring_result.get("weights_snapshot", dict(DEFAU
 
 3. **Signal snapshot strategy cho mở rộng lâu dài?**
    - **Resolved:** Áp dụng hybrid contract: lưu full raw signal snapshot trong JSONB và trích các field analytics nóng thành typed columns + index.
-   - **Implementation rule:** Signal mới được thêm trước vào JSONB theo schema version; chỉ promote thành typed column khi có nhu cầu thống kê truy vấn thường xuyên.
+   - **Implementation rule:** Signal mới được thêm trước vào JSONB theo schema version; chỉ promote thành typed column khi có nhu cầu thống kê truy vấn thường xuyên. Không lưu vật lý các field dẫn xuất như `ema21_above_ema55`; tính downstream bằng pandas/SQL expression từ `ema21` và `ema55` để tránh phình schema.
 
 ## Environment Availability
 
@@ -250,6 +250,18 @@ decision["weights_snapshot"] = scoring_result.get("weights_snapshot", dict(DEFAU
 
 **Missing dependencies with fallback:**
 - psql, redis-cli, docker có fallback qua app tests / existing runtime integration.
+
+## Large-Volume Data Organization & Index Strategy
+
+- Partition ưu tiên theo thời gian (`created_at`/`evaluated_at`) cho bảng snapshot/evaluation khi volume tăng lớn; giữ query nóng trong partition gần nhất.
+- Bộ index tối thiểu cho signal snapshot:
+  - BTREE `(symbol, timeframe, created_at DESC)` cho truy vấn chuỗi thời gian theo cặp symbol-timeframe.
+  - BTREE `(symbol, timeframe, cisd_direction, created_at DESC)` cho filter thống kê CISD nhanh.
+  - BRIN `(created_at)` để giảm cost scan range rộng theo thời gian.
+- Bộ index tối thiểu cho evaluation:
+  - BTREE `(symbol, timeframe, evaluated_at DESC)`.
+  - Partial index `WHERE is_current=true` cho truy vấn state hiện tại.
+- Nguyên tắc mở rộng: chỉ thêm index mới khi có query profile chứng minh bottleneck; tránh over-index gây write amplification.
 
 ## Validation Architecture
 

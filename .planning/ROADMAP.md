@@ -49,6 +49,12 @@ Plans:
 
 **Requirements:** EVAL-01, EVAL-02, EVAL-03, EVAL-04  
 **Goal:** Chuẩn hóa schema và pipeline lưu dữ liệu đánh giá strategy vào DB để truy vấn thống kê ổn định.
+**Plans:** 3 plans
+
+Plans:
+- [ ] 55-01-PLAN.md — Chốt evaluation schema journal-linked và guardrails DB-level (unique/FK/check) cho dữ liệu scoring.
+- [ ] 55-02-PLAN.md — Wiring ingestion/compute/persist vào trigger ORDER_OPENED để ghi evaluation records đầy đủ và traceable.
+- [ ] 55-03-PLAN.md — Xây backfill/recompute append-version theo score_version, giữ history và idempotent rerun.
 
 **Success Criteria:**
 1. Schema DB chuẩn hóa cho evaluation records được áp dụng.
