@@ -216,12 +216,19 @@ class TradeJournalManager:
                         timeframe = event.get("timeframe", "")
 
                     score_total_raw = event.get("score_total", event.get("score"))
+                    score_total = None
+                    if score_total_raw is not None:
+                        try:
+                            score_total = float(score_total_raw)
+                        except (TypeError, ValueError):
+                            logger.warning("on_order_opened: score_total is not numeric")
+
                     score_breakdown = event.get("score_breakdown")
                     weights_snapshot = event.get("weights_snapshot")
                     missing_data_policy = event.get("missing_data_policy")
 
                     has_scoring_core = not (
-                        score_total_raw is None
+                        score_total is None
                         or score_breakdown is None
                         or weights_snapshot is None
                         or missing_data_policy is None
@@ -243,7 +250,7 @@ class TradeJournalManager:
                         trace_id,
                         ticket,
                         score_version,
-                        float(score_total_raw),
+                        score_total,
                         json.dumps(score_breakdown),
                         json.dumps(weights_snapshot),
                         missing_data_policy,
