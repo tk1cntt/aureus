@@ -23,6 +23,8 @@ from engine.orders import SimulatedTradeManager
 from engine.ai_validator import AIValidator
 from engine.feature_flags import FeatureFlags
 from engine.symbol_runtime import SymbolRuntimeHealthManager
+from engine.scoring.compute import compute_trade_score
+from engine.scoring.aggregate import update_aggregate_score
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -34,14 +36,49 @@ PRIO_TRADE = 1
 PRIO_PULSE = 2
 _queue_counter = 0
 
+DEFAULT_SCORE_VERSION = "scor-v1.0.0"
+DEFAULT_WEIGHTS_SNAPSHOT = {
+    "profit_outcome": 0.35,
+    "signal_quality": 0.30,
+    "timing_quality": 0.20,
+    "volatility_session": 0.15,
+}
+
 
 # --- Contract Metadata Enrichment (moved from live_engine) ---
 
 def enrich_strategy_decisions_with_contract_metadata(strategy_results: list[dict], normalized_snapshot: dict) -> list[dict]:
-    """Adds required contract metadata to strategy decision payloads."""
+    """Adds required contract metadata + scoring audit fields to decision payloads."""
     enriched: list[dict] = []
     for result in strategy_results:
         decision = dict(result)
+        criteria_input = {
+            "profit_outcome": decision.get("profit_outcome", 0.5),
+            "signal_quality": decision.get("signal_quality", 0.5),
+            "timing_quality": decision.get("timing_quality", 0.5),
+            "volatility_session": decision.get("volatility_session", 0.5),
+        }
+        scoring_result = compute_trade_score(
+            {"criteria": criteria_input, "quality_gate_passed": True},
+            score_version=DEFAULT_SCORE_VERSION,
+            weights_snapshot=DEFAULT_WEIGHTS_SNAPSHOT,
+        )
+
+        if scoring_result.get("score_total") is not None:
+            decision["score_total"] = round(float(scoring_result["score_total"]), 6)
+        else:
+            decision["score_total"] = None
+
+        criteria = scoring_result.get("criteria") or []
+        for criterion in criteria:
+            if "normalized" in criterion and criterion["normalized"] is not None:
+                criterion["normalized"] = round(float(criterion["normalized"]), 6)
+
+        decision["score_breakdown"] = {"criteria": criteria}
+        decision["score_version"] = scoring_result.get("score_version", DEFAULT_SCORE_VERSION)
+        decision["weights_snapshot"] = scoring_result.get("weights_snapshot", dict(DEFAULT_WEIGHTS_SNAPSHOT))
+        decision["missing_data_policy"] = scoring_result.get("missing_data_policy", "impute_neutral_and_flag")
+
         decision["spec_version"] = SPEC_VERSION
         decision["engine_version"] = ENGINE_VERSION
         decision["strategy_version"] = str(decision.get("strategy_version") or "v0")
@@ -544,10 +581,36 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         if strategy_results or registry_rejections:
                             normalized_snapshot = signals_snapshot  # Already normalized by aggregator
 
+                        aggregate_artifact = None
                         if strategy_results:
                             strategy_results = enrich_strategy_decisions_with_contract_metadata(
                                 strategy_results,
                                 normalized_snapshot or {},
+                            )
+                            timeframe = str(payload.get("timeframe") or payload.get("tf") or "unknown")
+                            strategy_name = str(strategy_results[0].get("strategy") or "unknown")
+                            aggregate_artifact = update_aggregate_score(
+                                records=strategy_results,
+                                strategy_name=strategy_name,
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                score_version=DEFAULT_SCORE_VERSION,
+                            )
+                            for res in strategy_results:
+                                res["score_aggregate"] = aggregate_artifact
+                                res["score_aggregate_group_key"] = aggregate_artifact.get("group_key")
+                                res["score_aggregate_score"] = aggregate_artifact.get("aggregate_score")
+                                res["score_aggregate_trade_count"] = aggregate_artifact.get("trade_count")
+                                res["score_aggregate_score_version"] = aggregate_artifact.get("score_version")
+                                res["score_aggregate_dimensions"] = {
+                                    "strategy": aggregate_artifact.get("strategy"),
+                                    "symbol": aggregate_artifact.get("symbol"),
+                                    "timeframe": aggregate_artifact.get("timeframe"),
+                                }
+
+                            logger.info(
+                                f"[EXECUTOR][{symbol}] aggregate_score={aggregate_artifact.get('aggregate_score')} "
+                                f"group_key={aggregate_artifact.get('group_key')} count={aggregate_artifact.get('trade_count')}"
                             )
 
                         if registry_rejections:

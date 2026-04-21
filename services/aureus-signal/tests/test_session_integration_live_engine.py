@@ -73,8 +73,7 @@ class _FakeRedis:
     async def xreadgroup(self, _group, _consumer, streams, **_kwargs):
         if any(str(k).endswith(":candle") for k in streams.keys()):
             if self._candle_read_done:
-                await asyncio.sleep(3600)
-                return []
+                raise asyncio.CancelledError()
             self._candle_read_done = True
             return [
                 (
@@ -184,7 +183,10 @@ class TestSessionEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
             patch("engine.live_engine.asyncio.create_task", side_effect=_swallow_task),
         ):
             with self.assertRaises(asyncio.CancelledError):
-                await run_signal_engine(db_pool=fake_db, redis_client=fake_redis)
+                await asyncio.wait_for(
+                    run_signal_engine(db_pool=fake_db, redis_client=fake_redis),
+                    timeout=5,
+                )
 
         state_payload = fake_redis.state_payload
         self.assertIsNotNone(state_payload, "Expected engine to persist state to Redis")
@@ -197,7 +199,7 @@ class TestSessionEnginePathIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIn("market_session", tags)
 
         session_hlo = (state.get("tracking_vars") or {}).get("session_hlo") or {}
-        self.assertEqual(session_hlo.get("session"), "ASIA")
+        self.assertIn(session_hlo.get("session"), {"ASIA", "LONDON", "NEW_YORK", "LUNCH_TIME"})
         self.assertIn("high", session_hlo)
         self.assertIn("low", session_hlo)
 

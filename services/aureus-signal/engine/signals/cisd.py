@@ -104,7 +104,7 @@ class CISDSignal(BaseSignal):
                         "start_bar": start_bar,
                         "span": span,
                         "category": "cisd",
-                        "value": round((c_c - c_l) / (c_h - c_l) * 100, 2) if c_h != c_l else None,
+                        "value": round(c_c - track_price, 2),
                         "close": c_c,
                         "explain": f"Bullish CISD (span={span}, min={self.min_length}, max={self.max_length})",
                         "inputs": {
@@ -144,7 +144,7 @@ class CISDSignal(BaseSignal):
                         "start_bar": start_bar,
                         "span": span,
                         "category": "cisd",
-                        "value": round((c_h - c_c) / (c_h - c_l) * 100, 2) if c_h != c_l else None,
+                        "value": round(track_price - c_c, 2),
                         "close": c_c,
                         "explain": f"Bearish CISD (span={span}, min={self.min_length}, max={self.max_length})",
                         "inputs": {

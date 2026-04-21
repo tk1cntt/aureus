@@ -541,6 +541,19 @@ class TestSignalDetectorEventFormats:
 class TestDebugLoggingHelper:
     """Tạo debug logging để trace execution flow."""
 
+    def _create_state_with_context(self, symbol="XAUUSD"):
+        state = SymbolState(symbol)
+        state.symbol = symbol
+        state.htf_trend = "BULLISH"
+        state.current_session = "LONDON"
+        state.obs = []
+        state.emas = {21: {"slope": 1.0}}
+        state.log_signal_normalize = []
+        state.strategy_progress = {}
+        state.swing_points = []
+        state.transient_signals = {}
+        return state
+
     def test_add_debug_logging_to_evaluate(self):
         """Test debug logging trong evaluate()."""
         print("\n" + "="*80)

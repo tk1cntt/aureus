@@ -480,6 +480,7 @@ class StrategyRegistry:
                         "reason_code": "OK",
                         "t": int(intent.get("t", bar_ts) or bar_ts),
                         "origin_timestamp": intent.get("origin_timestamp") or intent.get("t") or bar_ts,
+                        "score": intent.get("score"),
                         "side": order_plan.get("direction", intent.get("direction", "BUY")),
                         "entry_type": order_plan.get("entry_type", "MARKET"),
                         "entry_policy": order_plan.get("entry_policy", "IMMEDIATE"),
