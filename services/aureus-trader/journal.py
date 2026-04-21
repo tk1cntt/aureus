@@ -197,6 +197,139 @@ class TradeJournalManager:
                     volume, sl, tp, trace_id
                 )
 
+                if rows and "UPDATE 1" in rows:
+                    journal_row = await conn.fetchrow(
+                        "SELECT id, strategy_name, symbol, timeframe "
+                        "FROM aureus_trade_journal WHERE trace_id = $1",
+                        trace_id,
+                    )
+
+                    if journal_row:
+                        trade_journal_id = journal_row.get("id")
+                        strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
+                        symbol = event.get("symbol", journal_row.get("symbol", ""))
+                        timeframe = event.get("timeframe", journal_row.get("timeframe", ""))
+                    else:
+                        trade_journal_id = None
+                        strategy_name = event.get("strategy_name", "")
+                        symbol = event.get("symbol", "")
+                        timeframe = event.get("timeframe", "")
+
+                    score_total_raw = event.get("score_total", event.get("score"))
+                    score_breakdown = event.get("score_breakdown")
+                    weights_snapshot = event.get("weights_snapshot")
+                    missing_data_policy = event.get("missing_data_policy")
+
+                    has_scoring_core = not (
+                        score_total_raw is None
+                        or score_breakdown is None
+                        or weights_snapshot is None
+                        or missing_data_policy is None
+                    )
+
+                    if has_scoring_core:
+                        score_version = event.get("score_version") or "scor-v1.0.0"
+
+                        await conn.execute(
+                        """
+                        INSERT INTO aureus_trade_evaluations (
+                            trade_journal_id, trace_id, ticket, score_version, score_total,
+                            score_breakdown, weights_snapshot, missing_data_policy,
+                            strategy_name, symbol, timeframe
+                        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
+                        ON CONFLICT (trade_journal_id, score_version) DO NOTHING
+                        """,
+                        trade_journal_id,
+                        trace_id,
+                        ticket,
+                        score_version,
+                        float(score_total_raw),
+                        json.dumps(score_breakdown),
+                        json.dumps(weights_snapshot),
+                        missing_data_policy,
+                        strategy_name,
+                        symbol,
+                        timeframe,
+                    )
+
+                    cisd_direction = event.get("cisd_direction")
+                    ema21 = event.get("ema21")
+                    ema55 = event.get("ema55")
+                    signal_snapshot = event.get("signal_snapshot") or {
+                        "cisd_direction": cisd_direction,
+                        "ema21": ema21,
+                        "ema55": ema55,
+                    }
+                    has_signal_core = not (
+                        cisd_direction is None or ema21 is None or ema55 is None
+                    )
+
+                    if has_signal_core:
+                        signal_schema_version = event.get("signal_schema_version") or "sig-v1.0.0"
+
+                        await conn.execute(
+                            """
+                            INSERT INTO aureus_trade_signal_snapshots (
+                                trade_journal_id, trace_id, ticket, signal_schema_version,
+                                signal_snapshot, cisd_direction, ema21, ema55,
+                                strategy_name, symbol, timeframe
+                            ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)
+                            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
+                            """,
+                            trade_journal_id,
+                            trace_id,
+                            ticket,
+                            signal_schema_version,
+                            json.dumps(signal_snapshot),
+                            cisd_direction,
+                            ema21,
+                            ema55,
+                            strategy_name,
+                            symbol,
+                            timeframe,
+                        )
+
+                    wants_scoring_persist = any(
+                        event.get(k) is not None
+                        for k in (
+                            "score_total", "score", "score_breakdown",
+                            "weights_snapshot", "missing_data_policy", "score_version"
+                        )
+                    )
+                    wants_signal_persist = any(
+                        event.get(k) is not None
+                        for k in (
+                            "signal_snapshot", "signal_schema_version",
+                            "cisd_direction", "ema21", "ema55"
+                        )
+                    )
+
+                    if wants_scoring_persist and not has_scoring_core:
+                        logger.warning(
+                            "on_order_opened: missing scoring core fields "
+                            "(score_total/score_breakdown/weights_snapshot/missing_data_policy)"
+                        )
+
+                    if wants_signal_persist and not has_signal_core:
+                        logger.warning(
+                            "on_order_opened: missing signal core fields "
+                            "(cisd_direction/ema21/ema55)"
+                        )
+
+                    if (
+                        (wants_scoring_persist and not has_scoring_core)
+                        or (wants_signal_persist and not has_signal_core)
+                    ) and not has_scoring_core and not has_signal_core:
+                        logger.warning(
+                            "on_order_opened: skip evaluation/snapshot persist because requested payload is incomplete"
+                        )
+                        return False
+
+                    if not has_scoring_core and not has_signal_core:
+                        logger.debug(
+                            "on_order_opened: no evaluation/snapshot payload provided; journal status updated only"
+                        )
+
             if rows and "UPDATE 1" in rows:
                 logger.info(
                     f"Journal updated: trace_id={trace_id} ticket={ticket} "
