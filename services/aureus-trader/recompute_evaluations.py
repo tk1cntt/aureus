@@ -28,8 +28,10 @@ def _validate_args(args):
         raise ValueError("--signal-schema-version is required")
     if args.batch_size <= 0:
         raise ValueError("--batch-size must be > 0")
-    _parse_iso8601(args.start)
-    _parse_iso8601(args.end)
+    start_dt = _parse_iso8601(args.start)
+    end_dt = _parse_iso8601(args.end)
+    if start_dt > end_dt:
+        raise ValueError("--start must be <= --end")
 
 
 async def recompute_batch(conn, score_version, signal_schema_version, start, end, batch_size=500, weights_snapshot=None):
