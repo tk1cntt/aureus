@@ -47,6 +47,7 @@ class AureusExecutionClient(LiveExecutionClient):
             "invalid_symbol_total": 0,
             "invalid_notional_total": 0,
             "symbol_stream_mismatch_total": 0,
+            "order_open_optional_fallback_total": 0,
         }
 
     @staticmethod
@@ -155,27 +156,29 @@ class AureusExecutionClient(LiveExecutionClient):
         side = str(data.get("side", "")).upper().strip()
         stream_symbol = self._extract_stream_symbol_from_message(data)
 
+        qty_raw = data.get("qty")
+        if qty_raw is None:
+            qty_raw = data.get("quantity")
+            if qty_raw is not None:
+                self.metrics["order_open_optional_fallback_total"] += 1
+
+        if not trace_id or not symbol or not side or qty_raw is None:
+            return False, "ORDER_OPEN_MISSING_CRITICAL_FIELD", []
+
         if stream_symbol and stream_symbol != symbol:
             self.metrics["symbol_stream_mismatch_total"] += 1
             return False, "SYMBOL_STREAM_MISMATCH", []
-
-        if not trace_id:
-            return False, "MISSING_TRACE_ID", []
 
         if trace_id in self._seen_trace_ids:
             self.metrics["duplicate_trace_id_total"] += 1
             return False, "DUPLICATE_TRACE_ID", []
 
-        if symbol not in self._symbol_whitelist:
+        if self._symbol_whitelist and symbol not in self._symbol_whitelist:
             self.metrics["invalid_symbol_total"] += 1
             return False, "SYMBOL_NOT_ALLOWED", []
 
         if side not in {"BUY", "SELL"}:
             return False, "INVALID_SIDE", []
-
-        qty_raw = data.get("qty")
-        if qty_raw is None:
-            return False, "INVALID_QTY", []
 
         try:
             qty = float(qty_raw)
@@ -196,16 +199,26 @@ class AureusExecutionClient(LiveExecutionClient):
             self.metrics["invalid_notional_total"] += 1
             return False, "MAX_NOTIONAL_EXCEEDED", []
 
-        if self._require_sl_tp and ("sl" not in data or "tp" not in data):
+        sl = data.get("sl")
+        tp = data.get("tp")
+        if self._require_sl_tp and (sl is None or tp is None):
             self.metrics["missing_sl_tp_total"] += 1
             return False, "MISSING_SL_TP", []
 
-        sl = data.get("sl")
-        tp = data.get("tp")
-        if sl is not None:
-            sl = float(sl)
-        if tp is not None:
-            tp = float(tp)
+        if "entry_policy" not in data:
+            self.metrics["order_open_optional_fallback_total"] += 1
+        if "expiry_policy" not in data:
+            self.metrics["order_open_optional_fallback_total"] += 1
+        if "backfill_status" not in data:
+            self.metrics["order_open_optional_fallback_total"] += 1
+
+        try:
+            if sl is not None:
+                sl = float(sl)
+            if tp is not None:
+                tp = float(tp)
+        except Exception:
+            return False, "INVALID_SL_TP", []
 
         orders: List[Dict[str, Any]] = [
             {

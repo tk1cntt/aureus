@@ -23,7 +23,7 @@ def test_execution_client_converts_order_intent():
         ]
 
         with patch.object(client, "generate_order") as mock_gen:
-            await client._poll_orders_once()
+            await client._poll_orders_once({"aureus:stream:XAUUSD:orders": "0-0"})
             assert mock_gen.call_count == 3
             entry = mock_gen.call_args_list[0][0][0]
             assert entry["kind"] == "ENTRY"
