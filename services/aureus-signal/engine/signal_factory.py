@@ -21,6 +21,7 @@ from engine.signals.fvg_up import FVGUpSignal
 from engine.signals.fvg_down import FVGDownSignal
 from engine.signals.cisd import CISDSignal
 from engine.signals.cisd_mtf import CISDMultiTFSignal
+from engine.signals.tpo import TPOSignal
 
 logger = get_logger(__name__)
 def _missing_state(reason: str = "NOT_AVAILABLE") -> Dict[str, Any]:
@@ -152,6 +153,10 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "cisd": CISDSignal(
             min_length=cfg.get("cisd_min_length", 0),
             max_length=cfg.get("cisd_max_length", 100),
+        ),
+        "tpo": TPOSignal(
+            value_area_pct=cfg.get("tpo_value_area_pct", 0.7),
+            tick_size=cfg.get("tpo_tick_size", cfg.get("point", 0.01)),
         ),
     }
 
