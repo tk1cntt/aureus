@@ -77,6 +77,26 @@ async def test_evaluation_reject_missing_scoring_core_no_persist(journal_manager
 
 
 @pytest.mark.asyncio
+async def test_order_opened_without_evaluation_payload_updates_journal_only(journal_manager, mock_db_pool):
+    order_opened_event = {
+        "type": "ORDER_OPENED",
+        "trace_id": "tr-55-001",
+        "ticket": 123456789,
+        "open_price": 3348.15,
+    }
+
+    mock_db_pool.set_result("execute", "UPDATE 1")
+    updated = await journal_manager.on_order_opened(order_opened_event)
+    assert updated is True
+
+    eval_queries = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_evaluations" in q[1]
+    ]
+    assert len(eval_queries) == 0
+
+
+@pytest.mark.asyncio
 async def test_evaluation_duplicate_order_opened_same_score_version_no_extra_record(journal_manager, mock_db_pool):
     order_opened_event = {
         "type": "ORDER_OPENED",

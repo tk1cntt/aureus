@@ -79,6 +79,31 @@ async def test_signal_snapshot_reject_missing_signal_core_no_persist(journal_man
 
 
 @pytest.mark.asyncio
+async def test_order_opened_without_signal_payload_updates_journal_only(journal_manager, mock_db_pool):
+    order_opened_event = {
+        "type": "ORDER_OPENED",
+        "trace_id": "tr-55-001",
+        "ticket": 123456789,
+        "open_price": 3348.15,
+        "score_total": 0.801234,
+        "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+        "score_version": "scor-v1.0.0",
+        "weights_snapshot": {"signal_quality": 0.30},
+        "missing_data_policy": "impute_neutral_and_flag",
+    }
+
+    mock_db_pool.set_result("execute", "UPDATE 1")
+    updated = await journal_manager.on_order_opened(order_opened_event)
+    assert updated is True
+
+    snapshot_queries = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
+    ]
+    assert len(snapshot_queries) == 0
+
+
+@pytest.mark.asyncio
 async def test_signal_snapshot_duplicate_order_opened_same_schema_version_no_extra_record(journal_manager, mock_db_pool):
     order_opened_event = {
         "type": "ORDER_OPENED",
