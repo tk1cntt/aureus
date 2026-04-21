@@ -34,9 +34,13 @@ Không mở rộng sang reporting engine đầy đủ hay Telegram delivery ở 
 - **D-10:** Bắt buộc có **missing-data policy explicit** trong payload để không mơ hồ khi criterion bị thiếu dữ liệu.
 - **D-11:** Persist đầy đủ các trường phục vụ audit gồm score_total, score_breakdown, score_version và metadata liên quan normalization/weight snapshot.
 
+### Scoring Output Precision & Persistence
+- **D-12:** Precision chuẩn cho scoring core: lưu nội bộ `score_total` và `criteria[*].normalized` ở mức **6 decimals** để đảm bảo reproducibility ổn định giữa các lần compute/recompute.
+- **D-13:** Trong Phase 54, áp dụng **temporary persistence contract** tại `strategy_executor` (không mở rộng schema DB mới trong phase này); schema chuẩn hóa đầy đủ sẽ thuộc Phase 55 theo EVAL requirements.
+
 ### Claude's Discretion
 - Thiết kế chi tiết công thức normalize cho từng criterion miễn vẫn tuân thủ contract versioning + breakdown đã khóa.
-- Thiết kế mức precision (rounding/decimal) cụ thể miễn nhất quán và truy vết được.
+- Thiết kế mức precision hiển thị (display formatting) ở lớp downstream miễn không làm thay đổi precision lưu nội bộ 6 decimals.
 
 ### Folded Todos
 - **Investigate missing OB events in signal_history_normalized** (todo: `2026-03-28-investigate-sweep-triggers-after-broken-pending.md`)
