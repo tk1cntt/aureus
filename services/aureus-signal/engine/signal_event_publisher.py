@@ -59,6 +59,10 @@ async def publish_strategy_match(
     strat_id = strategy_result.get("strategy_id", "")
     origin_ts = strategy_result.get("origin_timestamp", t)
     trace_id = f"{symbol}:{strat_id}:{origin_ts}"
+    signal_snapshot = strategy_result.get("normalized_signal_snapshot")
+    if not isinstance(signal_snapshot, dict):
+        signal_snapshot = active_signals if isinstance(active_signals, dict) else {}
+
     data = {
         "trace_id": trace_id,
         "symbol": symbol,
@@ -81,6 +85,7 @@ async def publish_strategy_match(
         "entry_price": strategy_result.get("entry_price"),
         "direction": strategy_result.get("side"),
         "active_signals": active_signals or {},
+        "signal_snapshot": signal_snapshot,
     }
     return await publish_signal_event(
         redis_client, symbol, "STRATEGY_MATCH", t, data

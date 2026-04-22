@@ -20,7 +20,7 @@ progress:
 Phase: 55 (evaluation-data-model-pipeline) — EXECUTING
 Plan: 1 of 3
 Status: Executing Phase 55
-Last activity: 2026-04-21 -- Phase 55 execution started
+Last activity: 2026-04-22 - Completed quick task 260422-v1s: Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null.
 
 ## Architecture Decision
 
@@ -37,6 +37,7 @@ Last activity: 2026-04-21 -- Phase 55 execution started
 |---|-------------|------|--------|-----------|
 | 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
 | 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
+| 260422-v1s | Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null. | 2026-04-22 | pending | [260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh](./quick/260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh/) |
 
 ## Accumulated Context
 

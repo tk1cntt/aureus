@@ -50,12 +50,35 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             j.ticket,
             j.strategy_name,
             j.symbol,
-            -- TODO(phase-55 follow-up): replace snapshot timeframe fallback with canonical aureus_trade_journal.timeframe lineage column.
-            COALESCE(ss.signal_snapshot->>'timeframe', 'M1') AS timeframe,
-            ss.signal_snapshot,
-            ss.cisd_direction,
-            ss.ema21,
-            ss.ema55,
+            'M1' AS timeframe,
+            ss.atr,
+            ss.ema_21,
+            ss.ema_34,
+            ss.ema_55,
+            ss.ema_89,
+            ss.ema_100,
+            ss.ema_200,
+            ss.vol_sma_20,
+            ss.session,
+            ss.candle_color_d1,
+            ss.candle_color_h1,
+            ss.candle_color_m30,
+            ss.candle_color_m15,
+            ss.candle_color_m5,
+            ss.bb_m1_up,
+            ss.bb_m1_dn,
+            ss.bb_m5_up,
+            ss.bb_m5_dn,
+            ss.bb_m15_up,
+            ss.bb_m15_dn,
+            ss.bb_m30_up,
+            ss.bb_m30_dn,
+            ss.bb_h1_up,
+            ss.bb_h1_dn,
+            ss.cisd_m5,
+            ss.cisd_m15,
+            ss.cisd_m30,
+            ss.cisd_h1,
             ev.score_breakdown
         FROM aureus_trade_journal j
         LEFT JOIN LATERAL (
@@ -66,7 +89,10 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             LIMIT 1
         ) ev ON true
         LEFT JOIN LATERAL (
-            SELECT signal_snapshot, cisd_direction, ema21, ema55
+            SELECT atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
+                   session, candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
+                   bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn, bb_m30_up, bb_m30_dn,
+                   bb_h1_up, bb_h1_dn, cisd_m5, cisd_m15, cisd_m30, cisd_h1
             FROM aureus_trade_signal_snapshots
             WHERE trade_journal_id = j.id
             ORDER BY created_at DESC
@@ -139,8 +165,6 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
                 score_version,
             )
 
-        signal_snapshot = row.get("signal_snapshot") or {}
-
         sig_insert_result = await conn.execute(
             """
             INSERT INTO aureus_trade_signal_snapshots (
@@ -167,34 +191,34 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             row["ticket"],
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            signal_snapshot.get("atr"),
-            signal_snapshot.get("ema_21", signal_snapshot.get("ema21")),
-            signal_snapshot.get("ema_34"),
-            signal_snapshot.get("ema_55", signal_snapshot.get("ema55")),
-            signal_snapshot.get("ema_89"),
-            signal_snapshot.get("ema_100"),
-            signal_snapshot.get("ema_200"),
-            signal_snapshot.get("vol_sma_20"),
-            signal_snapshot.get("session"),
-            signal_snapshot.get("candle_color_d1"),
-            signal_snapshot.get("candle_color_h1"),
-            signal_snapshot.get("candle_color_m30"),
-            signal_snapshot.get("candle_color_m15"),
-            signal_snapshot.get("candle_color_m5"),
-            signal_snapshot.get("bb_m1_up"),
-            signal_snapshot.get("bb_m1_dn"),
-            signal_snapshot.get("bb_m5_up"),
-            signal_snapshot.get("bb_m5_dn"),
-            signal_snapshot.get("bb_m15_up"),
-            signal_snapshot.get("bb_m15_dn"),
-            signal_snapshot.get("bb_m30_up"),
-            signal_snapshot.get("bb_m30_dn"),
-            signal_snapshot.get("bb_h1_up"),
-            signal_snapshot.get("bb_h1_dn"),
-            signal_snapshot.get("cisd_m5"),
-            signal_snapshot.get("cisd_m15"),
-            signal_snapshot.get("cisd_m30"),
-            signal_snapshot.get("cisd_h1"),
+            row.get("atr"),
+            row.get("ema_21"),
+            row.get("ema_34"),
+            row.get("ema_55"),
+            row.get("ema_89"),
+            row.get("ema_100"),
+            row.get("ema_200"),
+            row.get("vol_sma_20"),
+            row.get("session"),
+            row.get("candle_color_d1"),
+            row.get("candle_color_h1"),
+            row.get("candle_color_m30"),
+            row.get("candle_color_m15"),
+            row.get("candle_color_m5"),
+            row.get("bb_m1_up"),
+            row.get("bb_m1_dn"),
+            row.get("bb_m5_up"),
+            row.get("bb_m5_dn"),
+            row.get("bb_m15_up"),
+            row.get("bb_m15_dn"),
+            row.get("bb_m30_up"),
+            row.get("bb_m30_dn"),
+            row.get("bb_h1_up"),
+            row.get("bb_h1_dn"),
+            row.get("cisd_m5"),
+            row.get("cisd_m15"),
+            row.get("cisd_m30"),
+            row.get("cisd_h1"),
         )
 
         if sig_insert_result == "INSERT 0 1":

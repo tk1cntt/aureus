@@ -164,6 +164,8 @@ class OrderDispatcher:
                         trace_id = order.get("trace_id", "")
                         if trace_id:
                             final["trace_id"] = trace_id
+                        if isinstance(order.get("signal_snapshot"), dict) and not isinstance(final.get("signal_snapshot"), dict):
+                            final["signal_snapshot"] = order.get("signal_snapshot")
                         if final.get("time") is None and final.get("open_time") is None:
                             final["open_time"] = _normalize_mt5_unix_time(final.get("t"))
                         if final.get("time") is not None:

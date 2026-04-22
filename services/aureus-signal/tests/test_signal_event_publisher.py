@@ -85,6 +85,7 @@ class TestPublishStrategyMatch:
             "reason_code": "OK",
             "origin_timestamp": 1700000000,
             "t": 1700000000,
+            "normalized_signal_snapshot": {"atr": 2.5, "ema_21": 3345.12},
         }
 
         result = await publish_strategy_match(mock_redis, "XAUUSD", strategy_result)
@@ -99,6 +100,7 @@ class TestPublishStrategyMatch:
         assert payload["data"]["size_value"] == 1.0
         assert payload["data"]["size_mode"] == "FIXED_UNITS"
         assert payload["data"]["entry_type"] == "MARKET"
+        assert payload["data"]["signal_snapshot"] == {"atr": 2.5, "ema_21": 3345.12}
 
     async def test_publish_strategy_match_with_missing_fields(self):
         mock_redis = AsyncMock()
@@ -112,3 +114,4 @@ class TestPublishStrategyMatch:
         payload = json.loads(call_args[0][1])
         assert payload["data"]["entry_type"] == "MARKET"
         assert payload["data"]["size_mode"] == "FIXED_UNITS"
+        assert payload["data"]["signal_snapshot"] == {}

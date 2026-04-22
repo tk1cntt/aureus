@@ -53,6 +53,20 @@ class TestBuildOrderCommand:
         assert cmd["magic"] == 10001
         assert cmd["comment"] == "CHOCH_UP"
         assert cmd["cmd_id"].startswith("ord-")
+        assert cmd["signal_snapshot"] == {}
+
+    def test_forward_signal_snapshot_payload(self):
+        event = _make_match_event(
+            {
+                "data": {
+                    "signal_snapshot": {"atr": 2.5, "ema_21": 3345.12}
+                }
+            }
+        )
+
+        cmd = build_order_command(event)
+
+        assert cmd["signal_snapshot"] == {"atr": 2.5, "ema_21": 3345.12}
 
     def test_build_limit_order(self):
         event = _make_match_event(
