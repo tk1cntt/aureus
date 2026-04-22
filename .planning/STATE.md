@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
-last_updated: "2026-04-22T12:14:14.310Z"
-last_activity: 2026-04-22 -- Completed quick task 260422-qpv: MT5-only journal timestamps
+last_updated: "2026-04-22T13:05:00.000Z"
+last_activity: 2026-04-22 -- Completed quick task 260422-rfk: signal snapshot schema expansion
 progress:
   total_phases: 4
   completed_phases: 1
@@ -36,6 +36,7 @@ Last activity: 2026-04-21 -- Phase 55 execution started
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
+| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | (pending) | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
 
 ## Accumulated Context
 

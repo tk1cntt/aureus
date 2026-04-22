@@ -26,7 +26,20 @@ def test_eval_score_breakdown_and_missing_data_policy_constraints_exist():
     assert re.search(r"score_breakdown\s+JSONB\s+NOT\s+NULL", sql, re.IGNORECASE)
     assert re.search(r"missing_data_policy\s+TEXT\s+NOT\s+NULL", sql, re.IGNORECASE)
     assert re.search(r"jsonb_typeof\s*\(\s*score_breakdown\s*\)\s*=\s*'object'", sql, re.IGNORECASE)
-    assert re.search(r"jsonb_object_length\s*\(\s*score_breakdown\s*\)\s*>\s*0", sql, re.IGNORECASE)
+    assert re.search(r"score_breakdown\s*<>\s*'\{\}'::jsonb", sql, re.IGNORECASE)
+
+
+def test_eval_weights_snapshot_check_constraint_exists():
+    sql = _sql()
+    assert re.search(r"weights_snapshot\s+JSONB\s+NOT\s+NULL", sql, re.IGNORECASE)
+    assert re.search(r"jsonb_typeof\s*\(\s*weights_snapshot\s*\)\s*=\s*'object'", sql, re.IGNORECASE)
+    assert re.search(r"weights_snapshot\s*<>\s*'\{\}'::jsonb", sql, re.IGNORECASE)
+
+
+def test_eval_indexes_exist_for_runtime_queries():
+    sql = _sql()
+    assert re.search(r"CREATE\s+INDEX\s+idx_trade_eval_symbol_tf_eval_at", sql, re.IGNORECASE)
+    assert re.search(r"CREATE\s+INDEX\s+idx_trade_eval_current_symbol_tf_eval_at", sql, re.IGNORECASE)
 
 
 def test_eval_static_payload_contract_matches_plan_values():

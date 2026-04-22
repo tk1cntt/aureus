@@ -50,7 +50,8 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             j.ticket,
             j.strategy_name,
             j.symbol,
-            j.timeframe,
+            -- TODO(phase-55 follow-up): replace snapshot timeframe fallback with canonical aureus_trade_journal.timeframe lineage column.
+            COALESCE(ss.signal_snapshot->>'timeframe', 'M1') AS timeframe,
             ss.signal_snapshot,
             ss.cisd_direction,
             ss.ema21,
@@ -138,32 +139,62 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
                 score_version,
             )
 
-        signal_snapshot = row.get("signal_snapshot") or {
-            "cisd_direction": row.get("cisd_direction"),
-            "ema21": row.get("ema21"),
-            "ema55": row.get("ema55"),
-        }
+        signal_snapshot = row.get("signal_snapshot") or {}
 
         sig_insert_result = await conn.execute(
             """
             INSERT INTO aureus_trade_signal_snapshots (
-                trade_journal_id, trace_id, ticket, signal_schema_version,
-                signal_snapshot, cisd_direction, ema21, ema55,
-                strategy_name, symbol, timeframe
-            ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)
-            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
+                trade_journal_id, trace_id, ticket, strategy_name, symbol,
+                atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
+                session, candle_color_d1, candle_color_h1, candle_color_m30,
+                candle_color_m15, candle_color_m5,
+                bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
+                bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
+                cisd_m5, cisd_m15, cisd_m30, cisd_h1
+            ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17,
+                $18, $19,
+                $20, $21, $22, $23, $24, $25,
+                $26, $27, $28, $29,
+                $30, $31, $32, $33
+            )
+            ON CONFLICT (trade_journal_id) DO NOTHING
             """,
             row["id"],
             row["trace_id"],
             row["ticket"],
-            signal_schema_version,
-            json.dumps(signal_snapshot or {}),
-            row.get("cisd_direction"),
-            row.get("ema21"),
-            row.get("ema55"),
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            row.get("timeframe") or "",
+            signal_snapshot.get("atr"),
+            signal_snapshot.get("ema_21", signal_snapshot.get("ema21")),
+            signal_snapshot.get("ema_34"),
+            signal_snapshot.get("ema_55", signal_snapshot.get("ema55")),
+            signal_snapshot.get("ema_89"),
+            signal_snapshot.get("ema_100"),
+            signal_snapshot.get("ema_200"),
+            signal_snapshot.get("vol_sma_20"),
+            signal_snapshot.get("session"),
+            signal_snapshot.get("candle_color_d1"),
+            signal_snapshot.get("candle_color_h1"),
+            signal_snapshot.get("candle_color_m30"),
+            signal_snapshot.get("candle_color_m15"),
+            signal_snapshot.get("candle_color_m5"),
+            signal_snapshot.get("bb_m1_up"),
+            signal_snapshot.get("bb_m1_dn"),
+            signal_snapshot.get("bb_m5_up"),
+            signal_snapshot.get("bb_m5_dn"),
+            signal_snapshot.get("bb_m15_up"),
+            signal_snapshot.get("bb_m15_dn"),
+            signal_snapshot.get("bb_m30_up"),
+            signal_snapshot.get("bb_m30_dn"),
+            signal_snapshot.get("bb_h1_up"),
+            signal_snapshot.get("bb_h1_dn"),
+            signal_snapshot.get("cisd_m5"),
+            signal_snapshot.get("cisd_m15"),
+            signal_snapshot.get("cisd_m30"),
+            signal_snapshot.get("cisd_h1"),
         )
 
         if sig_insert_result == "INSERT 0 1":

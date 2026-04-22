@@ -40,9 +40,32 @@ def _strip_excluded_signal_states(signal_snapshot: dict) -> dict:
 
 
 
-def _has_signal_payload(signal_snapshot: dict, cisd_direction, ema21, ema55) -> bool:
-    return bool(signal_snapshot) or any(v is not None for v in (cisd_direction, ema21, ema55))
+def _has_signal_payload(signal_snapshot: dict) -> bool:
+    return bool(signal_snapshot)
 
+
+def _normalize_session_code(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        code = int(value)
+        return code if code in (1, 2, 3) else None
+    mapping = {"ASIAN": 1, "LONDON": 2, "NEWYORK": 3, "NEW_YORK": 3}
+    return mapping.get(str(value).strip().upper())
+
+
+def _normalize_polarity_code(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        code = int(value)
+        return code if code in (-1, 1) else None
+    text = str(value).strip().upper()
+    if text == "BULL":
+        return 1
+    if text == "BEAR":
+        return -1
+    return None
 
 
 VALID_EXIT_REASONS = {
@@ -303,19 +326,8 @@ class TradeJournalManager:
                         timeframe,
                     )
 
-                    cisd_direction = event.get("cisd_direction")
-                    ema21 = event.get("ema21")
-                    ema55 = event.get("ema55")
-
                     raw_signal_snapshot = event.get("signal_snapshot")
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
-
-                    if cisd_direction is not None:
-                        signal_snapshot["cisd_direction"] = cisd_direction
-                    if ema21 is not None:
-                        signal_snapshot["ema21"] = ema21
-                    if ema55 is not None:
-                        signal_snapshot["ema55"] = ema55
 
                     if not signal_snapshot and journal_row:
                         fallback_snapshot = {}
@@ -328,31 +340,95 @@ class TradeJournalManager:
                         signal_snapshot = fallback_snapshot
 
                     signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
-                    has_signal_payload = _has_signal_payload(signal_snapshot, cisd_direction, ema21, ema55)
+                    has_signal_payload = _has_signal_payload(signal_snapshot)
 
                     if has_signal_payload:
-                        signal_schema_version = event.get("signal_schema_version") or "sig-v1.0.0"
+                        atr = signal_snapshot.get("atr", event.get("atr"))
+                        ema_21 = signal_snapshot.get("ema_21", signal_snapshot.get("ema21", event.get("ema_21", event.get("ema21"))))
+                        ema_34 = signal_snapshot.get("ema_34", event.get("ema_34"))
+                        ema_55 = signal_snapshot.get("ema_55", signal_snapshot.get("ema55", event.get("ema_55", event.get("ema55"))))
+                        ema_89 = signal_snapshot.get("ema_89", event.get("ema_89"))
+                        ema_100 = signal_snapshot.get("ema_100", event.get("ema_100"))
+                        ema_200 = signal_snapshot.get("ema_200", event.get("ema_200"))
+                        vol_sma_20 = signal_snapshot.get("vol_sma_20", event.get("vol_sma_20"))
+
+                        session = _normalize_session_code(signal_snapshot.get("session", event.get("session")))
+                        candle_color_d1 = _normalize_polarity_code(signal_snapshot.get("candle_color_d1", event.get("candle_color_d1")))
+                        candle_color_h1 = _normalize_polarity_code(signal_snapshot.get("candle_color_h1", event.get("candle_color_h1")))
+                        candle_color_m30 = _normalize_polarity_code(signal_snapshot.get("candle_color_m30", event.get("candle_color_m30")))
+                        candle_color_m15 = _normalize_polarity_code(signal_snapshot.get("candle_color_m15", event.get("candle_color_m15")))
+                        candle_color_m5 = _normalize_polarity_code(signal_snapshot.get("candle_color_m5", event.get("candle_color_m5")))
+
+                        bb_m1_up = signal_snapshot.get("bb_m1_up", event.get("bb_m1_up"))
+                        bb_m1_dn = signal_snapshot.get("bb_m1_dn", event.get("bb_m1_dn"))
+                        bb_m5_up = signal_snapshot.get("bb_m5_up", event.get("bb_m5_up"))
+                        bb_m5_dn = signal_snapshot.get("bb_m5_dn", event.get("bb_m5_dn"))
+                        bb_m15_up = signal_snapshot.get("bb_m15_up", event.get("bb_m15_up"))
+                        bb_m15_dn = signal_snapshot.get("bb_m15_dn", event.get("bb_m15_dn"))
+                        bb_m30_up = signal_snapshot.get("bb_m30_up", event.get("bb_m30_up"))
+                        bb_m30_dn = signal_snapshot.get("bb_m30_dn", event.get("bb_m30_dn"))
+                        bb_h1_up = signal_snapshot.get("bb_h1_up", event.get("bb_h1_up"))
+                        bb_h1_dn = signal_snapshot.get("bb_h1_dn", event.get("bb_h1_dn"))
+
+                        cisd_m5 = _normalize_polarity_code(signal_snapshot.get("cisd_m5", event.get("cisd_m5")))
+                        cisd_m15 = _normalize_polarity_code(signal_snapshot.get("cisd_m15", event.get("cisd_m15")))
+                        cisd_m30 = _normalize_polarity_code(signal_snapshot.get("cisd_m30", event.get("cisd_m30")))
+                        cisd_h1 = _normalize_polarity_code(signal_snapshot.get("cisd_h1", event.get("cisd_h1")))
 
                         await conn.execute(
                             """
                             INSERT INTO aureus_trade_signal_snapshots (
-                                trade_journal_id, trace_id, ticket, signal_schema_version,
-                                signal_snapshot, cisd_direction, ema21, ema55,
-                                strategy_name, symbol, timeframe
-                            ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)
-                            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
+                                trade_journal_id, trace_id, ticket, strategy_name, symbol,
+                                atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
+                                session, candle_color_d1, candle_color_h1, candle_color_m30,
+                                candle_color_m15, candle_color_m5,
+                                bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
+                                bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
+                                cisd_m5, cisd_m15, cisd_m30, cisd_h1
+                            ) VALUES (
+                                $1, $2, $3, $4, $5,
+                                $6, $7, $8, $9, $10, $11, $12, $13,
+                                $14, $15, $16, $17,
+                                $18, $19,
+                                $20, $21, $22, $23, $24, $25,
+                                $26, $27, $28, $29,
+                                $30, $31, $32, $33
+                            )
+                            ON CONFLICT (trade_journal_id) DO NOTHING
                             """,
                             trade_journal_id,
                             trace_id,
                             ticket,
-                            signal_schema_version,
-                            json.dumps(signal_snapshot),
-                            cisd_direction,
-                            ema21,
-                            ema55,
                             strategy_name,
                             symbol,
-                            timeframe,
+                            atr,
+                            ema_21,
+                            ema_34,
+                            ema_55,
+                            ema_89,
+                            ema_100,
+                            ema_200,
+                            vol_sma_20,
+                            session,
+                            candle_color_d1,
+                            candle_color_h1,
+                            candle_color_m30,
+                            candle_color_m15,
+                            candle_color_m5,
+                            bb_m1_up,
+                            bb_m1_dn,
+                            bb_m5_up,
+                            bb_m5_dn,
+                            bb_m15_up,
+                            bb_m15_dn,
+                            bb_m30_up,
+                            bb_m30_dn,
+                            bb_h1_up,
+                            bb_h1_dn,
+                            cisd_m5,
+                            cisd_m15,
+                            cisd_m30,
+                            cisd_h1,
                         )
 
                     wants_scoring_persist = any(

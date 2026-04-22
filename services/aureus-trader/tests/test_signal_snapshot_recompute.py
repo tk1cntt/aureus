@@ -17,13 +17,11 @@ class MockConn:
                 "strategy_name": "chandelier_breakout",
                 "symbol": "XAUUSD",
                 "timeframe": "M5",
-                "cisd_direction": "bull",
-                "ema21": 3345.12,
-                "ema55": 3338.40,
                 "signal_snapshot": {
-                    "cisd_direction": "bull",
-                    "ema21": 3345.12,
-                    "ema55": 3338.40,
+                    "atr": 2.5,
+                    "ema_21": 3345.12,
+                    "session": 2,
+                    "cisd_m5": 1,
                 },
                 "score_breakdown": {"criteria": {"signal_quality": 0.8}},
             }
@@ -32,7 +30,7 @@ class MockConn:
     async def execute(self, query, *args):
         self.execute_calls.append((query, args))
         if "INSERT INTO aureus_trade_signal_snapshots" in query:
-            key = (args[0], args[3])
+            key = args[0]
             if key in self.inserted_snapshots:
                 return "INSERT 0 0"
             self.inserted_snapshots.add(key)
@@ -76,7 +74,9 @@ async def test_recompute_signal_snapshot_append_history_and_preserve_old_version
     assert stats["signal_snapshot_inserted"] == 1
     snapshot_inserts = [q for q in conn.execute_calls if "INSERT INTO aureus_trade_signal_snapshots" in q[0]]
     assert len(snapshot_inserts) == 1
-    assert snapshot_inserts[0][1][3] == "sig-v1.1.0"
+    assert snapshot_inserts[0][1][5] == 2.5  # atr
+    assert snapshot_inserts[0][1][6] == 3345.12  # ema_21
+    assert snapshot_inserts[0][1][13] == 2  # session
 
 
 @pytest.mark.asyncio
