@@ -35,7 +35,7 @@ Last activity: 2026-04-21 -- Phase 55 execution started
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | pending | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
+| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
 
 ## Accumulated Context
 
