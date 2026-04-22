@@ -85,6 +85,7 @@ class OrderOpenedEvent(BaseModel):
     magic: int
     strategy_name: Optional[str] = None
     trace_id: Optional[str] = None
+    open_time: Optional[int] = None
     t: int
 
 class OrderClosedEvent(BaseModel):
@@ -101,6 +102,7 @@ class OrderClosedEvent(BaseModel):
     magic: int
     strategy_name: Optional[str] = None
     trace_id: Optional[str] = None
+    exit_time: Optional[int] = None
     t: int
 
 class OrderFailedEvent(BaseModel):
@@ -238,6 +240,13 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
 
     if msg_type in ORDER_EVENT_TYPES:
         try:
+            if msg_type == 'ORDER_OPENED' and data.get('open_time') is None and data.get('t') is not None:
+                data = dict(data)
+                data['open_time'] = data.get('t')
+            if msg_type == 'ORDER_CLOSED' and data.get('exit_time') is None and data.get('t') is not None:
+                data = dict(data)
+                data['exit_time'] = data.get('t')
+
             model_class = ORDER_EVENT_TYPES[msg_type]
             valid_event = model_class(**data)
             event_json = valid_event.model_dump_json()

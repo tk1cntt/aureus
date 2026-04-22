@@ -13,6 +13,12 @@ from config import TraderConfig, ORDER_QUEUE_KEY, COMMANDS_CHANNEL, EVENTS_CHANN
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_mt5_unix_time(value):
+    if not isinstance(value, (int, float)):
+        return value
+    return int(value / 1000) if value > 1e11 else int(value)
+
 # Retryable error classifications
 RETRYABLE_NACK_REASONS = {"TRADE_DISABLED"}
 RETRYABLE_FAIL_REASONS = {"MARKET_CLOSED"}
@@ -158,6 +164,12 @@ class OrderDispatcher:
                         trace_id = order.get("trace_id", "")
                         if trace_id:
                             final["trace_id"] = trace_id
+                        if final.get("time") is None and final.get("open_time") is None:
+                            final["open_time"] = _normalize_mt5_unix_time(final.get("t"))
+                        if final.get("time") is not None:
+                            final["time"] = _normalize_mt5_unix_time(final.get("time"))
+                        if final.get("open_time") is not None:
+                            final["open_time"] = _normalize_mt5_unix_time(final.get("open_time"))
                         await self.journal.on_order_opened(final)
                     return
 
@@ -193,6 +205,14 @@ class OrderDispatcher:
                     # Journal: record trade closure (ORDER_CLOSED events don't have cmd_id)
                     if event.get("type") in ("ORDER_CLOSED", "ORDER_CLOSED_PARTIAL"):
                         if self.journal:
+                            if event.get("close_time") is None and event.get("time") is None:
+                                normalized_t = _normalize_mt5_unix_time(event.get("t"))
+                                event["close_time"] = normalized_t
+                                event["time"] = normalized_t
+                            if event.get("time") is not None:
+                                event["time"] = _normalize_mt5_unix_time(event.get("time"))
+                            if event.get("close_time") is not None:
+                                event["close_time"] = _normalize_mt5_unix_time(event.get("close_time"))
                             # Fire-and-forget: don't block event resolution
                             asyncio.create_task(self.journal.on_order_closed(event))
 

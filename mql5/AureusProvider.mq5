@@ -851,18 +851,82 @@ string RetcodeToReason(int retcode)
   }
 
 //+------------------------------------------------------------------+
+//| Resolve open time from MT5 position/order/deal objects             |
+//+------------------------------------------------------------------+
+bool ResolvePositionOpenTimeMs(ulong positionTicket, long &openTimeMs)
+  {
+   if(positionTicket == 0)
+      return false;
+   if(!PositionSelectByTicket(positionTicket))
+      return false;
+   long posTime = (long)PositionGetInteger(POSITION_TIME);
+   if(posTime <= 0)
+      return false;
+   openTimeMs = posTime * 1000;
+   return true;
+  }
+
+bool ResolveOrderSetupTimeMs(ulong orderTicket, long &openTimeMs)
+  {
+   if(orderTicket == 0)
+      return false;
+   if(OrderSelect(orderTicket))
+     {
+      long orderTime = (long)OrderGetInteger(ORDER_TIME_SETUP);
+      if(orderTime > 0)
+        {
+         openTimeMs = orderTime * 1000;
+         return true;
+        }
+     }
+   if(HistoryOrderSelect(orderTicket))
+     {
+      long historyOrderTime = (long)HistoryOrderGetInteger(orderTicket, ORDER_TIME_SETUP);
+      if(historyOrderTime > 0)
+        {
+         openTimeMs = historyOrderTime * 1000;
+         return true;
+        }
+     }
+   return false;
+  }
+
+bool ResolveDealTimeMs(ulong dealTicket, long &dealTimeMs)
+  {
+   if(dealTicket == 0)
+      return false;
+   if(!HistoryDealSelect(dealTicket))
+      return false;
+   long dealTime = (long)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+   if(dealTime <= 0)
+      return false;
+   dealTimeMs = dealTime * 1000;
+   return true;
+  }
+
+bool ResolveOpenEventTimeMs(ulong positionTicket, ulong orderTicket, ulong dealTicket, long &openTimeMs)
+  {
+   if(ResolvePositionOpenTimeMs(positionTicket, openTimeMs))
+      return true;
+   if(ResolveOrderSetupTimeMs(orderTicket, openTimeMs))
+      return true;
+   if(ResolveDealTimeMs(dealTicket, openTimeMs))
+      return true;
+   return false;
+  }
+
+//+------------------------------------------------------------------+
 //| Push ORDER_OPENED event                                            |
 //+------------------------------------------------------------------+
 void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
                      string orderType, double volume, double openPrice,
-                     double sl, double tp, long magic, string strategyName = "", string traceId = "")
+                     double sl, double tp, long magic, string strategyName = "", string traceId = "", long openTimeMs)
   {
-   long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
-                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
-                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, strategyName, traceId, timeMs);
+                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"open_time\":%lld,\"t\":%lld}",
+                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, strategyName, traceId, openTimeMs, openTimeMs);
    g_socket.SendJSON(json);
    if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s strategy=%s", ticket, symbol, strategyName);
   }
@@ -888,15 +952,14 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
                      double commission, double swap, long magic,
-                     string strategyName = "", string traceId = "")
+                     string strategyName = "", string traceId = "", long exitTimeMs)
   {
-   long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
-                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"exit_time\":%lld,\"t\":%lld}",
                     symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
-                    magic, strategyName, traceId, timeMs);
+                    magic, strategyName, traceId, exitTimeMs, exitTimeMs);
    g_socket.SendJSON(json);
    if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s", ticket, profit, strategyName);
   }
@@ -1340,8 +1403,16 @@ void ExecuteOpenOrder(const string &raw)
            {
             if(!terminalEventSent)
               {
+               long openedTimeMs = 0;
+               if(!ResolveOpenEventTimeMs((ulong)result.order, (ulong)result.order, (ulong)result.deal, openedTimeMs))
+                 {
+                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
+                  terminalEventSent = true;
+                  g_ordersFailed++;
+                  return;
+                 }
                PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                               volume, result.price, request.sl, request.tp, magic, strategyName, traceId);
+                               volume, result.price, request.sl, request.tp, magic, strategyName, traceId, openedTimeMs);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1388,8 +1459,16 @@ void ExecuteOpenOrder(const string &raw)
             if(InpDebugMode) PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
             if(!terminalEventSent)
               {
+               long openedTimeMs = 0;
+               if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
+                 {
+                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
+                  terminalEventSent = true;
+                  g_ordersFailed++;
+                  return;
+                 }
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId, openedTimeMs);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1417,8 +1496,16 @@ void ExecuteOpenOrder(const string &raw)
             if(InpDebugMode) PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
             if(!terminalEventSent)
               {
+               long openedTimeMs = 0;
+               if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
+                 {
+                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
+                  terminalEventSent = true;
+                  g_ordersFailed++;
+                  return;
+                 }
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId, openedTimeMs);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1427,8 +1514,16 @@ void ExecuteOpenOrder(const string &raw)
 
          if(!terminalEventSent)
            {
+            long openedTimeMs = 0;
+            if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
+              {
+               PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
+               terminalEventSent = true;
+               g_ordersFailed++;
+               return;
+              }
             PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                            volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId);
+                            volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId, openedTimeMs);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1437,8 +1532,16 @@ void ExecuteOpenOrder(const string &raw)
         {
          if(!terminalEventSent)
            {
+            long openedTimeMs = 0;
+            if(!ResolveOpenEventTimeMs((ulong)result.order, (ulong)result.order, (ulong)result.deal, openedTimeMs))
+              {
+               PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
+               terminalEventSent = true;
+               g_ordersFailed++;
+               return;
+              }
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                            volume, result.price, sl, tp, magic, strategyName, traceId);
+                            volume, result.price, sl, tp, magic, strategyName, traceId, openedTimeMs);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1842,9 +1945,10 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       traceId = StringSubstr(dealComment, commentSep + 1);
      }
 
+   long exitTimeMs = (long)HistoryDealGetInteger(trans.deal, DEAL_TIME) * 1000;
    PushOrderClosed(symbol, ticket, direction, volume,
                    openPrice, closePrice, profit, commission, swap, magic,
-                   strategyName, traceId);
+                   strategyName, traceId, exitTimeMs);
   }
 
 //+------------------------------------------------------------------+
