@@ -301,7 +301,7 @@ class TradeJournalManager:
                         or missing_data_policy is None
                     )
 
-                    if has_scoring_core:
+                    if has_scoring_core and trade_journal_id is not None:
                         score_version = event.get("score_version") or "scor-v1.0.0"
 
                         await conn.execute(
@@ -325,6 +325,8 @@ class TradeJournalManager:
                         symbol,
                         timeframe,
                     )
+                    elif has_scoring_core:
+                        logger.warning("on_order_opened: skip evaluation persist because trade_journal_id is missing")
 
                     raw_signal_snapshot = event.get("signal_snapshot")
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
@@ -342,7 +344,7 @@ class TradeJournalManager:
                     signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
                     has_signal_payload = _has_signal_payload(signal_snapshot)
 
-                    if has_signal_payload:
+                    if has_signal_payload and trade_journal_id is not None:
                         atr = signal_snapshot.get("atr", event.get("atr"))
                         ema_21 = signal_snapshot.get("ema_21", signal_snapshot.get("ema21", event.get("ema_21", event.get("ema21"))))
                         ema_34 = signal_snapshot.get("ema_34", event.get("ema_34"))
@@ -430,6 +432,8 @@ class TradeJournalManager:
                             cisd_m30,
                             cisd_h1,
                         )
+                    elif has_signal_payload:
+                        logger.warning("on_order_opened: skip signal snapshot persist because trade_journal_id is missing")
 
                     wants_scoring_persist = any(
                         event.get(k) is not None
