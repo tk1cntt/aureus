@@ -53,6 +53,7 @@ class CISDMultiTFSignal(BaseSignal):
         self.tf_configs = []
         # Persistent status cache: {"m5": "bullish", "m15": "bearish", ...}
         self._last_status: Dict[str, str] = {}
+        self._last_logged_status: Dict[str, str] = {}
 
         for cfg in tf_configs:
             tf = str(cfg.get("tf", "")).upper()
@@ -166,6 +167,9 @@ class CISDMultiTFSignal(BaseSignal):
             }
 
         symbol = getattr(state_obj, "symbol", "UNKNOWN")
-        logger.info(
-            f"[{symbol}] [CISD-MTF] {status.upper()} on {tf}"
-        )
+        log_key = f"{symbol}:{tf_lower}"
+        if self._last_logged_status.get(log_key) != status:
+            logger.info(
+                f"[{symbol}] [CISD-MTF] {status.upper()} on {tf}"
+            )
+            self._last_logged_status[log_key] = status

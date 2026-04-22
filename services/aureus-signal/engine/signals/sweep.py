@@ -50,6 +50,11 @@ class SweepSignal(BaseSignal):
             status = ob["status"]
             is_bullish = ob.get("ob_type") == "BULLISH"
 
+            def _mark_transition(new_status: str) -> None:
+                if status != new_status:
+                    ob["status"] = new_status
+                    ob["_just_swept"] = True
+
             ob_bottom = self._to_float(ob.get("bottom"))
             ob_top = self._to_float(ob.get("top"))
             
@@ -62,51 +67,41 @@ class SweepSignal(BaseSignal):
                     if c_h < ob_bottom:
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
-                            ob["status"] = "CLEAN_BREAKOUT"
-                            ob["_just_swept"] = True  # Flag to trigger signal this tick
+                            _mark_transition("CLEAN_BREAKOUT")
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
-                        ob["status"] = "STOP_HUNT"
-                        ob["_just_swept"] = True  # Flag to trigger signal this tick
+                        _mark_transition("STOP_HUNT")
                 else:
                     # Not broken yet. Check if it penetrates the bottom
                     if c_l < ob_bottom:
                         if c_c < ob_bottom:
-                            ob["status"] = "BROKEN_PENDING"
-                            ob["_just_swept"] = True # It broke, but it's a sweep attempt
+                            _mark_transition("BROKEN_PENDING") # It broke, but it's a sweep attempt
                         else:
-                            ob["status"] = "SWEEP"
-                            ob["_just_swept"] = True
+                            _mark_transition("SWEEP")
                     elif c_l <= ob_top:
-                        ob["status"] = "TOUCHED"
-                        ob["_just_swept"] = True
+                        _mark_transition("TOUCHED")
             else: # BEARISH
                 if status == "BROKEN_PENDING":
                     # Check for 2 candles complete outside
                     if c_l > ob_top:
                         ob["break_counter"] += 1
                         if ob["break_counter"] >= 2:
-                            ob["status"] = "CLEAN_BREAKOUT"
-                            ob["_just_swept"] = True  # Flag to trigger signal this tick
+                            _mark_transition("CLEAN_BREAKOUT")
                     else:
                         # Reclaim into OB in 1-2 candles -> STOP_HUNT
                         ob["break_counter"] = 0
-                        ob["status"] = "STOP_HUNT"
-                        ob["_just_swept"] = True
+                        _mark_transition("STOP_HUNT")
                 else:
                     # Check if it penetrates the top
                     if c_h > ob_top:
                         if c_c > ob_top:
-                            ob["status"] = "BROKEN_PENDING"
-                            ob["_just_swept"] = True
+                            _mark_transition("BROKEN_PENDING")
                         else:
-                            ob["status"] = "SWEEP"
-                            ob["_just_swept"] = True
+                            _mark_transition("SWEEP")
                     elif c_h >= ob_bottom:
-                        ob["status"] = "TOUCHED"
-                        ob["_just_swept"] = True
-            if status != "PENDING":
+                        _mark_transition("TOUCHED")
+            if ob.get("_just_swept") and ob.get("status") != "PENDING":
                 logger.info(f"[t={ob.get('t_start')}] [{ob.get('symbol')}][_update_ob_states] OB Status: {ob.get('status')}")
         # Garbage Collection đã bị gỡ bỏ hoàn toàn.
         # Engine dựa vào chu kì Daily Reset (5h sáng GMT+7) thông qua lệnh RECALCULATE

@@ -11,12 +11,19 @@ class GapDetector:
     async def find_gaps(self, symbol: str, timeframe: str = 'M1', lookback_hours: int = 24) -> List[Dict[str, Any]]:
         """Find missing data ranges in the last X hours."""
         query = """
-        WITH time_series AS (
+        WITH anchor AS (
+            SELECT COALESCE(MAX(c.time), date_trunc('minute', now())) AS latest_candle_time
+            FROM aureus_candles c
+            WHERE c.symbol = $1
+              AND c.timeframe = $2
+        ),
+        time_series AS (
             SELECT generate_series(
-                date_trunc('minute', now() - ($3::int * interval '1 hour')),
-                date_trunc('minute', now() - interval '2 minutes'),
+                date_trunc('minute', a.latest_candle_time - ($3::int * interval '1 hour')),
+                date_trunc('minute', a.latest_candle_time - interval '2 minutes'),
                 interval '1 minute'
             ) AS bucket
+            FROM anchor a
         ),
         gaps AS (
             SELECT ts.bucket
