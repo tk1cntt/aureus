@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
-last_updated: "2026-04-21T16:17:28.162Z"
-last_activity: 2026-04-21 -- Phase 55 execution started
+last_updated: "2026-04-22T12:14:14.310Z"
+last_activity: 2026-04-22 -- Completed quick task 260422-qpv: MT5-only journal timestamps
 progress:
   total_phases: 4
   completed_phases: 1
@@ -30,6 +30,12 @@ Last activity: 2026-04-21 -- Phase 55 execution started
 - Aureus handles: signal pipeline (18 signals via `AureusSignalActor`), strategy evaluation (via `AureusStrategyAdapter`)
 - Output: TimescaleDB (backtest results) → Custom UI (primary) + Grafana (supplementary)
 - Existing infra leveraged: `aureus-nautilus-node`, `aureus-nautilus-bridge`, TimescaleDB, Grafana, Prometheus
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | pending | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
 
 ## Accumulated Context
 

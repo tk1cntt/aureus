@@ -12,6 +12,39 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+EXCLUDED_SIGNAL_STATE_TAGS = {
+    "zigzag_state",
+    "ob_state",
+    "choch_state",
+    "fvg_state",
+    "trend_filter_state",
+}
+
+
+def _strip_excluded_signal_states(signal_snapshot: dict) -> dict:
+    cleaned = dict(signal_snapshot or {})
+
+    for key in EXCLUDED_SIGNAL_STATE_TAGS:
+        cleaned.pop(key, None)
+
+    active_signals = cleaned.get("active_signals")
+    if isinstance(active_signals, list):
+        filtered = []
+        for item in active_signals:
+            if isinstance(item, dict) and item.get("tag") in EXCLUDED_SIGNAL_STATE_TAGS:
+                continue
+            filtered.append(item)
+        cleaned["active_signals"] = filtered
+
+    return cleaned
+
+
+
+def _has_signal_payload(signal_snapshot: dict, cisd_direction, ema21, ema55) -> bool:
+    return bool(signal_snapshot) or any(v is not None for v in (cisd_direction, ema21, ema55))
+
+
+
 VALID_EXIT_REASONS = {
     "TP_HIT", "SL_HIT", "TRAILING_STOP", "MANUAL_CLOSE", "SIGNAL_EXIT"
 }
@@ -168,13 +201,24 @@ class TradeJournalManager:
             volume = event.get("volume", event.get("lots"))
             position_id = event.get("position_id")
             open_time = event.get("time", event.get("open_time"))
+            if open_time is None:
+                logger.warning("on_order_opened: missing MT5 order time (time/open_time)")
+                return False
 
-            if open_time and isinstance(open_time, (int, float)):
+            if isinstance(open_time, (int, float)):
                 entry_time = datetime.fromtimestamp(open_time, tz=timezone.utc)
             elif isinstance(open_time, str):
-                entry_time = datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+                try:
+                    entry_time = datetime.fromisoformat(open_time.replace("Z", "+00:00"))
+                except ValueError:
+                    logger.warning(f"on_order_opened: invalid MT5 order time '{open_time}'")
+                    return False
             else:
-                entry_time = datetime.now(tz=timezone.utc)
+                logger.warning(f"on_order_opened: unsupported MT5 order time type '{type(open_time).__name__}'")
+                return False
+
+            if entry_time.tzinfo is None:
+                entry_time = entry_time.replace(tzinfo=timezone.utc)
 
             query = """
                 UPDATE aureus_trade_journal
@@ -199,7 +243,7 @@ class TradeJournalManager:
 
                 if rows and "UPDATE 1" in rows:
                     journal_row = await conn.fetchrow(
-                        "SELECT id, strategy_name, symbol, timeframe "
+                        "SELECT id, strategy_name, symbol, active_signals, context_filters "
                         "FROM aureus_trade_journal WHERE trace_id = $1",
                         trace_id,
                     )
@@ -262,16 +306,31 @@ class TradeJournalManager:
                     cisd_direction = event.get("cisd_direction")
                     ema21 = event.get("ema21")
                     ema55 = event.get("ema55")
-                    signal_snapshot = event.get("signal_snapshot") or {
-                        "cisd_direction": cisd_direction,
-                        "ema21": ema21,
-                        "ema55": ema55,
-                    }
-                    has_signal_core = not (
-                        cisd_direction is None or ema21 is None or ema55 is None
-                    )
 
-                    if has_signal_core:
+                    raw_signal_snapshot = event.get("signal_snapshot")
+                    signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
+
+                    if cisd_direction is not None:
+                        signal_snapshot["cisd_direction"] = cisd_direction
+                    if ema21 is not None:
+                        signal_snapshot["ema21"] = ema21
+                    if ema55 is not None:
+                        signal_snapshot["ema55"] = ema55
+
+                    if not signal_snapshot and journal_row:
+                        fallback_snapshot = {}
+                        journal_active_signals = journal_row.get("active_signals")
+                        journal_context_filters = journal_row.get("context_filters")
+                        if journal_active_signals:
+                            fallback_snapshot["active_signals"] = journal_active_signals
+                        if journal_context_filters:
+                            fallback_snapshot["context_filters"] = journal_context_filters
+                        signal_snapshot = fallback_snapshot
+
+                    signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
+                    has_signal_payload = _has_signal_payload(signal_snapshot, cisd_direction, ema21, ema55)
+
+                    if has_signal_payload:
                         signal_schema_version = event.get("signal_schema_version") or "sig-v1.0.0"
 
                         await conn.execute(
@@ -303,13 +362,6 @@ class TradeJournalManager:
                             "weights_snapshot", "missing_data_policy", "score_version"
                         )
                     )
-                    wants_signal_persist = any(
-                        event.get(k) is not None
-                        for k in (
-                            "signal_snapshot", "signal_schema_version",
-                            "cisd_direction", "ema21", "ema55"
-                        )
-                    )
 
                     if wants_scoring_persist and not has_scoring_core:
                         logger.warning(
@@ -317,22 +369,7 @@ class TradeJournalManager:
                             "(score_total/score_breakdown/weights_snapshot/missing_data_policy)"
                         )
 
-                    if wants_signal_persist and not has_signal_core:
-                        logger.warning(
-                            "on_order_opened: missing signal core fields "
-                            "(cisd_direction/ema21/ema55)"
-                        )
-
-                    if (
-                        (wants_scoring_persist and not has_scoring_core)
-                        or (wants_signal_persist and not has_signal_core)
-                    ) and not has_scoring_core and not has_signal_core:
-                        logger.warning(
-                            "on_order_opened: skip evaluation/snapshot persist because requested payload is incomplete"
-                        )
-                        return False
-
-                    if not has_scoring_core and not has_signal_core:
+                    if not has_scoring_core and not has_signal_payload:
                         logger.debug(
                             "on_order_opened: no evaluation/snapshot payload provided; journal status updated only"
                         )
@@ -415,12 +452,24 @@ class TradeJournalManager:
             swap = event.get("swap", 0) or 0
 
             close_time_raw = event.get("close_time", event.get("time"))
-            if close_time_raw and isinstance(close_time_raw, (int, float)):
+            if close_time_raw is None:
+                logger.warning("on_order_closed: missing MT5 close time (close_time/time)")
+                return False
+
+            if isinstance(close_time_raw, (int, float)):
                 exit_time = datetime.fromtimestamp(close_time_raw, tz=timezone.utc)
             elif isinstance(close_time_raw, str):
-                exit_time = datetime.fromisoformat(close_time_raw.replace("Z", "+00:00"))
+                try:
+                    exit_time = datetime.fromisoformat(close_time_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    logger.warning(f"on_order_closed: invalid MT5 close time '{close_time_raw}'")
+                    return False
             else:
-                exit_time = datetime.now(tz=timezone.utc)
+                logger.warning(f"on_order_closed: unsupported MT5 close time type '{type(close_time_raw).__name__}'")
+                return False
+
+            if exit_time.tzinfo is None:
+                exit_time = exit_time.replace(tzinfo=timezone.utc)
 
             # Exit reason
             exit_reason = event.get("close_reason", event.get("reason", ""))

@@ -134,6 +134,21 @@ class TestOnOrderOpenedInputValidation:
         result = await journal_manager.on_order_opened(valid_order_opened_event)
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_TJ_IN_10c_missing_mt5_order_time(self, journal_manager, valid_order_opened_event):
+        """Missing MT5 time/open_time → returns False (no fallback allowed)."""
+        valid_order_opened_event.pop("time", None)
+        valid_order_opened_event.pop("open_time", None)
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_TJ_IN_10d_invalid_mt5_order_time_string(self, journal_manager, valid_order_opened_event):
+        """Invalid MT5 time string → returns False (no fallback allowed)."""
+        valid_order_opened_event["time"] = "not-a-time"
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+        assert result is False
+
 
 class TestOnOrderClosedInputValidation:
     """TJ-IN-11 through TJ-IN-13: Input validation for on_order_closed."""
@@ -611,7 +626,7 @@ class TestBranchCoverage:
 
     @pytest.mark.asyncio
     async def test_missing_close_time(self, journal_manager, valid_order_closed_event, mock_db_pool):
-        """Missing close_time → uses current time."""
+        """Missing close_time → returns False (no fallback allowed)."""
         valid_order_closed_event["close_time"] = None
         valid_order_closed_event["time"] = None
         mock_db_pool.set_result("fetchrow", {
@@ -624,7 +639,7 @@ class TestBranchCoverage:
         mock_db_pool.set_result("fetchval", 1)
 
         result = await journal_manager.on_order_closed(valid_order_closed_event)
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_origin_timestamp_datetime_object(self, journal_manager, mock_db_pool):
@@ -756,13 +771,13 @@ class TestBranchCoverage:
 
     @pytest.mark.asyncio
     async def test_on_order_opened_time_is_none(self, journal_manager, valid_order_opened_event, mock_db_pool):
-        """open_time is None → uses current time."""
+        """open_time is None → returns False (no fallback allowed)."""
         valid_order_opened_event["time"] = None
         valid_order_opened_event["open_time"] = None
         mock_db_pool.set_result("execute", "UPDATE 1")
 
         result = await journal_manager.on_order_opened(valid_order_opened_event)
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_on_order_opened_time_is_string(self, journal_manager, valid_order_opened_event, mock_db_pool):
