@@ -36,7 +36,7 @@ Last activity: 2026-04-21 -- Phase 55 execution started
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
-| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | (pending) | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
+| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
 
 ## Accumulated Context
 
