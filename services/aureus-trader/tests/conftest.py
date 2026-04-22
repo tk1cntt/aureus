@@ -34,7 +34,9 @@ class MockDBConnection:
             "trace_id": args[0],
             "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
             "direction": "BUY",
-            "symbol": "XAUUSD"
+            "symbol": "XAUUSD",
+            "active_signals": [{"tag": "liquidity_sweep", "status": "active"}],
+            "context_filters": {"session": "london"}
         })
 
     async def execute(self, query, *args):

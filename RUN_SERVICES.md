@@ -151,6 +151,17 @@ wsl -d Aureus -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail 
 
 4. Nếu có đổi code backend: chỉ cần `docker restart <service>`, KHÔNG cần rebuild (trừ khi đổi requirements.txt/Dockerfile).
 
+5. Với phase có DB migration (ví dụ Phase 55), bắt buộc verify runtime schema:
+```powershell
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('aureus_trade_evaluations','aureus_trade_signal_snapshots');\""
+```
+
+6. Verify runtime persistence (không chỉ test pass):
+```powershell
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, evaluated_at FROM aureus_trade_evaluations ORDER BY evaluated_at DESC LIMIT 5;\""
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, created_at FROM aureus_trade_signal_snapshots ORDER BY created_at DESC LIMIT 5;\""
+```
+
 ---
 
 ## 6) Lỗi Thường Gặp & Cách Xử Lý Nhanh

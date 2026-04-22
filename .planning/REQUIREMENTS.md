@@ -20,6 +20,54 @@
 - [ ] **EVAL-03**: Backfill/recompute pipeline cho phép tính lại điểm khi thay đổi scoring weights/version mà không mất lịch sử phiên bản cũ.
 - [ ] **EVAL-04**: Data quality guards cho evaluation pipeline (idempotency key, uniqueness, null/constraint checks) để tránh duplicate/sai lệch.
 - [ ] **SIGNAL-SNAPSHOT-01**: Lưu signal snapshot theo mô hình hybrid (JSONB raw + typed hot columns + index theo symbol/timeframe/time-range) để hỗ trợ vừa mở rộng schema vừa query nhanh trên volume lớn; các field dẫn xuất (ví dụ `ema21_above_ema55`) không persist vật lý, tính downstream bằng pandas/SQL expression.
+- [ ] **EVAL-RUNTIME-01**: Runtime DB schema parity là gate bắt buộc trước khi mark complete phase dữ liệu (bảng/index/constraints phải tồn tại trên DB dev thật, không chỉ trong file migration/test unit).
+- [ ] **EVAL-RUNTIME-02**: Migration compatibility phải được thiết kế theo capability của PostgreSQL runtime; không dùng biểu thức CHECK không tương thích version engine.
+- [ ] **EVAL-RUNTIME-03**: Trường business-critical cho recompute (ví dụ `timeframe`) phải có nguồn chuẩn trong schema lineage; fallback từ JSON chỉ là tạm thời và phải có kế hoạch loại bỏ.
+- [ ] **EVAL-RUNTIME-04**: Bắt buộc có bằng chứng E2E persistence runtime (row thật mới nhất cho evaluation + signal snapshot) trong checklist nghiệm thu.
+
+### Architecture Decision Note — Phase 55 Runtime Parity
+
+- **ADN-55-01 (Chosen):** Hybrid strategy: (1) migration compatibility theo runtime PG capability + (2) runtime schema gate + (3) migration tiếp theo để chuẩn hóa lineage field `timeframe` tại `aureus_trade_journal`.
+- **Rationale:** Giữ tính tương thích vận hành ngắn hạn nhưng vẫn tiến tới data model đúng về dài hạn, tránh false-positive "phase complete".
+- **Execution guardrails:**
+  - Không chốt phase nếu thiếu `aureus_trade_evaluations` hoặc `aureus_trade_signal_snapshots` trên runtime DB.
+  - Không chốt phase nếu recompute còn phụ thuộc fallback JSON mà chưa có kế hoạch migration lineage.
+  - Mọi thay đổi migration phải pass cả test migration + query runtime kiểm chứng.
+
+### Decision-linked Test Addendum
+
+- [ ] **TC-EVAL-RUNTIME-001:** Runtime DB có đủ bảng phase 55 (`aureus_trade_evaluations`, `aureus_trade_signal_snapshots`).
+- [ ] **TC-EVAL-RUNTIME-002:** Runtime DB có đủ index/unique chính cho hai bảng phase 55.
+- [ ] **TC-EVAL-RUNTIME-003:** Chạy recompute trên window thực, có row mới ở cả hai bảng (kiểm tra `MAX(evaluated_at)` và `MAX(created_at)`).
+- [ ] **TC-EVAL-RUNTIME-004:** Không còn tình trạng pass test nhưng thiếu schema runtime.
+- [ ] **TC-EVAL-RUNTIME-005:** Có ticket follow-up migration để chuẩn hóa nguồn `timeframe` từ schema lineage, không phụ thuộc JSON fallback vĩnh viễn.
+
+### Trade-off Record (for future review)
+
+- Chọn compatibility migration giúp deploy nhanh hơn nhưng tăng chi phí quản trị nhiều biến thể migration.
+- Giữ fallback `timeframe` từ snapshot giúp không block runtime ngay, nhưng tăng rủi ro semantic drift nếu kéo dài.
+- Chuẩn hóa lineage `timeframe` bằng migration riêng tăng effort ngắn hạn, đổi lại giảm rủi ro dữ liệu sai trong recompute dài hạn.
+
+### Adversarial Risks (must monitor)
+
+- Runtime nâng cấp PostgreSQL/Timescale có thể làm compatibility expression hiện tại không còn tối ưu hoặc sai planner.
+- Fallback `timeframe='M1'` có thể tạo dữ liệu đánh giá sai nếu trade thực tế ở TF khác.
+- Migration apply thành công nhưng pipeline event không đẩy đủ trường scoring/snapshot vẫn làm bảng rỗng và tạo false confidence.
+
+### Required Runtime Evidence (sign-off)
+
+- `SELECT tablename FROM pg_tables ... IN ('aureus_trade_evaluations','aureus_trade_signal_snapshots')`
+- `SELECT indexname FROM pg_indexes ...`
+- `SELECT COUNT(*), MAX(evaluated_at) FROM aureus_trade_evaluations`
+- `SELECT COUNT(*), MAX(created_at) FROM aureus_trade_signal_snapshots`
+- Mẫu 5 rows mới nhất có `trace_id, symbol, timeframe, version` cho cả hai bảng.
+
+### Follow-up Constraint
+
+- Không merge milestone v1.6 nếu chưa có phase follow-up chuẩn hóa `timeframe` lineage trong `aureus_trade_journal`.
+
+**Last architectural review update:** 2026-04-22
+
 
 ### Reporting Engine (RPT)
 

@@ -492,6 +492,6 @@ class TestEdgeCases:
             await db_writer.process_batch()
             conn.executemany.assert_called_once()
             _, data_rows = conn.executemany.call_args[0]
-            assert data_rows[0][8] == "PENDING"
+            assert data_rows[0][8] == "SENT"
         import asyncio
         asyncio.run(run_test())

@@ -9,6 +9,8 @@ Khi tạo phase mới phải tạo từ phase tiếp theo đang làm. K đư
 
 Tên của từng phase phải là tiếng anh và ngắn gọn.
 
+Khi sửa bất kỳ tính năng nào liên quan tới database phải test e2e với database để xác nhận đã chỉnh sửa và tạo data thành công.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**

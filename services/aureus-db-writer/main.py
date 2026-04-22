@@ -533,9 +533,15 @@ class DBWriter:
                         entry_type = order_data.get('entry_type', order_data.get('type', ''))
                         status = order_data.get('status', 'PENDING')
 
-                        # Normalize producer status values to state machine compatible values
-                        if status in ('PENDING_AI', 'ACTIVE'):
+                        # Normalize producer values to state machine compatible statuses
+                        if status == 'PENDING_AI':
                             status = 'PENDING'
+                        elif event_type == 'ORDER_OPEN':
+                            status = 'SENT'
+                        elif event_type == 'ORDER_CLOSE':
+                            status = 'CLOSED'
+                        elif status == 'ACTIVE':
+                            status = 'SENT'
 
                         # Skip events that are not real order states
                         if direction not in ('BUY', 'SELL'):
@@ -580,10 +586,10 @@ class DBWriter:
                                 rejected_msg_ids.append((stream, msg_id))
                                 continue
                         else:
-                            # New record: first status must be PENDING
-                            if new_status != 'PENDING':
+                            # New record: allow bootstrap from PENDING or SENT (producer may emit ORDER_OPEN directly)
+                            if new_status not in ('PENDING', 'SENT'):
                                 logger.warning(
-                                    f"[GLOBAL] [process_batch] Warning: New trade must start as PENDING, "
+                                    f"[GLOBAL] [process_batch] Warning: New trade must start as PENDING/SENT, "
                                     f"got '{new_status}' for trace_id={trace_id}. Skipping."
                                 )
                                 rejected_msg_ids.append((stream, msg_id))
