@@ -158,9 +158,16 @@ wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus 
 
 6. Verify runtime persistence (không chỉ test pass):
 ```powershell
+# Đếm tổng record để xác nhận pipeline có ghi dữ liệu
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT COUNT(*) AS eval_rows FROM aureus_trade_evaluations;\""
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT COUNT(*) AS snapshot_rows FROM aureus_trade_signal_snapshots;\""
+
+# Kiểm tra bản ghi mới nhất (trace_id/symbol/timeframe)
 wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, evaluated_at FROM aureus_trade_evaluations ORDER BY evaluated_at DESC LIMIT 5;\""
 wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, created_at FROM aureus_trade_signal_snapshots ORDER BY created_at DESC LIMIT 5;\""
 ```
+
+7. Gate sign-off phase 55: chỉ mark complete khi cả 2 bảng tồn tại và có record runtime mới.
 
 ---
 

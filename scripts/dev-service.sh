@@ -18,5 +18,9 @@ docker compose -f docker-compose.dev.yml --env-file .env build aureus-gateway-de
 echo "🚀 Starting Dev services..."
 docker compose -f docker-compose.dev.yml --env-file .env up -d redis-dev timescaledb-dev aureus-gateway-dev aureus-db-writer-dev aureus-signal-dev aureus-strategy-executor-dev aureus-dashboard-api-dev
 
+echo "🔎 Verifying Phase 55 runtime schema..."
+docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('aureus_trade_evaluations','aureus_trade_signal_snapshots') ORDER BY tablename;"
+
 echo "--------------------------------------------------------"
 echo "✅ Dev Docker Services are running!"
+echo "✅ Runtime schema check executed for Phase 55 tables"
