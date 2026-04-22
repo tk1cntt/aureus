@@ -49,8 +49,23 @@ def test_signal_snapshot_old_columns_removed():
         assert not re.search(rf"\b{col}\b", snapshot_sql, re.IGNORECASE)
 
 
+def test_signal_snapshot_unique_constraint_exists():
+    sql = _sql()
+    snapshot_sql = _snapshot_table_sql(sql)
+    assert re.search(r"CONSTRAINT\s+uq_trade_signal_snapshot_trade\s+UNIQUE\s*\(\s*trade_journal_id\s*\)", snapshot_sql, re.IGNORECASE)
+
+
 def test_signal_snapshot_indexes_exist_for_runtime_queries():
     sql = _sql()
     assert re.search(r"CREATE\s+INDEX\s+idx_trade_signal_snapshot_symbol_created_at", sql, re.IGNORECASE)
+    assert re.search(r"ON\s+aureus_trade_signal_snapshots\s*\(\s*symbol\s*,\s*created_at\s+DESC\s*\)", sql, re.IGNORECASE)
     assert re.search(r"CREATE\s+INDEX\s+idx_trade_signal_snapshot_symbol_session_created_at", sql, re.IGNORECASE)
+    assert re.search(r"ON\s+aureus_trade_signal_snapshots\s*\(\s*symbol\s*,\s*session\s*,\s*created_at\s+DESC\s*\)", sql, re.IGNORECASE)
     assert re.search(r"CREATE\s+INDEX\s+idx_trade_signal_snapshot_created_at_brin", sql, re.IGNORECASE)
+    assert re.search(r"ON\s+aureus_trade_signal_snapshots\s+USING\s+BRIN\s*\(\s*created_at\s*\)", sql, re.IGNORECASE)
+
+
+def test_signal_snapshot_phase55_tables_exist_in_migration():
+    sql = _sql()
+    assert re.search(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_evaluations", sql, re.IGNORECASE)
+    assert re.search(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_signal_snapshots", sql, re.IGNORECASE)

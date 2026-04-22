@@ -36,10 +36,34 @@ def test_eval_weights_snapshot_check_constraint_exists():
     assert re.search(r"weights_snapshot\s*<>\s*'\{\}'::jsonb", sql, re.IGNORECASE)
 
 
+def _evaluation_table_sql(sql: str) -> str:
+    match = re.search(
+        r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_evaluations\s*\((.*?)\);",
+        sql,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert match is not None
+    return match.group(1)
+
+
+def test_eval_phase55_tables_exist_in_migration():
+    sql = _sql()
+    assert re.search(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_evaluations", sql, re.IGNORECASE)
+    assert re.search(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_signal_snapshots", sql, re.IGNORECASE)
+
+
 def test_eval_indexes_exist_for_runtime_queries():
     sql = _sql()
     assert re.search(r"CREATE\s+INDEX\s+idx_trade_eval_symbol_tf_eval_at", sql, re.IGNORECASE)
+    assert re.search(r"ON\s+aureus_trade_evaluations\s*\(\s*symbol\s*,\s*timeframe\s*,\s*evaluated_at\s+DESC\s*\)", sql, re.IGNORECASE)
     assert re.search(r"CREATE\s+INDEX\s+idx_trade_eval_current_symbol_tf_eval_at", sql, re.IGNORECASE)
+    assert re.search(r"WHERE\s+is_current\s*=\s*TRUE", sql, re.IGNORECASE)
+
+
+def test_eval_jsonb_shape_checks_scoped_to_table():
+    table_sql = _evaluation_table_sql(_sql())
+    assert re.search(r"CONSTRAINT\s+chk_trade_eval_breakdown_shape", table_sql, re.IGNORECASE)
+    assert re.search(r"CONSTRAINT\s+chk_trade_eval_weights_shape", table_sql, re.IGNORECASE)
 
 
 def test_eval_static_payload_contract_matches_plan_values():
