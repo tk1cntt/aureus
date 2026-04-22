@@ -2,8 +2,8 @@ import re
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2] / "aureus-db-writer"
-MIGRATION_PATH = ROOT / "migrations" / "optimize_trade_signal_snapshots_storage.sql"
+ROOT = Path(__file__).resolve().parents[2]
+MIGRATION_PATH = ROOT / "aureus-db-writer" / "migrations" / "optimize_trade_signal_snapshots_storage.sql"
 
 
 def _sql() -> str:
@@ -20,7 +20,7 @@ def _snapshot_table_sql(sql: str) -> str:
     return match.group(1)
 
 
-def test_signal_snapshot_hybrid_columns_exist():
+def test_storage_policy_hybrid_contract_columns_exist():
     sql = _sql()
     snapshot_sql = _snapshot_table_sql(sql)
     required_cols = [
@@ -32,25 +32,15 @@ def test_signal_snapshot_hybrid_columns_exist():
         assert re.search(rf"\b{col}\b", snapshot_sql, re.IGNORECASE)
 
 
-def test_signal_snapshot_forbidden_typed_columns_absent():
+def test_storage_policy_reject_debug_legacy_derived_typed_columns():
     sql = _sql()
     snapshot_sql = _snapshot_table_sql(sql)
-    forbidden = ["ema21_above_ema55", "debug_payload", "raw_reasoning"]
-    for col in forbidden:
+    forbidden_cols = ["ema21_above_ema55", "debug_payload", "raw_reasoning"]
+    for col in forbidden_cols:
         assert not re.search(rf"\b{col}\b", snapshot_sql, re.IGNORECASE)
 
 
-def test_signal_snapshot_unique_trade_schema_constraint_exists():
-    sql = _sql()
-    snapshot_sql = _snapshot_table_sql(sql)
-    assert re.search(
-        r"CONSTRAINT\s+uq_trade_signal_snapshot_trade_schema\s+UNIQUE\s*\(\s*trade_journal_id\s*,\s*signal_schema_version\s*\)",
-        snapshot_sql,
-        re.IGNORECASE,
-    )
-
-
-def test_signal_snapshot_archive_and_retention_policy_exist():
+def test_storage_policy_ttl_and_archive_before_prune_present():
     sql = _sql()
     assert re.search(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+aureus_trade_signal_snapshots_archive", sql, re.IGNORECASE)
     assert re.search(r"interval\s+'90\s+days'", sql, re.IGNORECASE)

@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2] / "aureus-db-writer"
+ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_PATH = ROOT / "migrations" / "optimize_trade_signal_snapshots_storage.sql"
 
 
