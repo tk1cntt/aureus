@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from recompute_evaluations import recompute_batch
@@ -17,34 +19,11 @@ class MockConn:
                 "strategy_name": "chandelier_breakout",
                 "symbol": "XAUUSD",
                 "timeframe": "M5",
-                "atr": 2.5,
-                "ema_21": 3345.12,
-                "ema_34": None,
-                "ema_55": None,
-                "ema_89": None,
-                "ema_100": None,
-                "ema_200": None,
-                "vol_sma_20": None,
-                "session": 2,
-                "candle_color_d1": None,
-                "candle_color_h1": None,
-                "candle_color_m30": None,
-                "candle_color_m15": None,
-                "candle_color_m5": None,
-                "bb_m1_up": None,
-                "bb_m1_dn": None,
-                "bb_m5_up": None,
-                "bb_m5_dn": None,
-                "bb_m15_up": None,
-                "bb_m15_dn": None,
-                "bb_m30_up": None,
-                "bb_m30_dn": None,
-                "bb_h1_up": None,
-                "bb_h1_dn": None,
-                "cisd_m5": 1,
-                "cisd_m15": None,
-                "cisd_m30": None,
-                "cisd_h1": None,
+                "signal_snapshot": {"cisd_direction": "bull", "ema_21": 3345.12, "ema_55": 3338.40},
+                "cisd_direction": "bull",
+                "ema21": 3345.12,
+                "ema55": 3338.40,
+                "created_at": "2026-04-01T00:00:00Z",
                 "score_breakdown": {"criteria": {"signal_quality": 0.8}},
             }
         ]
@@ -52,7 +31,7 @@ class MockConn:
     async def execute(self, query, *args):
         self.execute_calls.append((query, args))
         if "INSERT INTO aureus_trade_signal_snapshots" in query:
-            key = args[0]
+            key = (args[0], args[6])
             if key in self.inserted_snapshots:
                 return "INSERT 0 0"
             self.inserted_snapshots.add(key)
@@ -96,9 +75,12 @@ async def test_recompute_signal_snapshot_append_history_and_preserve_old_version
     assert stats["signal_snapshot_inserted"] == 1
     snapshot_inserts = [q for q in conn.execute_calls if "INSERT INTO aureus_trade_signal_snapshots" in q[0]]
     assert len(snapshot_inserts) == 1
-    assert snapshot_inserts[0][1][5] == 2.5  # atr
-    assert snapshot_inserts[0][1][6] == 3345.12  # ema_21
-    assert snapshot_inserts[0][1][13] == 2  # session
+    assert snapshot_inserts[0][1][5] == "M5"
+    assert snapshot_inserts[0][1][6] == "sig-v1.1.0"
+    assert json.loads(snapshot_inserts[0][1][7])["cisd_direction"] == "bull"
+    assert snapshot_inserts[0][1][9] == 3345.12
+    assert snapshot_inserts[0][1][10] == 3338.40
+    assert snapshot_inserts[0][1][11] == "2026-04-01T00:00:00Z"
 
 
 @pytest.mark.asyncio

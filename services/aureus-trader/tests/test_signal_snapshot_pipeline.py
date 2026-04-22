@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -63,7 +65,7 @@ async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_mana
     assert snapshot_args[2] == 123456789
     assert snapshot_args[5] == "M15"
     assert snapshot_args[6] == "sig-v2.0.0"
-    assert snapshot_args[7]["cisd_direction"] == "bull"
+    assert json.loads(snapshot_args[7])["cisd_direction"] == "bull"
     assert snapshot_args[8] == "bull"
     assert snapshot_args[9] == 3345.12
     assert snapshot_args[10] == 3338.40
