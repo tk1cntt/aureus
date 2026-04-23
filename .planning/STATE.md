@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-23 - Completed quick task 260423-t4w: Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết.
+Last activity: 2026-04-23 - Completed quick task 260423-umx: Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots)
 
 ## Architecture Decision
 
@@ -39,6 +39,7 @@ Last activity: 2026-04-23 - Completed quick task 260423-t4w: Tối ưu phần 
 | 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
 | 260422-v1s | Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null. | 2026-04-22 | e8afd3c | [260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh](./quick/260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh/) |
 | 260423-t4w | Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết. | 2026-04-23 | ac90ec9 | [260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi](./quick/260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi/) |
+| 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
