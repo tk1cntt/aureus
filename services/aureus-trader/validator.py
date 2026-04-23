@@ -75,7 +75,16 @@ def validate_strategy_match(event: dict) -> ValidationResult:
     # Rule: LIMIT/STOP orders require entry_price > 0
     if entry_type in {"LIMIT", "STOP"}:
         entry_price = data.get("entry_price", 0)
-        if not (isinstance(entry_price, (int, float)) and entry_price > 0):
+        entry_price_num = None
+        if isinstance(entry_price, (int, float)):
+            entry_price_num = float(entry_price)
+        elif isinstance(entry_price, str):
+            try:
+                entry_price_num = float(entry_price.strip())
+            except ValueError:
+                entry_price_num = None
+
+        if not (isinstance(entry_price_num, float) and entry_price_num > 0):
             errors.append(f'{entry_type} order requires entry_price > 0')
 
     if errors:

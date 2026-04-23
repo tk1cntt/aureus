@@ -143,6 +143,17 @@ class TestPendingOrderValidation:
         assert result.valid is False
         assert any("entry_price" in e for e in result.errors)
 
+    def test_limit_order_entry_price_numeric_string(self):
+        event = _make_event({"data": {"entry_type": "LIMIT", "entry_price": "2320.5"}})
+        result = validate_strategy_match(event)
+        assert result.valid is True
+
+    def test_limit_order_entry_price_invalid_string(self):
+        event = _make_event({"data": {"entry_type": "LIMIT", "entry_price": "abc"}})
+        result = validate_strategy_match(event)
+        assert result.valid is False
+        assert any("entry_price" in e for e in result.errors)
+
 
 class TestMissingData:
     def test_missing_data_field(self):

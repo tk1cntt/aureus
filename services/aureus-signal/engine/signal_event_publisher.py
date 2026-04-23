@@ -86,6 +86,12 @@ async def publish_strategy_match(
         "direction": strategy_result.get("side"),
         "active_signals": active_signals or {},
         "signal_snapshot": signal_snapshot,
+        "score_total": strategy_result.get("score_total"),
+        "score_breakdown": strategy_result.get("score_breakdown"),
+        "weights_snapshot": strategy_result.get("weights_snapshot"),
+        "missing_data_policy": strategy_result.get("missing_data_policy"),
+        "score_version": strategy_result.get("score_version"),
+        "signal_schema_version": strategy_result.get("signal_schema_version"),
     }
     return await publish_signal_event(
         redis_client, symbol, "STRATEGY_MATCH", t, data

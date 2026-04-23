@@ -68,7 +68,7 @@ async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(jo
 
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
-    assert updated is False
+    assert updated is True
     assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
 
     eval_queries = [
@@ -76,6 +76,14 @@ async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(jo
         if "INSERT INTO aureus_trade_evaluations" in q[1]
     ]
     assert len(eval_queries) == 0
+
+    snapshot_queries = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
+    ]
+    assert len(snapshot_queries) == 1
+
+    assert any("UPDATE aureus_trade_journal" in q[1] for q in mock_db_pool._conn.queries)
 
 
 @pytest.mark.asyncio
@@ -90,7 +98,7 @@ async def test_order_opened_without_evaluation_payload_fails_contract(journal_ma
 
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
-    assert updated is False
+    assert updated is True
     assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
 
     eval_queries = [
@@ -98,6 +106,14 @@ async def test_order_opened_without_evaluation_payload_fails_contract(journal_ma
         if "INSERT INTO aureus_trade_evaluations" in q[1]
     ]
     assert len(eval_queries) == 0
+
+    snapshot_queries = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
+    ]
+    assert len(snapshot_queries) == 1
+
+    assert any("UPDATE aureus_trade_journal" in q[1] for q in mock_db_pool._conn.queries)
 
 
 @pytest.mark.asyncio

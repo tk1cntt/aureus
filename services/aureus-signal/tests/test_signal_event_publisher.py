@@ -85,6 +85,12 @@ class TestPublishStrategyMatch:
             "reason_code": "OK",
             "origin_timestamp": 1700000000,
             "t": 1700000000,
+            "score_total": 0.812345,
+            "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+            "weights_snapshot": {"signal_quality": 0.30},
+            "missing_data_policy": "impute_neutral_and_flag",
+            "score_version": "scor-v1.0.0",
+            "signal_schema_version": "sig-v2.0.0",
             "normalized_signal_snapshot": {"atr": 2.5, "ema_21": 3345.12},
         }
 
@@ -101,6 +107,12 @@ class TestPublishStrategyMatch:
         assert payload["data"]["size_mode"] == "FIXED_UNITS"
         assert payload["data"]["entry_type"] == "MARKET"
         assert payload["data"]["signal_snapshot"] == {"atr": 2.5, "ema_21": 3345.12}
+        assert payload["data"]["score_total"] == 0.812345
+        assert payload["data"]["score_breakdown"] == {"criteria": [{"name": "signal_quality", "normalized": 0.8}]}
+        assert payload["data"]["weights_snapshot"] == {"signal_quality": 0.30}
+        assert payload["data"]["missing_data_policy"] == "impute_neutral_and_flag"
+        assert payload["data"]["score_version"] == "scor-v1.0.0"
+        assert payload["data"]["signal_schema_version"] == "sig-v2.0.0"
 
     async def test_publish_strategy_match_with_missing_fields(self):
         mock_redis = AsyncMock()
