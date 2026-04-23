@@ -50,7 +50,7 @@ async def test_evaluation_boundary_pre_open_zero_post_open_one(journal_manager, 
 
 
 @pytest.mark.asyncio
-async def test_evaluation_missing_scoring_core_updates_journal_only(journal_manager, mock_db_pool):
+async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(journal_manager, mock_db_pool, caplog):
     order_opened_event = {
         "type": "ORDER_OPENED",
         "trace_id": "tr-55-001",
@@ -68,7 +68,8 @@ async def test_evaluation_missing_scoring_core_updates_journal_only(journal_mana
 
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
-    assert updated is True
+    assert updated is False
+    assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
@@ -78,7 +79,7 @@ async def test_evaluation_missing_scoring_core_updates_journal_only(journal_mana
 
 
 @pytest.mark.asyncio
-async def test_order_opened_without_evaluation_payload_updates_journal_only(journal_manager, mock_db_pool):
+async def test_order_opened_without_evaluation_payload_fails_contract(journal_manager, mock_db_pool, caplog):
     order_opened_event = {
         "type": "ORDER_OPENED",
         "trace_id": "tr-55-001",
@@ -89,7 +90,8 @@ async def test_order_opened_without_evaluation_payload_updates_journal_only(jour
 
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
-    assert updated is True
+    assert updated is False
+    assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
