@@ -2,6 +2,7 @@
 Unit tests for dispatcher.py
 """
 import asyncio
+import json
 import pytest
 import sys
 import os
@@ -141,9 +142,21 @@ class EventRedisMock(FakeRedisMock):
     def __init__(self, messages=None):
         super().__init__(queue_size=0)
         self._pubsub = FakePubSub(messages=messages)
+        self.published_messages = []
 
     def pubsub(self):
         return self._pubsub
+
+    async def publish(self, channel, message):
+        self.published_messages.append((channel, message))
+
+
+class NoopJournal:
+    async def on_order_opened(self, event):
+        return True
+
+    async def on_order_closed(self, event):
+        return True
 
 
 class DummyJournal:
@@ -158,6 +171,68 @@ class DummyJournal:
     async def on_order_closed(self, event):
         self.closed_events.append(event)
         return True
+
+
+class TestOrderDispatcherPayloadContract:
+    @pytest.mark.asyncio
+    async def test_dispatch_order_publishes_minimal_open_order_payload(self):
+        from config import TraderConfig, COMMANDS_CHANNEL
+
+        redis_mock = EventRedisMock()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=NoopJournal())
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-payload-1"},
+            {"type": "ORDER_OPENED", "cmd_id": "ord-payload-1", "ticket": 111},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        order = {
+            "type": "OPEN_ORDER",
+            "symbol": "XAUUSD",
+            "cmd_id": "ord-payload-1",
+            "direction": "BUY",
+            "order_type": "MARKET",
+            "volume": 0.1,
+            "price": 0,
+            "sl": 2300.0,
+            "tp": 2350.0,
+            "magic": 10001,
+            "comment": "CHOCH_UP",
+            "signal_snapshot": {"atr": 2.5},
+            "score_breakdown": {"k": 1},
+            "weights_snapshot": {"k": 0.2},
+            "score_total": 0.81,
+            "trace_id": "trace-abc",
+            "missing_data_policy": "impute_neutral_and_flag",
+            "score_version": "scor-v1",
+            "signal_schema_version": "sig-v2",
+        }
+
+        await dispatcher.dispatch_order(order)
+
+        assert len(redis_mock.published_messages) == 1
+        channel, message = redis_mock.published_messages[0]
+        payload = json.loads(message)
+
+        assert channel == COMMANDS_CHANNEL
+        assert payload == {
+            "type": "OPEN_ORDER",
+            "symbol": "XAUUSD",
+            "cmd_id": "ord-payload-1",
+            "direction": "BUY",
+            "order_type": "MARKET",
+            "volume": 0.1,
+            "price": 0,
+            "sl": 2300.0,
+            "tp": 2350.0,
+            "magic": 10001,
+            "comment": "CHOCH_UP",
+        }
 
 
 class TestOrderDispatcherMt5TimeMapping:
@@ -185,12 +260,28 @@ class TestOrderDispatcherMt5TimeMapping:
 
         dispatcher._wait_for_response = fake_wait_for_response
 
-        await dispatcher.dispatch_order({"cmd_id": "ord-open-1", "symbol": "XAUUSD", "trace_id": "tr-open-1"})
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-open-1",
+            "symbol": "XAUUSD",
+            "trace_id": "tr-open-1",
+            "score_total": 0.812345,
+            "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+            "weights_snapshot": {"signal_quality": 0.30},
+            "missing_data_policy": "impute_neutral_and_flag",
+            "score_version": "scor-v1.0.0",
+            "signal_schema_version": "sig-v2.0.0",
+        })
 
         assert len(journal.opened_events) == 1
         opened = journal.opened_events[0]
         assert opened["open_time"] == 1744095600
         assert opened["trace_id"] == "tr-open-1"
+        assert opened["score_total"] == 0.812345
+        assert opened["score_breakdown"] == {"criteria": [{"name": "signal_quality", "normalized": 0.8}]}
+        assert opened["weights_snapshot"] == {"signal_quality": 0.30}
+        assert opened["missing_data_policy"] == "impute_neutral_and_flag"
+        assert opened["score_version"] == "scor-v1.0.0"
+        assert opened["signal_schema_version"] == "sig-v2.0.0"
 
     @pytest.mark.asyncio
     async def test_event_listener_maps_close_time_from_t_when_missing(self):

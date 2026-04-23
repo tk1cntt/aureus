@@ -53,20 +53,101 @@ class TestBuildOrderCommand:
         assert cmd["magic"] == 10001
         assert cmd["comment"] == "CHOCH_UP"
         assert cmd["cmd_id"].startswith("ord-")
-        assert cmd["signal_snapshot"] == {}
+        assert "signal_snapshot" not in cmd
+        assert "score_breakdown" not in cmd
+        assert "weights_snapshot" not in cmd
+        assert "missing_data_policy" not in cmd
+        assert "score_version" not in cmd
+        assert "signal_schema_version" not in cmd
+        assert "trace_id" not in cmd
+        assert set(cmd.keys()) == {
+            "type", "symbol", "cmd_id", "direction", "order_type",
+            "volume", "price", "sl", "tp", "magic", "comment",
+        }
 
-    def test_forward_signal_snapshot_payload(self):
+    def test_omit_signal_snapshot_and_scoring_payload_fields(self):
         event = _make_match_event(
             {
                 "data": {
-                    "signal_snapshot": {"atr": 2.5, "ema_21": 3345.12}
+                    "signal_snapshot": {"atr": 2.5, "ema_21": 3345.12},
+                    "score_total": 0.812345,
+                    "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+                    "weights_snapshot": {"signal_quality": 0.30},
+                    "missing_data_policy": "impute_neutral_and_flag",
+                    "score_version": "scor-v1.0.0",
+                    "signal_schema_version": "sig-v2.0.0",
+                    "trace_id": "trace-123",
                 }
             }
         )
 
         cmd = build_order_command(event)
 
-        assert cmd["signal_snapshot"] == {"atr": 2.5, "ema_21": 3345.12}
+        assert "signal_snapshot" not in cmd
+        assert "score_total" not in cmd
+        assert "score_breakdown" not in cmd
+        assert "weights_snapshot" not in cmd
+        assert "missing_data_policy" not in cmd
+        assert "score_version" not in cmd
+        assert "signal_schema_version" not in cmd
+        assert "trace_id" not in cmd
+
+    def test_forward_conditional_execution_fields_when_present(self):
+        event = _make_match_event(
+            {
+                "data": {
+                    "tp_rr_ratio": 2.0,
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "risk_amount": 75.0,
+                }
+            }
+        )
+
+        cmd = build_order_command(event)
+
+        assert cmd["tp_rr_ratio"] == 2.0
+        assert cmd["size_mode"] == "RISK_FIXED_AMOUNT"
+        assert cmd["risk_amount"] == 75.0
+        assert cmd["volume"] == 0
+
+    def test_do_not_forward_size_mode_when_not_risk_fixed_amount(self):
+        event = _make_match_event(
+            {
+                "data": {
+                    "size_mode": "FIXED_LOT",
+                    "risk_amount": 99.0,
+                }
+            }
+        )
+
+        cmd = build_order_command(event)
+
+        assert "size_mode" not in cmd
+        assert "risk_amount" not in cmd
+
+    def test_fallback_default_risk_budget_for_risk_fixed_amount(self, monkeypatch):
+        monkeypatch.setenv("RISK_FIXED_AMOUNT_BUDGET", "55")
+        event = _make_match_event(
+            {
+                "data": {
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "risk_amount": None,
+                }
+            }
+        )
+
+        cmd = build_order_command(event)
+
+        assert cmd["size_mode"] == "RISK_FIXED_AMOUNT"
+        assert cmd["risk_amount"] == 55.0
+        assert cmd["volume"] == 0
+
+    def test_ignore_invalid_tp_rr_ratio(self):
+        event = _make_match_event({"data": {"tp_rr_ratio": "bad-value"}})
+
+        cmd = build_order_command(event)
+
+        assert "tp_rr_ratio" not in cmd
 
     def test_build_limit_order(self):
         event = _make_match_event(

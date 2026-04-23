@@ -7,7 +7,6 @@ and implements selective retry with exponential backoff.
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
 
 from config import TraderConfig, ORDER_QUEUE_KEY, COMMANDS_CHANNEL, EVENTS_CHANNEL, SIGNALS_CHANNEL_PREFIX
 
@@ -107,10 +106,11 @@ class OrderDispatcher:
         """
         cmd_id = order["cmd_id"]
         max_retries = self.config.max_retries
+        mt5_order = self._extract_mt5_execution_payload(order)
 
         for attempt in range(max_retries + 1):
             # PUBLISH to aureus:mt5:commands
-            await self.redis.publish(COMMANDS_CHANNEL, json.dumps(order))
+            await self.redis.publish(COMMANDS_CHANNEL, json.dumps(mt5_order))
             logger.debug(
                 f"Published order {cmd_id} (attempt {attempt + 1}/{max_retries + 1})"
             )
@@ -166,6 +166,16 @@ class OrderDispatcher:
                             final["trace_id"] = trace_id
                         if isinstance(order.get("signal_snapshot"), dict) and not isinstance(final.get("signal_snapshot"), dict):
                             final["signal_snapshot"] = order.get("signal_snapshot")
+                        for key in (
+                            "score_total",
+                            "score_breakdown",
+                            "weights_snapshot",
+                            "missing_data_policy",
+                            "score_version",
+                            "signal_schema_version",
+                        ):
+                            if final.get(key) is None and order.get(key) is not None:
+                                final[key] = order.get(key)
                         if final.get("time") is None and final.get("open_time") is None:
                             final["open_time"] = _normalize_mt5_unix_time(final.get("t"))
                         if final.get("time") is not None:
@@ -231,6 +241,30 @@ class OrderDispatcher:
             logger.info("Event listener cancelled")
         finally:
             await pubsub.unsubscribe(EVENTS_CHANNEL)
+
+    @staticmethod
+    def _extract_mt5_execution_payload(order: dict) -> dict:
+        allowed_fields = {
+            "type",
+            "symbol",
+            "cmd_id",
+            "direction",
+            "order_type",
+            "volume",
+            "price",
+            "sl",
+            "tp",
+            "magic",
+            "comment",
+            "tp_rr_ratio",
+            "size_mode",
+            "risk_amount",
+        }
+        return {
+            key: order[key]
+            for key in allowed_fields
+            if key in order and order[key] is not None
+        }
 
     async def _wait_for_response(
         self, cmd_id: str, timeout: float

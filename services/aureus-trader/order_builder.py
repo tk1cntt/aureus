@@ -68,8 +68,6 @@ def build_order_command(match_event: dict) -> dict:
         "tp": tp,
         "magic": data.get("magic_number", 0),
         "comment": _build_comment(match_event, data),
-        "trace_id": data.get("trace_id", match_event.get("trace_id", "")),
-        "signal_snapshot": data.get("signal_snapshot") if isinstance(data.get("signal_snapshot"), dict) else {},
     }
 
     # Forward tp_rr_ratio so MT5 can recalculate TP from actual entry price
