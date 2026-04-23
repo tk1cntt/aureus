@@ -22,6 +22,11 @@ async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_mana
         "open_price": 3348.15,
         "time": "2026-04-01T00:00:00Z",
         "timeframe": "M15",
+        "score_total": 0.812345,
+        "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+        "weights_snapshot": {"signal_quality": 0.30},
+        "missing_data_policy": "impute_neutral_and_flag",
+        "score_version": "scor-v1.0.0",
         "signal_schema_version": "sig-v2.0.0",
         "signal_snapshot": {
             "cisd_direction": "bull",
@@ -80,6 +85,11 @@ async def test_signal_snapshot_duplicate_trade_and_schema_version_is_blocked(jou
         "open_price": 3348.15,
         "time": "2026-04-01T00:00:00Z",
         "timeframe": "M15",
+        "score_total": 0.812345,
+        "score_breakdown": {"criteria": [{"name": "signal_quality", "normalized": 0.8}]},
+        "weights_snapshot": {"signal_quality": 0.30},
+        "missing_data_policy": "impute_neutral_and_flag",
+        "score_version": "scor-v1.0.0",
         "signal_schema_version": "sig-v2.0.0",
         "signal_snapshot": {
             "cisd_direction": "bull",

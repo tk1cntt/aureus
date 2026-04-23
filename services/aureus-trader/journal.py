@@ -294,39 +294,57 @@ class TradeJournalManager:
                     weights_snapshot = event.get("weights_snapshot")
                     missing_data_policy = event.get("missing_data_policy")
 
-                    has_scoring_core = not (
-                        score_total is None
-                        or score_breakdown is None
-                        or weights_snapshot is None
-                        or missing_data_policy is None
-                    )
+                    missing_core_fields = [
+                        name
+                        for name, value in (
+                            ("score_total", score_total),
+                            ("score_breakdown", score_breakdown),
+                            ("weights_snapshot", weights_snapshot),
+                            ("missing_data_policy", missing_data_policy),
+                        )
+                        if value is None
+                    ]
 
-                    if has_scoring_core and trade_journal_id is not None:
-                        score_version = event.get("score_version") or "scor-v1.0.0"
+                    if missing_core_fields:
+                        logger.error(
+                            "EVAL_PAYLOAD_MISSING_CORE_FIELDS: trace_id=%s ticket=%s missing=%s",
+                            trace_id,
+                            ticket,
+                            ",".join(missing_core_fields),
+                        )
+                        return False
 
-                        await conn.execute(
-                        """
-                        INSERT INTO aureus_trade_evaluations (
-                            trade_journal_id, trace_id, ticket, score_version, score_total,
-                            score_breakdown, weights_snapshot, missing_data_policy,
-                            strategy_name, symbol, timeframe
-                        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
-                        ON CONFLICT (trade_journal_id, score_version) DO NOTHING
-                        """,
-                        trade_journal_id,
-                        trace_id,
-                        ticket,
-                        score_version,
-                        score_total,
-                        json.dumps(score_breakdown),
-                        json.dumps(weights_snapshot),
-                        missing_data_policy,
-                        strategy_name,
-                        symbol,
-                        timeframe,
-                    )
-                    elif has_scoring_core:
-                        logger.warning("on_order_opened: skip evaluation persist because trade_journal_id is missing")
+                    if trade_journal_id is None:
+                        logger.error(
+                            "EVAL_PERSIST_MISSING_TRADE_JOURNAL_ID: trace_id=%s ticket=%s",
+                            trace_id,
+                            ticket,
+                        )
+                        return False
+
+                    score_version = event.get("score_version") or "scor-v1.0.0"
+
+                    await conn.execute(
+                    """
+                    INSERT INTO aureus_trade_evaluations (
+                        trade_journal_id, trace_id, ticket, score_version, score_total,
+                        score_breakdown, weights_snapshot, missing_data_policy,
+                        strategy_name, symbol, timeframe
+                    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
+                    ON CONFLICT (trade_journal_id, score_version) DO NOTHING
+                    """,
+                    trade_journal_id,
+                    trace_id,
+                    ticket,
+                    score_version,
+                    score_total,
+                    json.dumps(score_breakdown),
+                    json.dumps(weights_snapshot),
+                    missing_data_policy,
+                    strategy_name,
+                    symbol,
+                    timeframe,
+                )
 
                     raw_signal_snapshot = event.get("signal_snapshot")
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
@@ -382,23 +400,9 @@ class TradeJournalManager:
                     elif has_signal_payload:
                         logger.warning("on_order_opened: skip signal snapshot persist because trade_journal_id is missing")
 
-                    wants_scoring_persist = any(
-                        event.get(k) is not None
-                        for k in (
-                            "score_total", "score", "score_breakdown",
-                            "weights_snapshot", "missing_data_policy", "score_version"
-                        )
-                    )
-
-                    if wants_scoring_persist and not has_scoring_core:
-                        logger.warning(
-                            "on_order_opened: missing scoring core fields "
-                            "(score_total/score_breakdown/weights_snapshot/missing_data_policy)"
-                        )
-
-                    if not has_scoring_core and not has_signal_payload:
+                    if not has_signal_payload:
                         logger.debug(
-                            "on_order_opened: no evaluation/snapshot payload provided; journal status updated only"
+                            "on_order_opened: no signal_snapshot payload provided; evaluation persisted only"
                         )
 
             if rows and "UPDATE 1" in rows:
