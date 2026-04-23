@@ -16,14 +16,14 @@
 ### Data Model & Pipeline (EVAL)
 
 - [ ] **EVAL-01**: Thiết kế schema DB chuẩn hóa cho dữ liệu đánh giá trade/strategy (score, breakdown, context, score_version, timestamp).
-- [ ] **EVAL-02**: Pipeline ingestion/compute/persist đảm bảo mỗi trade có evaluation record đầy đủ và truy vết được nguồn dữ liệu.
-- [ ] **EVAL-03**: Backfill/recompute pipeline cho phép tính lại điểm khi thay đổi scoring weights/version mà không mất lịch sử phiên bản cũ.
-- [ ] **EVAL-04**: Data quality guards cho evaluation pipeline (idempotency key, uniqueness, null/constraint checks) để tránh duplicate/sai lệch.
-- [ ] **SIGNAL-SNAPSHOT-01**: Lưu signal snapshot theo mô hình hybrid (JSONB raw + typed hot columns + index theo symbol/timeframe/time-range) để hỗ trợ vừa mở rộng schema vừa query nhanh trên volume lớn; các field dẫn xuất (ví dụ `ema21_above_ema55`) không persist vật lý, tính downstream bằng pandas/SQL expression.
-- [ ] **EVAL-RUNTIME-01**: Runtime DB schema parity là gate bắt buộc trước khi mark complete phase dữ liệu (bảng/index/constraints phải tồn tại trên DB dev thật, không chỉ trong file migration/test unit).
+- [x] **EVAL-02**: Pipeline ingestion/compute/persist đảm bảo mỗi trade có evaluation record đầy đủ và truy vết được nguồn dữ liệu.
+- [x] **EVAL-03**: Backfill/recompute pipeline cho phép tính lại điểm khi thay đổi scoring weights/version mà không mất lịch sử phiên bản cũ.
+- [x] **EVAL-04**: Data quality guards cho evaluation pipeline (idempotency key, uniqueness, null/constraint checks) để tránh duplicate/sai lệch.
+- [x] **SIGNAL-SNAPSHOT-01**: Lưu signal snapshot theo mô hình hybrid (JSONB raw + typed hot columns + index theo symbol/timeframe/time-range) để hỗ trợ vừa mở rộng schema vừa query nhanh trên volume lớn; các field dẫn xuất (ví dụ `ema21_above_ema55`) không persist vật lý, tính downstream bằng pandas/SQL expression.
+- [x] **EVAL-RUNTIME-01**: Runtime DB schema parity là gate bắt buộc trước khi mark complete phase dữ liệu (bảng/index/constraints phải tồn tại trên DB dev thật, không chỉ trong file migration/test unit).
 - [ ] **EVAL-RUNTIME-02**: Migration compatibility phải được thiết kế theo capability của PostgreSQL runtime; không dùng biểu thức CHECK không tương thích version engine.
-- [ ] **EVAL-RUNTIME-03**: Trường business-critical cho recompute (ví dụ `timeframe`) phải có nguồn chuẩn trong schema lineage; fallback từ JSON chỉ là tạm thời và phải có kế hoạch loại bỏ.
-- [ ] **EVAL-RUNTIME-04**: Bắt buộc có bằng chứng E2E persistence runtime (row thật mới nhất cho evaluation + signal snapshot) trong checklist nghiệm thu.
+- [x] **EVAL-RUNTIME-03**: Trường business-critical cho recompute (ví dụ `timeframe`) phải có nguồn chuẩn trong schema lineage; fallback từ JSON chỉ là tạm thời và phải có kế hoạch loại bỏ.
+- [x] **EVAL-RUNTIME-04**: Bắt buộc có bằng chứng E2E persistence runtime (row thật mới nhất cho evaluation + signal snapshot) trong checklist nghiệm thu.
 
 ### Architecture Decision Note — Phase 55 Runtime Parity
 

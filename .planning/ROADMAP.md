@@ -21,7 +21,7 @@
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
 | 54 | Strategy Scoring Framework | SCOR-01→04, ACC-01 | Planned |
-| 55 | Evaluation Data Model & Pipeline | EVAL-01→04 | Planned |
+| 55 | 6/6 | Complete   | 2026-04-23 |
 | 56 | Multi-Dimensional Reporting Engine | RPT-01→05, ACC-03 | Planned |
 | 57 | Telegram Insight Delivery | TEL-EVAL-01→04, ACC-02 | Planned |
 
@@ -49,12 +49,17 @@ Plans:
 
 **Requirements:** EVAL-01, EVAL-02, EVAL-03, EVAL-04  
 **Goal:** Chuẩn hóa schema và pipeline lưu dữ liệu đánh giá strategy vào DB để truy vấn thống kê ổn định.
-**Plans:** 3 plans
+**Plans:** 6/6 plans complete
+
+> Mở rộng từ 3 lên 6 plans để tách rõ runtime-parity gate (EVAL-RUNTIME-01→04) và storage policy gate SIGNAL-SNAPSHOT-01, tránh false-positive completion khi chỉ pass unit/migration.
 
 Plans:
-- [ ] 55-01-PLAN.md — Chốt evaluation schema journal-linked và guardrails DB-level (unique/FK/check) cho dữ liệu scoring.
-- [ ] 55-02-PLAN.md — Wiring ingestion/compute/persist vào trigger ORDER_OPENED để ghi evaluation records đầy đủ và traceable.
-- [ ] 55-03-PLAN.md — Xây backfill/recompute append-version theo score_version, giữ history và idempotent rerun.
+- [x] 55-01-PLAN.md — Chốt evaluation schema journal-linked và guardrails DB-level (unique/FK/check) cho dữ liệu scoring.
+- [x] 55-02-PLAN.md — Wiring ingestion/compute/persist vào trigger ORDER_OPENED để ghi evaluation records đầy đủ và traceable.
+- [x] 55-03-PLAN.md — Xây backfill/recompute append-version theo score_version, giữ history và idempotent rerun.
+- [x] 55-04-PLAN.md — Khóa runtime schema parity và migration compatibility trên PostgreSQL runtime trước khi sign-off phase.
+- [x] 55-05-PLAN.md — Ổn định runtime recompute + sign-off evidence gate (schema/index/latest rows) để loại false completion.
+- [x] 55-06-PLAN.md — Tối ưu signal snapshot hybrid storage (full raw JSONB + canonical typed hot columns + retention/archive) và DB E2E proof.
 
 **Success Criteria:**
 1. Schema DB chuẩn hóa cho evaluation records được áp dụng.
