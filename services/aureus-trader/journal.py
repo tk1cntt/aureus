@@ -40,9 +40,102 @@ def _strip_excluded_signal_states(signal_snapshot: dict) -> dict:
 
 
 
-def _has_signal_payload(signal_snapshot: dict) -> bool:
-    return bool(signal_snapshot)
+def _to_float_or_none(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
 
+
+def _first_present(snapshot: dict, event: dict, keys: tuple[str, ...]):
+    for key in keys:
+        if isinstance(snapshot, dict) and key in snapshot and snapshot.get(key) is not None:
+            return snapshot.get(key)
+        if isinstance(event, dict) and key in event and event.get(key) is not None:
+            return event.get(key)
+    return None
+
+
+def _extract_active_signal_fields(active_signals) -> dict:
+    extracted = {}
+    if not isinstance(active_signals, list):
+        return extracted
+
+    supported_keys = {
+        "atr", "ema_21", "ema21", "ema_34", "ema34", "ema_55", "ema55", "ema_89", "ema89",
+        "ema_100", "ema100", "ema_200", "ema200", "vol_sma_20", "volSma20", "session",
+        "candle_color_d1", "candle_color_h1", "candle_color_m30", "candle_color_m15", "candle_color_m5",
+        "bb_m1_up", "bb_m1_dn", "bb_m5_up", "bb_m5_dn", "bb_m15_up", "bb_m15_dn", "bb_m30_up", "bb_m30_dn", "bb_h1_up", "bb_h1_dn",
+        "cisd_m5", "cisd_m15", "cisd_m30", "cisd_h1",
+    }
+
+    for item in active_signals:
+        if not isinstance(item, dict):
+            continue
+        for key in supported_keys:
+            if key in item and item.get(key) is not None and key not in extracted:
+                extracted[key] = item.get(key)
+    return extracted
+
+
+def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
+    snapshot = signal_snapshot if isinstance(signal_snapshot, dict) else {}
+    src_event = event if isinstance(event, dict) else {}
+
+    active_signal_fields = _extract_active_signal_fields(snapshot.get("active_signals"))
+    context_filters = snapshot.get("context_filters") if isinstance(snapshot.get("context_filters"), dict) else {}
+
+    merged_snapshot = dict(snapshot)
+    for key, value in active_signal_fields.items():
+        merged_snapshot.setdefault(key, value)
+    if "session" not in merged_snapshot and context_filters.get("session") is not None:
+        merged_snapshot["session"] = context_filters.get("session")
+
+    columns = {
+        "atr": _to_float_or_none(_first_present(merged_snapshot, src_event, ("atr",))),
+        "ema_21": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_21", "ema21"))),
+        "ema_34": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_34", "ema34"))),
+        "ema_55": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_55", "ema55"))),
+        "ema_89": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_89", "ema89"))),
+        "ema_100": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_100", "ema100"))),
+        "ema_200": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_200", "ema200"))),
+        "vol_sma_20": _to_float_or_none(_first_present(merged_snapshot, src_event, ("vol_sma_20", "volSma20"))),
+        "session": _normalize_session_code(_first_present(merged_snapshot, src_event, ("session",))),
+        "candle_color_d1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_d1",))),
+        "candle_color_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_h1",))),
+        "candle_color_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m30",))),
+        "candle_color_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m15",))),
+        "candle_color_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m5",))),
+        "bb_m1_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m1_up",))),
+        "bb_m1_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m1_dn",))),
+        "bb_m5_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m5_up",))),
+        "bb_m5_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m5_dn",))),
+        "bb_m15_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m15_up",))),
+        "bb_m15_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m15_dn",))),
+        "bb_m30_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m30_up",))),
+        "bb_m30_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m30_dn",))),
+        "bb_h1_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_h1_up",))),
+        "bb_h1_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_h1_dn",))),
+        "cisd_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m5",))),
+        "cisd_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m15",))),
+        "cisd_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m30",))),
+        "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1",))),
+    }
+
+    logger.info("build_signal_snapshot_columns: columns=%s", columns)
+
+    return columns
 
 def _normalize_session_code(value):
     if value is None:
@@ -205,6 +298,13 @@ class TradeJournalManager:
             trace_id = event.get("trace_id")
             ticket = event.get("ticket")
 
+            logger.info(
+                "on_order_opened: start trace_id=%s ticket=%s event_keys=%s",
+                trace_id,
+                ticket,
+                sorted(list(event.keys())) if isinstance(event, dict) else [],
+            )
+
             if not trace_id:
                 logger.warning("on_order_opened: missing trace_id in event")
                 return False
@@ -276,11 +376,23 @@ class TradeJournalManager:
                         strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
                         symbol = event.get("symbol", journal_row.get("symbol", ""))
                         timeframe = event.get("timeframe", journal_row.get("timeframe", ""))
+                        logger.info(
+                            "on_order_opened: loaded journal row trace_id=%s trade_journal_id=%s strategy=%s symbol=%s",
+                            trace_id,
+                            trade_journal_id,
+                            strategy_name,
+                            symbol,
+                        )
                     else:
                         trade_journal_id = None
                         strategy_name = event.get("strategy_name", "")
                         symbol = event.get("symbol", "")
                         timeframe = event.get("timeframe", "")
+                        logger.warning(
+                            "on_order_opened: journal row not found after update trace_id=%s ticket=%s",
+                            trace_id,
+                            ticket,
+                        )
 
                     score_total_raw = event.get("score_total", event.get("score"))
                     score_total = None
@@ -306,13 +418,12 @@ class TradeJournalManager:
                     ]
 
                     if missing_core_fields:
-                        logger.error(
-                            "EVAL_PAYLOAD_MISSING_CORE_FIELDS: trace_id=%s ticket=%s missing=%s",
+                        logger.warning(
+                            "EVAL_PAYLOAD_MISSING_CORE_FIELDS: trace_id=%s ticket=%s missing=%s -- skipping evaluation insert, continuing snapshot persist",
                             trace_id,
                             ticket,
                             ",".join(missing_core_fields),
                         )
-                        return False
 
                     if trade_journal_id is None:
                         logger.error(
@@ -322,32 +433,58 @@ class TradeJournalManager:
                         )
                         return False
 
+                    timeframe = event.get("timeframe") or (journal_row.get("timeframe") if journal_row else None) or "M1"
+                    if not isinstance(timeframe, str) or not timeframe.strip():
+                        timeframe = "M1"
+
                     score_version = event.get("score_version") or "scor-v1.0.0"
 
-                    await conn.execute(
-                    """
-                    INSERT INTO aureus_trade_evaluations (
-                        trade_journal_id, trace_id, ticket, score_version, score_total,
-                        score_breakdown, weights_snapshot, missing_data_policy,
-                        strategy_name, symbol, timeframe
-                    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
-                    ON CONFLICT (trade_journal_id, score_version) DO NOTHING
-                    """,
-                    trade_journal_id,
-                    trace_id,
-                    ticket,
-                    score_version,
-                    score_total,
-                    json.dumps(score_breakdown),
-                    json.dumps(weights_snapshot),
-                    missing_data_policy,
-                    strategy_name,
-                    symbol,
-                    timeframe,
-                )
+                    if not missing_core_fields:
+                        eval_insert_result = await conn.execute(
+                        """
+                        INSERT INTO aureus_trade_evaluations (
+                            trade_journal_id, trace_id, ticket, score_version, score_total,
+                            score_breakdown, weights_snapshot, missing_data_policy,
+                            strategy_name, symbol, timeframe
+                        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
+                        ON CONFLICT (trade_journal_id, score_version) DO NOTHING
+                        """,
+                        trade_journal_id,
+                        trace_id,
+                        ticket,
+                        score_version,
+                        score_total,
+                        json.dumps(score_breakdown),
+                        json.dumps(weights_snapshot),
+                        missing_data_policy,
+                        strategy_name,
+                        symbol,
+                        timeframe,
+                    )
+                        logger.info(
+                            "on_order_opened: evaluation_insert trace_id=%s ticket=%s result=%s",
+                            trace_id,
+                            ticket,
+                            eval_insert_result,
+                        )
+                    else:
+                        logger.info(
+                            "on_order_opened: evaluation_insert skipped trace_id=%s ticket=%s missing_core_fields=%s",
+                            trace_id,
+                            ticket,
+                            missing_core_fields,
+                        )
 
                     raw_signal_snapshot = event.get("signal_snapshot")
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
+                    snapshot_source = "event.signal_snapshot"
+
+                    logger.info(
+                        "on_order_opened: snapshot_source trace_id=%s ticket=%s raw_signal_snapshot_type=%s",
+                        trace_id,
+                        ticket,
+                        type(raw_signal_snapshot).__name__,
+                    )
 
                     if not signal_snapshot and journal_row:
                         fallback_snapshot = {}
@@ -358,31 +495,34 @@ class TradeJournalManager:
                         if journal_context_filters:
                             fallback_snapshot["context_filters"] = journal_context_filters
                         signal_snapshot = fallback_snapshot
+                        snapshot_source = "journal_fallback"
 
                     signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
-                    has_signal_payload = _has_signal_payload(signal_snapshot)
+                    snapshot_columns = _build_signal_snapshot_columns(signal_snapshot, event)
 
-                    if has_signal_payload and trade_journal_id is not None:
-                        signal_schema_version = event.get("signal_schema_version") or "sig-v2.0.0"
-                        timeframe = event.get("timeframe") or "M15"
-                        cisd_direction = str(
-                            signal_snapshot.get("cisd_direction", event.get("cisd_direction", ""))
-                        ).strip().lower() or None
-                        ema21 = signal_snapshot.get("ema_21", signal_snapshot.get("ema21", event.get("ema_21", event.get("ema21"))))
-                        ema55 = signal_snapshot.get("ema_55", signal_snapshot.get("ema55", event.get("ema_55", event.get("ema55"))))
-
-                        await conn.execute(
+                    if trade_journal_id is not None:
+                        snapshot_insert_result = await conn.execute(
                             """
                             INSERT INTO aureus_trade_signal_snapshots (
-                                trade_journal_id, trace_id, ticket, strategy_name, symbol,
-                                timeframe, signal_schema_version, signal_snapshot,
-                                cisd_direction, ema21, ema55, created_at
+                                trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
+                                atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
+                                vol_sma_20, session,
+                                candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
+                                bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
+                                bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
+                                cisd_m5, cisd_m15, cisd_m30, cisd_h1,
+                                created_at
                             ) VALUES (
-                                $1, $2, $3, $4, $5,
-                                $6, $7, $8::jsonb,
-                                $9, $10, $11, $12
+                                $1, $2, $3, $4, $5, $6,
+                                $7, $8, $9, $10, $11, $12, $13,
+                                $14, $15,
+                                $16, $17, $18, $19, $20,
+                                $21, $22, $23, $24, $25, $26,
+                                $27, $28, $29, $30,
+                                $31, $32, $33, $34,
+                                $35
                             )
-                            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
+                            ON CONFLICT (trade_journal_id) DO NOTHING
                             """,
                             trade_journal_id,
                             trace_id,
@@ -390,19 +530,48 @@ class TradeJournalManager:
                             strategy_name,
                             symbol,
                             timeframe,
-                            signal_schema_version,
-                            json.dumps(signal_snapshot),
-                            cisd_direction,
-                            ema21,
-                            ema55,
+                            snapshot_columns["atr"],
+                            snapshot_columns["ema_21"],
+                            snapshot_columns["ema_34"],
+                            snapshot_columns["ema_55"],
+                            snapshot_columns["ema_89"],
+                            snapshot_columns["ema_100"],
+                            snapshot_columns["ema_200"],
+                            snapshot_columns["vol_sma_20"],
+                            snapshot_columns["session"],
+                            snapshot_columns["candle_color_d1"],
+                            snapshot_columns["candle_color_h1"],
+                            snapshot_columns["candle_color_m30"],
+                            snapshot_columns["candle_color_m15"],
+                            snapshot_columns["candle_color_m5"],
+                            snapshot_columns["bb_m1_up"],
+                            snapshot_columns["bb_m1_dn"],
+                            snapshot_columns["bb_m5_up"],
+                            snapshot_columns["bb_m5_dn"],
+                            snapshot_columns["bb_m15_up"],
+                            snapshot_columns["bb_m15_dn"],
+                            snapshot_columns["bb_m30_up"],
+                            snapshot_columns["bb_m30_dn"],
+                            snapshot_columns["bb_h1_up"],
+                            snapshot_columns["bb_h1_dn"],
+                            snapshot_columns["cisd_m5"],
+                            snapshot_columns["cisd_m15"],
+                            snapshot_columns["cisd_m30"],
+                            snapshot_columns["cisd_h1"],
                             entry_time,
                         )
-                    elif has_signal_payload:
-                        logger.warning("on_order_opened: skip signal snapshot persist because trade_journal_id is missing")
-
-                    if not has_signal_payload:
-                        logger.debug(
-                            "on_order_opened: no signal_snapshot payload provided; evaluation persisted only"
+                        logger.info(
+                            "on_order_opened: snapshot_insert trace_id=%s ticket=%s result=%s",
+                            trace_id,
+                            ticket,
+                            snapshot_insert_result,
+                        )
+                    else:
+                        logger.warning(
+                            "on_order_opened: snapshot_insert skipped trace_id=%s ticket=%s reason=no_payload source=%s",
+                            trace_id,
+                            ticket,
+                            snapshot_source,
                         )
 
             if rows and "UPDATE 1" in rows:
