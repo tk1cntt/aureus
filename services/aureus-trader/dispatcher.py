@@ -162,6 +162,12 @@ class OrderDispatcher:
                     # Journal: record execution — inject trace_id from order
                     if self.journal:
                         trace_id = order.get("trace_id", "")
+                        strategy_event = order.get("strategy_event")
+                        if isinstance(strategy_event, dict):
+                            strategy_payload = dict(strategy_event)
+                            if trace_id and not strategy_payload.get("trace_id"):
+                                strategy_payload["trace_id"] = trace_id
+                            await self.journal.on_strategy_match(strategy_payload)
                         if trace_id:
                             final["trace_id"] = trace_id
                         if isinstance(order.get("signal_snapshot"), dict) and not isinstance(final.get("signal_snapshot"), dict):

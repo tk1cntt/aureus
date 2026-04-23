@@ -109,6 +109,7 @@ async def run_trader():
 
                 # Build order command
                 order_cmd = build_order_command(event)
+                order_cmd["strategy_event"] = event
 
                 # Idempotency check
                 is_new = await dedup.check_and_mark(order_cmd["cmd_id"])
@@ -123,9 +124,6 @@ async def run_trader():
                         f"Order queued: {order_cmd['cmd_id']} "
                         f"{order_cmd['symbol']} {order_cmd['direction']}"
                     )
-                    # Journal: record strategy match (non-blocking)
-                    if journal:
-                        asyncio.create_task(journal.on_strategy_match(event))
                 else:
                     logger.error(
                         f"Queue full, order rejected: {order_cmd['cmd_id']}"

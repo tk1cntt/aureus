@@ -152,6 +152,9 @@ class EventRedisMock(FakeRedisMock):
 
 
 class NoopJournal:
+    async def on_strategy_match(self, event):
+        return True
+
     async def on_order_opened(self, event):
         return True
 
@@ -161,8 +164,13 @@ class NoopJournal:
 
 class DummyJournal:
     def __init__(self):
+        self.strategy_events = []
         self.opened_events = []
         self.closed_events = []
+
+    async def on_strategy_match(self, event):
+        self.strategy_events.append(event)
+        return True
 
     async def on_order_opened(self, event):
         self.opened_events.append(event)
@@ -233,6 +241,76 @@ class TestOrderDispatcherPayloadContract:
             "magic": 10001,
             "comment": "CHOCH_UP",
         }
+
+
+class TestOrderDispatcherJournalStrategyMatch:
+    @pytest.mark.asyncio
+    async def test_dispatch_order_calls_strategy_match_on_order_opened_with_trace_id(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-journal-1"},
+            {"type": "ORDER_OPENED", "cmd_id": "ord-journal-1", "ticket": 111},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": "trace-journal-1",
+            "symbol": "XAUUSD",
+            "direction": "BUY",
+        }
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-journal-1",
+            "symbol": "XAUUSD",
+            "trace_id": "trace-journal-1",
+            "strategy_event": strategy_event,
+        })
+
+        assert len(journal.strategy_events) == 1
+        assert len(journal.opened_events) == 1
+        assert journal.strategy_events[0]["trace_id"] == "trace-journal-1"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_order_does_not_call_strategy_match_when_not_order_opened(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-journal-2"},
+            {"type": "ORDER_FAILED", "cmd_id": "ord-journal-2", "reason": "INVALID_STOPS"},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": "trace-journal-2",
+            "symbol": "XAUUSD",
+            "direction": "SELL",
+        }
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-journal-2",
+            "symbol": "XAUUSD",
+            "trace_id": "trace-journal-2",
+            "strategy_event": strategy_event,
+        })
+
+        assert len(journal.strategy_events) == 0
 
 
 class TestOrderDispatcherMt5TimeMapping:
