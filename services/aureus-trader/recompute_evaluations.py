@@ -1,11 +1,14 @@
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import datetime
 
 import asyncpg
+
+logger = logging.getLogger(__name__)
 
 CURRENT_DIR = os.path.dirname(__file__)
 SIGNAL_ENGINE_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "..", "aureus-signal", "engine", "scoring"))
@@ -34,6 +37,34 @@ def _validate_args(args):
         raise ValueError("--start must be <= --end")
 
 
+def _normalize_timeframe(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _select_timeframe_with_lineage(row):
+    lineage_timeframe = _normalize_timeframe(row.get("lineage_timeframe"))
+    if lineage_timeframe:
+        return lineage_timeframe, "lineage_timeframe"
+
+    journal_timeframe = _normalize_timeframe(row.get("journal_timeframe"))
+    if journal_timeframe:
+        return journal_timeframe, "journal_timeframe"
+
+    snapshot_timeframe = _normalize_timeframe(row.get("snapshot_timeframe"))
+    if snapshot_timeframe:
+        return snapshot_timeframe, "snapshot_timeframe"
+
+    logger.warning(
+        "TIMEFRAME_LINEAGE_FALLBACK: trace_id=%s trade_journal_id=%s fallback_source=default_M1",
+        row.get("trace_id"),
+        row.get("id"),
+    )
+    return "M1", "default_M1"
+
+
 async def recompute_batch(conn, score_version, signal_schema_version, start, end, batch_size=500, weights_snapshot=None):
     if batch_size <= 0:
         raise ValueError("batch_size must be > 0")
@@ -50,12 +81,14 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             j.ticket,
             j.strategy_name,
             j.symbol,
-            COALESCE(ss.timeframe, 'M1') AS timeframe,
+            j.timeframe AS journal_timeframe,
+            ss.timeframe AS snapshot_timeframe,
             ss.signal_snapshot,
             ss.cisd_direction,
             ss.ema21,
             ss.ema55,
             ss.created_at,
+            ev.timeframe AS lineage_timeframe,
             ev.score_breakdown
         FROM aureus_trade_journal j
         LEFT JOIN LATERAL (
@@ -88,6 +121,8 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
     immutable_weights = dict(weights_snapshot or {})
 
     for row in rows:
+        timeframe, _timeframe_source = _select_timeframe_with_lineage(row)
+
         score_input = {
             "quality_gate_passed": True,
             "criteria": row.get("score_breakdown") or {},
@@ -113,7 +148,7 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             score_result.get("missing_data_policy") or "impute_neutral_and_flag",
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            row.get("timeframe") or "",
+            timeframe,
         )
 
         if eval_insert_result == "INSERT 0 1":
@@ -157,7 +192,7 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             row["ticket"],
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            row.get("timeframe") or "M1",
+            timeframe,
             signal_schema_version,
             json.dumps(row.get("signal_snapshot") or {}),
             row.get("cisd_direction"),
