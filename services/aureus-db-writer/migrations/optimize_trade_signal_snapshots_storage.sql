@@ -24,6 +24,70 @@ CREATE INDEX IF NOT EXISTS idx_trade_signal_snapshot_symbol_tf_created_at
 CREATE INDEX IF NOT EXISTS idx_trade_signal_snapshot_created_at_brin
     ON aureus_trade_signal_snapshots USING BRIN(created_at);
 
+ALTER TABLE aureus_trade_signal_snapshots
+    ADD COLUMN IF NOT EXISTS timeframe TEXT,
+    ADD COLUMN IF NOT EXISTS signal_schema_version TEXT,
+    ADD COLUMN IF NOT EXISTS signal_snapshot JSONB,
+    ADD COLUMN IF NOT EXISTS cisd_direction TEXT,
+    ADD COLUMN IF NOT EXISTS ema21 DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS ema55 DOUBLE PRECISION;
+
+UPDATE aureus_trade_signal_snapshots
+SET
+    timeframe = COALESCE(timeframe, 'M15'),
+    signal_schema_version = COALESCE(signal_schema_version, 'sig-v2.0.0'),
+    signal_snapshot = COALESCE(signal_snapshot, '{}'::jsonb),
+    cisd_direction = COALESCE(cisd_direction,
+        CASE
+            WHEN cisd_m15 > 0 THEN 'bull'
+            WHEN cisd_m15 < 0 THEN 'bear'
+            ELSE NULL
+        END
+    ),
+    ema21 = COALESCE(ema21, ema_21),
+    ema55 = COALESCE(ema55, ema_55)
+WHERE timeframe IS NULL
+   OR signal_schema_version IS NULL
+   OR signal_snapshot IS NULL
+   OR ema21 IS NULL
+   OR ema55 IS NULL;
+
+ALTER TABLE aureus_trade_signal_snapshots
+    ALTER COLUMN timeframe SET NOT NULL,
+    ALTER COLUMN signal_schema_version SET NOT NULL,
+    ALTER COLUMN signal_snapshot SET NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'uq_trade_signal_snapshot_trade_schema'
+          AND conrelid = 'aureus_trade_signal_snapshots'::regclass
+    ) THEN
+        ALTER TABLE aureus_trade_signal_snapshots
+            ADD CONSTRAINT uq_trade_signal_snapshot_trade_schema
+            UNIQUE (trade_journal_id, signal_schema_version);
+    END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_trade_signal_snapshot_json_object'
+          AND conrelid = 'aureus_trade_signal_snapshots'::regclass
+    ) THEN
+        ALTER TABLE aureus_trade_signal_snapshots
+            ADD CONSTRAINT chk_trade_signal_snapshot_json_object CHECK (
+                jsonb_typeof(signal_snapshot) = 'object' AND signal_snapshot <> '{}'::jsonb
+            ) NOT VALID;
+    END IF;
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS aureus_trade_signal_snapshots_archive (
     id BIGSERIAL PRIMARY KEY,
     snapshot_id BIGINT,
