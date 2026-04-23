@@ -167,7 +167,19 @@ wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus 
 wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, created_at FROM aureus_trade_signal_snapshots ORDER BY created_at DESC LIMIT 5;\""
 ```
 
-7. Gate sign-off phase 55: chỉ mark complete khi cả 2 bảng tồn tại và có record runtime mới.
+7. Gate sign-off phase 55: dùng command runtime evidence chính thức, chỉ mark complete khi command exit code = 0.
+```powershell
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python services/aureus-trader/scripts/verify_phase55_runtime_evidence.py --dsn \"$AUREUS_DB_DSN\" --output /mnt/d/Aureus/.planning/phases/55-evaluation-data-model-pipeline/55-07-runtime-evidence.json"
+```
+
+8. Verify artifact nhanh:
+```powershell
+wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python -c 'import json; p=".planning/phases/55-evaluation-data-model-pipeline/55-07-runtime-evidence.json"; d=json.load(open(p, "r", encoding="utf-8")); assert d["tables_ok"] and d["indexes_ok"] and d["latest_rows_ok"]'"
+```
+
+Nếu thiếu table/index/data mới, script sẽ trả exit code khác 0 để fail gate.
+
+9. Gate sign-off phase 55: chỉ mark complete khi cả 2 bảng tồn tại và có record runtime mới.
 
 ---
 
