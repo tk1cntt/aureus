@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-04-23T02:28:26.272001+00:00",
+  "required_tables": [
+    "aureus_trade_evaluations",
+    "aureus_trade_signal_snapshots"
+  ],
+  "present_tables": [
+    "aureus_trade_evaluations",
+    "aureus_trade_signal_snapshots"
+  ],
+  "missing_tables": [],
+  "required_indexes": [
+    "uq_trade_eval_trade_version",
+    "idx_trade_eval_symbol_timeframe_eval_at",
+    "idx_trade_eval_current",
+    "uq_trade_snapshot_trade_schema",
+    "idx_trade_snapshot_symbol_tf_created_at"
+  ],
+  "present_indexes": [
+    "idx_trade_eval_current",
+    "idx_trade_eval_symbol_timeframe_eval_at",
+    "idx_trade_snapshot_symbol_tf_created_at",
+    "uq_trade_eval_trade_version",
+    "uq_trade_snapshot_trade_schema"
+  ],
+  "missing_indexes": [],
+  "evaluation_stats": {
+    "row_count": 29,
+    "latest_at": "2026-04-22T17:47:23.980117+00:00"
+  },
+  "snapshot_stats": {
+    "row_count": 52,
+    "latest_at": "2026-04-23T00:02:07.211241+00:00"
+  },
+  "latest_evaluation_rows": [
+    {
+      "trace_id": "phase55-e2e-1776880043",
+      "symbol": "XAUUSD",
+      "timeframe": "M5",
+      "score_version": "scor-v1.0.0",
+      "evaluated_at": "2026-04-22T17:47:23.980117+00:00"
+    },
+    {
+      "trace_id": "AUDUSD:1:1776874800",
+      "symbol": "AUDUSD",
+      "timeframe": "M1",
+      "score_version": "scor-v1.0.0",
+      "evaluated_at": "2026-04-22T15:37:32.594583+00:00"
+    },
+    {
+      "trace_id": "GBPUSD:1:1776874800",
+      "symbol": "GBPUSD",
+      "timeframe": "M1",
+      "score_version": "scor-v1.0.0",
+      "evaluated_at": "2026-04-22T15:37:32.506877+00:00"
+    },
+    {
+      "trace_id": "XAUUSD:607:1776835140",
+      "symbol": "XAUUSD",
+      "timeframe": "M1",
+      "score_version": "scor-v1.0.0",
+      "evaluated_at": "2026-04-22T02:27:03.479902+00:00"
+    },
+    {
+      "trace_id": "XAUUSD:641:1776835260",
+      "symbol": "XAUUSD",
+      "timeframe": "M1",
+      "score_version": "scor-v1.0.0",
+      "evaluated_at": "2026-04-22T02:27:03.329662+00:00"
+    }
+  ],
+  "latest_snapshot_rows": [
+    {
+      "trace_id": "BTCUSD:6:1776913260",
+      "symbol": "BTCUSD",
+      "timeframe": "M15",
+      "signal_schema_version": "sig-v2.0.0",
+      "created_at": "2026-04-23T00:02:07.211241+00:00"
+    },
+    {
+      "trace_id": "XAUUSD:2:1776913260",
+      "symbol": "XAUUSD",
+      "timeframe": "M15",
+      "signal_schema_version": "sig-v2.0.0",
+      "created_at": "2026-04-23T00:02:03.421296+00:00"
+    },
+    {
+      "trace_id": "BTCUSD:607:1776913200",
+      "symbol": "BTCUSD",
+      "timeframe": "M15",
+      "signal_schema_version": "sig-v2.0.0",
+      "created_at": "2026-04-23T00:01:09.064505+00:00"
+    },
+    {
+      "trace_id": "BTCUSD:1:1776913200",
+      "symbol": "BTCUSD",
+      "timeframe": "M15",
+      "signal_schema_version": "sig-v2.0.0",
+      "created_at": "2026-04-23T00:01:07.180300+00:00"
+    },
+    {
+      "trace_id": "BTCUSD:642:1776913140",
+      "symbol": "BTCUSD",
+      "timeframe": "M15",
+      "signal_schema_version": "sig-v2.0.0",
+      "created_at": "2026-04-23T00:00:04.460068+00:00"
+    }
+  ],
+  "tables_ok": true,
+  "indexes_ok": true,
+  "latest_rows_ok": true
+}

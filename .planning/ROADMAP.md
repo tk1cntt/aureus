@@ -21,7 +21,7 @@
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
 | 54 | Strategy Scoring Framework | SCOR-01→04, ACC-01 | Planned |
-| 55 | 6/6 | Complete   | 2026-04-23 |
+| 55 | 7/7 | Complete    | 2026-04-23 |
 | 56 | Multi-Dimensional Reporting Engine | RPT-01→05, ACC-03 | Planned |
 | 57 | Telegram Insight Delivery | TEL-EVAL-01→04, ACC-02 | Planned |
 
@@ -49,7 +49,7 @@ Plans:
 
 **Requirements:** EVAL-01, EVAL-02, EVAL-03, EVAL-04  
 **Goal:** Chuẩn hóa schema và pipeline lưu dữ liệu đánh giá strategy vào DB để truy vấn thống kê ổn định.
-**Plans:** 6/6 plans complete
+**Plans:** 7/7 plans complete
 
 > Mở rộng từ 3 lên 6 plans để tách rõ runtime-parity gate (EVAL-RUNTIME-01→04) và storage policy gate SIGNAL-SNAPSHOT-01, tránh false-positive completion khi chỉ pass unit/migration.
 
