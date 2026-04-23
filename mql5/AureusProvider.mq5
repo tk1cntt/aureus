@@ -69,7 +69,8 @@ int OnInit()
 
    if(g_symbolCount <= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: No symbols configured in InpSymbols!");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] ERROR: No symbols configured in InpSymbols!");
       return INIT_FAILED;
      }
 
@@ -88,14 +89,17 @@ int OnInit()
       // Ensure the symbol is in MarketWatch (needed for CopyRates on non-chart symbols)
       if(!SymbolSelect(g_contexts[i].symbol, true))
         {
-         if(InpDebugMode) PrintFormat("[AureusProvider] WARNING: Could not select symbol %s in MarketWatch",
-                     g_contexts[i].symbol);
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] WARNING: Could not select symbol %s in MarketWatch",
+                        g_contexts[i].symbol);
         }
      }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] Configured %d symbols: %s", g_symbolCount, InpSymbols);
-   if(InpDebugMode) PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
-               InpSendTicks ? "ON" : "OFF", _Symbol);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] Configured %d symbols: %s", g_symbolCount, InpSymbols);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
+                  InpSendTicks ? "ON" : "OFF", _Symbol);
 
 //--- Configure socket
    g_socket.SetHost(InpGatewayHost);
@@ -131,11 +135,13 @@ int OnInit()
             g_contexts[i].lastCandleTime = barTimes[0];
         }
 
-      if(InpDebugMode) PrintFormat("[AureusProvider] Passive mode enabled. Waiting for recovery commands.");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Passive mode enabled. Waiting for recovery commands.");
      }
    else
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] Initial connection failed — will retry on timer");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Initial connection failed — will retry on timer");
       g_wasDisconnected = true;
       g_disconnectTime  = TimeCurrent();
      }
@@ -162,8 +168,9 @@ void OnDeinit(const int reason)
    for(int i = 0; i < g_symbolCount; i++)
       totalCandles += g_contexts[i].candlesSent;
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
-               g_ticksSent, totalCandles, g_ordersExecuted, g_ordersFailed);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] Stopped. Ticks: %d, Candles: %d, Orders: %d executed/%d failed",
+                  g_ticksSent, totalCandles, g_ordersExecuted, g_ordersFailed);
   }
 
 //+------------------------------------------------------------------+
@@ -298,9 +305,11 @@ void ExecutePositionsRequest()
   {
    string json = BuildPositionsJSON();
    if(g_socket.SendJSON(json))
-      if(InpDebugMode) PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
-   else
-      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] POSITION_REPORT sent: %d positions", PositionsTotal());
+      else
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] ERROR: Failed to send POSITION_REPORT");
   }
 
 //+------------------------------------------------------------------+
@@ -310,7 +319,8 @@ string BuildTradeHistoryJSON(datetime fromTime, datetime toTime, long filterMagi
   {
    if(!HistorySelect(fromTime, toTime))
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] HistorySelect failed: %d", GetLastError());
       return "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"HistorySelect failed\"}";
      }
 
@@ -445,13 +455,15 @@ void DoInitialBackfillForSymbol(int ctxIndex)
 
    string sym = g_contexts[ctxIndex].symbol;
    int totalBars = InpInitialBars;
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Sending initial backfill: %d M1 candles", sym, totalBars);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] Sending initial backfill: %d M1 candles", sym, totalBars);
 
    MqlRates allRates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, totalBars, allRates);
    if(copied <= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Initial CopyRates failed: %d", sym, GetLastError());
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] Initial CopyRates failed: %d", sym, GetLastError());
       return;
      }
 
@@ -473,8 +485,9 @@ void DoInitialBackfillForSymbol(int ctxIndex)
       if(g_socket.SendJSON(json))
         {
          totalSent += count;
-         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] BACKFILL chunk %d-%d sent (%d candles)",
-                     sym, start + 1, end, count);
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] [%s] BACKFILL chunk %d-%d sent (%d candles)",
+                        sym, start + 1, end, count);
         }
       else
         {
@@ -489,10 +502,11 @@ void DoInitialBackfillForSymbol(int ctxIndex)
      {
       g_contexts[ctxIndex].lastCandleTime = allRates[copied - 1].time;
       g_contexts[ctxIndex].candlesSent += totalSent;
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Initial backfill complete: %d/%d candles (%s to %s)",
-                  sym, totalSent, copied,
-                  TimeToString(allRates[0].time),
-                  TimeToString(allRates[copied - 1].time));
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] Initial backfill complete: %d/%d candles (%s to %s)",
+                     sym, totalSent, copied,
+                     TimeToString(allRates[0].time),
+                     TimeToString(allRates[copied - 1].time));
      }
   }
 
@@ -512,7 +526,8 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
      {
       if(g_contexts[ctxIndex].lastCandleTime == 0)
         {
-         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No lastCandleTime — skipping backfill", sym);
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] [%s] No lastCandleTime — skipping backfill", sym);
          return;
         }
       start = g_contexts[ctxIndex].lastCandleTime;
@@ -523,27 +538,31 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
 
    if(missedBars <= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No candle gap detected", sym);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] No candle gap detected", sym);
       return;
      }
 
    if(toTime == 0 && missedBars > InpMaxBackfillBars)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Gap too large (%d bars), limiting to %d",
-                  sym, missedBars, InpMaxBackfillBars);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] Gap too large (%d bars), limiting to %d",
+                     sym, missedBars, InpMaxBackfillBars);
       missedBars = InpMaxBackfillBars;
       start = end - (missedBars * 60);
      }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfilling %d M1 bars from %s to %s",
-               sym, missedBars, TimeToString(start), TimeToString(end));
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] Backfilling %d M1 bars from %s to %s",
+                  sym, missedBars, TimeToString(start), TimeToString(end));
 
    MqlRates rates[];
 // Use time bounds directly instead of iBarShift to force MT5 to download/sync history
    int copied = CopyRates(sym, PERIOD_M1, start, end, rates);
    if(copied <= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] CopyRates by time failed: %d", sym, GetLastError());
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] CopyRates by time failed: %d", sym, GetLastError());
       return;
      }
 
@@ -563,7 +582,8 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
 
    if(filteredCount == 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] No new candles to backfill in range", sym);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] No new candles to backfill in range", sym);
       return;
      }
 
@@ -591,14 +611,16 @@ void DoBackfillForSymbol(int ctxIndex, datetime fromTime=0, datetime toTime=0)
         }
       else
         {
-         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfill chunk send failed after %d/%d candles",
-                     sym, sentCount, filteredCount);
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] [%s] Backfill chunk send failed after %d/%d candles",
+                        sym, sentCount, filteredCount);
          break;
         }
      }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Targeted backfill finished: %d/%d candles sent",
-               sym, sentCount, filteredCount);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] Targeted backfill finished: %d/%d candles sent",
+                  sym, sentCount, filteredCount);
   }
 
 //+------------------------------------------------------------------+
@@ -613,13 +635,15 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
    if(count > InpMaxBackfillBars)
       count = InpMaxBackfillBars;
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Backfilling last %d M1 bars", sym, count);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] Backfilling last %d M1 bars", sym, count);
 
    MqlRates rates[];
    int copied = CopyRates(sym, PERIOD_M1, 1, count, rates);
    if(copied <= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] [%s] CopyRates failed for count backfill: %d", sym, GetLastError());
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] [%s] CopyRates failed for count backfill: %d", sym, GetLastError());
       return;
      }
 
@@ -644,13 +668,15 @@ void DoBackfillCountForSymbol(int ctxIndex, int count)
         }
       else
         {
-         if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed after %d/%d candles",
-                     sym, sentCount, copied);
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] [%s] Count-based backfill chunk send failed after %d/%d candles",
+                        sym, sentCount, copied);
          break;
         }
      }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Count-based backfill finished: %d/%d candles sent", sym, sentCount, copied);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] Count-based backfill finished: %d/%d candles sent", sym, sentCount, copied);
   }
 
 //+------------------------------------------------------------------+
@@ -806,7 +832,8 @@ void SendACK(string cmdId)
                     "{\"type\":\"ACK\",\"cmd_id\":\"%s\",\"t\":%lld}",
                     cmdId, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ACK sent for cmd_id=%s", cmdId);
   }
 
 //+------------------------------------------------------------------+
@@ -819,7 +846,8 @@ void SendNACK(string cmdId, string reason)
                     "{\"type\":\"NACK\",\"cmd_id\":\"%s\",\"reason\":\"%s\",\"t\":%lld}",
                     cmdId, reason, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] NACK sent for cmd_id=%s reason=%s", cmdId, reason);
   }
 
 //+------------------------------------------------------------------+
@@ -829,90 +857,91 @@ string RetcodeToReason(int retcode)
   {
    switch(retcode)
      {
-      case 10019:
-         return "INSUFFICIENT_MARGIN";
-      case 10016:
-         return "INVALID_STOPS";
-      case 10017:
-         return "TRADE_DISABLED";
-      case 10018:
-         return "MARKET_CLOSED";
-      case 10006:
+      case 10004: // TRADE_RETCODE_REQUOTE: requote
+         return "REQUOTE";
+      case 10006: // TRADE_RETCODE_REJECT: request bị từ chối
          return "REJECTED";
-      case 10015:
-         return "INVALID_PRICE";
-      case 10014:
-         return "INVALID_VOLUME";
-      case 10013:
+      case 10007: // TRADE_RETCODE_CANCEL: request bị cancel bởi trader
+         return "CANCELED";
+      case 10008: // TRADE_RETCODE_PLACED: order đã được đặt
+         return "ORDER_PLACED";
+      case 10009: // TRADE_RETCODE_DONE: request xử lý thành công
+         return "DONE";
+      case 10010: // TRADE_RETCODE_DONE_PARTIAL: khớp lệnh một phần
+         return "DONE_PARTIAL";
+      case 10011: // TRADE_RETCODE_ERROR: lỗi xử lý request
+         return "SERVER_ERROR";
+      case 10012: // TRADE_RETCODE_TIMEOUT: request timeout
+         return "TIMEOUT";
+      case 10013: // TRADE_RETCODE_INVALID: request không hợp lệ
          return "REQUEST_DENIED";
+      case 10014: // TRADE_RETCODE_INVALID_VOLUME: volume không hợp lệ
+         return "INVALID_VOLUME";
+      case 10015: // TRADE_RETCODE_INVALID_PRICE: giá không hợp lệ
+         return "INVALID_PRICE";
+      case 10016: // TRADE_RETCODE_INVALID_STOPS: SL/TP không hợp lệ
+         return "INVALID_STOPS";
+      case 10017: // TRADE_RETCODE_TRADE_DISABLED: trading bị disable
+         return "TRADE_DISABLED";
+      case 10018: // TRADE_RETCODE_MARKET_CLOSED: market đóng cửa
+         return "MARKET_CLOSED";
+      case 10019: // TRADE_RETCODE_NO_MONEY: không đủ margin/funds
+         return "INSUFFICIENT_MARGIN";
+      case 10020: // TRADE_RETCODE_PRICE_CHANGED: giá đã thay đổi
+         return "PRICE_CHANGED";
+      case 10021: // TRADE_RETCODE_PRICE_OFF: không có quote giá
+         return "PRICE_OFF";
+      case 10022: // TRADE_RETCODE_INVALID_EXPIRATION: expiration không hợp lệ
+         return "INVALID_EXPIRATION";
+      case 10023: // TRADE_RETCODE_ORDER_CHANGED: trạng thái order đã đổi
+         return "ORDER_CHANGED";
+      case 10024: // TRADE_RETCODE_TOO_MANY_REQUESTS: quá nhiều request
+         return "TOO_MANY_REQUESTS";
+      case 10025: // TRADE_RETCODE_NO_CHANGES: modify không có thay đổi
+         return "NO_CHANGES";
+      case 10026: // TRADE_RETCODE_SERVER_DISABLES_AT: server tắt autotrading
+         return "SERVER_DISABLES_AT";
+      case 10027: // TRADE_RETCODE_CLIENT_DISABLES_AT: terminal tắt autotrading
+         return "CLIENT_DISABLES_AT";
+      case 10028: // TRADE_RETCODE_LOCKED: request đang bị lock
+         return "LOCKED";
+      case 10029: // TRADE_RETCODE_FROZEN: order/position bị frozen
+         return "FROZEN";
+      case 10030: // TRADE_RETCODE_INVALID_FILL: filling type không hợp lệ
+         return "INVALID_FILL";
+      case 10031: // TRADE_RETCODE_CONNECTION: không có kết nối trade server
+         return "CONNECTION";
+      case 10032: // TRADE_RETCODE_ONLY_REAL: chỉ cho phép trên tài khoản real
+         return "ONLY_REAL";
+      case 10033: // TRADE_RETCODE_LIMIT_ORDERS: vượt giới hạn pending orders
+         return "LIMIT_ORDERS";
+      case 10034: // TRADE_RETCODE_LIMIT_VOLUME: vượt giới hạn volume cho symbol
+         return "LIMIT_VOLUME";
+      case 10035: // TRADE_RETCODE_INVALID_ORDER: loại order không hợp lệ/bị cấm
+         return "INVALID_ORDER";
+      case 10036: // TRADE_RETCODE_POSITION_CLOSED: position đã đóng
+         return "POSITION_CLOSED";
+      case 10038: // TRADE_RETCODE_INVALID_CLOSE_VOLUME: close volume vượt position volume
+         return "INVALID_CLOSE_VOLUME";
+      case 10039: // TRADE_RETCODE_CLOSE_ORDER_EXIST: đã có close order cho position
+         return "CLOSE_ORDER_EXIST";
+      case 10040: // TRADE_RETCODE_LIMIT_POSITIONS: vượt giới hạn số positions
+         return "TRADE_LIMIT_POSITIONS";
+      case 10041: // TRADE_RETCODE_REJECT_CANCEL: request activate/cancel bị reject
+         return "REJECT_CANCEL";
+      case 10042: // TRADE_RETCODE_LONG_ONLY: chỉ cho phép vị thế Buy
+         return "LONG_ONLY";
+      case 10043: // TRADE_RETCODE_SHORT_ONLY: chỉ cho phép vị thế Sell
+         return "SHORT_ONLY";
+      case 10044: // TRADE_RETCODE_CLOSE_ONLY: chỉ cho phép đóng vị thế
+         return "CLOSE_ONLY";
+      case 10045: // TRADE_RETCODE_FIFO_CLOSE: bắt buộc đóng theo FIFO
+         return "FIFO_CLOSE";
+      case 10046: // TRADE_RETCODE_HEDGE_PROHIBITED: hedging bị cấm
+         return "HEDGE_PROHIBITED";
       default:
          return StringFormat("ERROR_%d", retcode);
      }
-  }
-
-//+------------------------------------------------------------------+
-//| Resolve open time from MT5 position/order/deal objects             |
-//+------------------------------------------------------------------+
-bool ResolvePositionOpenTimeMs(ulong positionTicket, long &openTimeMs)
-  {
-   if(positionTicket == 0)
-      return false;
-   if(!PositionSelectByTicket(positionTicket))
-      return false;
-   long posTime = (long)PositionGetInteger(POSITION_TIME);
-   if(posTime <= 0)
-      return false;
-   openTimeMs = posTime * 1000;
-   return true;
-  }
-
-bool ResolveOrderSetupTimeMs(ulong orderTicket, long &openTimeMs)
-  {
-   if(orderTicket == 0)
-      return false;
-   if(OrderSelect(orderTicket))
-     {
-      long orderTime = (long)OrderGetInteger(ORDER_TIME_SETUP);
-      if(orderTime > 0)
-        {
-         openTimeMs = orderTime * 1000;
-         return true;
-        }
-     }
-   if(HistoryOrderSelect(orderTicket))
-     {
-      long historyOrderTime = (long)HistoryOrderGetInteger(orderTicket, ORDER_TIME_SETUP);
-      if(historyOrderTime > 0)
-        {
-         openTimeMs = historyOrderTime * 1000;
-         return true;
-        }
-     }
-   return false;
-  }
-
-bool ResolveDealTimeMs(ulong dealTicket, long &dealTimeMs)
-  {
-   if(dealTicket == 0)
-      return false;
-   if(!HistoryDealSelect(dealTicket))
-      return false;
-   long dealTime = (long)HistoryDealGetInteger(dealTicket, DEAL_TIME);
-   if(dealTime <= 0)
-      return false;
-   dealTimeMs = dealTime * 1000;
-   return true;
-  }
-
-bool ResolveOpenEventTimeMs(ulong positionTicket, ulong orderTicket, ulong dealTicket, long &openTimeMs)
-  {
-   if(ResolvePositionOpenTimeMs(positionTicket, openTimeMs))
-      return true;
-   if(ResolveOrderSetupTimeMs(orderTicket, openTimeMs))
-      return true;
-   if(ResolveDealTimeMs(dealTicket, openTimeMs))
-      return true;
-   return false;
   }
 
 //+------------------------------------------------------------------+
@@ -920,15 +949,17 @@ bool ResolveOpenEventTimeMs(ulong positionTicket, ulong orderTicket, ulong dealT
 //+------------------------------------------------------------------+
 void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
                      string orderType, double volume, double openPrice,
-                     double sl, double tp, long magic, string strategyName = "", string traceId = "", long openTimeMs)
+                     double sl, double tp, long magic, string strategyName = "", string traceId = "")
   {
+   long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_OPENED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,"
-                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"open_time\":%lld,\"t\":%lld}",
-                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, strategyName, traceId, openTimeMs, openTimeMs);
+                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
+                    cmdId, symbol, ticket, direction, orderType, volume, openPrice, sl, tp, magic, strategyName, traceId, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s strategy=%s", ticket, symbol, strategyName);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ORDER_OPENED pushed: ticket=%lld symbol=%s strategy=%s", ticket, symbol, strategyName);
   }
 
 //+------------------------------------------------------------------+
@@ -942,7 +973,7 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
                     "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
                     cmdId, symbol, reason, retcode, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
+   PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
                cmdId, reason, retcode);
   }
 
@@ -952,16 +983,18 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
                      double commission, double swap, long magic,
-                     string strategyName = "", string traceId = "", long exitTimeMs)
+                     string strategyName = "", string traceId = "")
   {
+   long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
-                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"exit_time\":%lld,\"t\":%lld}",
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
                     symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
-                    magic, strategyName, traceId, exitTimeMs, exitTimeMs);
+                    magic, strategyName, traceId, timeMs);
    g_socket.SendJSON(json);
-   if(InpDebugMode) PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s", ticket, profit, strategyName);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s", ticket, profit, strategyName);
   }
 
 
@@ -1002,8 +1035,9 @@ double CalculateLotFromBudget(string symbol, string direction,
    double tickSize  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
    if(tickValue <= 0 || tickSize <= 0)
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Invalid tick info — tickValue=%.5f tickSize=%.5f",
-                  symbol, tickValue, tickSize);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Invalid tick info — tickValue=%.5f tickSize=%.5f",
+                     symbol, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
 
@@ -1020,8 +1054,9 @@ double CalculateLotFromBudget(string symbol, string direction,
    double slDistance = MathAbs(actualEntry - slRequested);
    if(slDistance < tickSize)
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] SL too close — dist=%.5f tickSize=%.5f",
-                  symbol, slDistance, tickSize);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] SL too close — dist=%.5f tickSize=%.5f",
+                     symbol, slDistance, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
 
@@ -1029,8 +1064,9 @@ double CalculateLotFromBudget(string symbol, string direction,
    double lossPerLot = (slDistance / tickSize) * tickValue;
    if(lossPerLot <= 0)
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Zero lossPerLot — dist=%.5f tickVal=%.2f tickSize=%.5f",
-                  symbol, slDistance, tickValue, tickSize);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Zero lossPerLot — dist=%.5f tickVal=%.2f tickSize=%.5f",
+                     symbol, slDistance, tickValue, tickSize);
       return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
      }
 
@@ -1076,15 +1112,17 @@ double CalculateLotFromBudget(string symbol, string direction,
       slDistance = newSlDistance;
       lossPerLot = (slDistance / tickSize) * tickValue;
 
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Lot %.2f > max %.2f — SL widened: dist=%.5f → new SL=%.5f",
-                  symbol, riskAmount / lossPerLot, maxVol, slDistance, slRequested);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Lot %.2f > max %.2f — SL widened: dist=%.5f → new SL=%.5f",
+                     symbol, riskAmount / lossPerLot, maxVol, slDistance, slRequested);
      }
 
 // --- Nếu lot < minVol → từ chối (không tăng budget) ---
    if(lot < minVol)
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Calculated lot %.4f < min %.2f — SL too wide for budget $%.2f",
-                  symbol, lot, minVol, originalBudget);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Calculated lot %.4f < min %.2f — SL too wide for budget $%.2f",
+                     symbol, lot, minVol, originalBudget);
       return 0.0;
      }
 
@@ -1101,23 +1139,26 @@ double CalculateLotFromBudget(string symbol, string direction,
                        : SymbolInfoDouble(symbol, SYMBOL_BID),
                        marginRequired))
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Failed to calc margin — error=%d",
-                  symbol, GetLastError());
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Failed to calc margin — error=%d",
+                     symbol, GetLastError());
       return 0.0;
      }
 
    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
    if(freeMargin < marginRequired)
      {
-      if(InpDebugMode) PrintFormat("[lot_calc] [%s] Insufficient margin — need=%.2f free=%.2f",
-                  symbol, marginRequired, freeMargin);
+      if(InpDebugMode)
+         PrintFormat("[lot_calc] [%s] Insufficient margin — need=%.2f free=%.2f",
+                     symbol, marginRequired, freeMargin);
       return 0.0;
      }
 
-   if(InpDebugMode) PrintFormat("[lot_calc] [%s] %s | budget=$%.2f | entry=%.5f | SL=%.5f | "
-               "dist=%.5f | tickVal=%.2f tickSize=%.5f | loss/lot=$%.2f | lot=%.2f | margin=%.2f",
-               symbol, direction, originalBudget, actualEntry, slRequested,
-               slDistance, tickValue, tickSize, lossPerLot, lot, marginRequired);
+   if(InpDebugMode)
+      PrintFormat("[lot_calc] [%s] %s | budget=$%.2f | entry=%.5f | SL=%.5f | "
+                  "dist=%.5f | tickVal=%.2f tickSize=%.5f | loss/lot=$%.2f | lot=%.2f | margin=%.2f",
+                  symbol, direction, originalBudget, actualEntry, slRequested,
+                  slDistance, tickValue, tickSize, lossPerLot, lot, marginRequired);
 
    return lot;
   }
@@ -1213,33 +1254,37 @@ void ExecuteOpenOrder(const string &raw)
 
    double entry_price = 0, sl_price = 0, tp_price = 0, lot_size = 0;
 
-   if(orderType == "MARKET")
+
+   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+   if(direction == "BUY")
      {
-      double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-      double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-      if(direction == "BUY")
-        {
-         // Vào lệnh BUY ngay
+      // Vào lệnh BUY ngay
+      if(orderType == "MARKET")
          entry_price = ask;
-         sl = sl - buffer_in_price;
-         volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
-         tp = entry_price + (entry_price - sl) * tpRRRatio;
-        }
       else
-         if(direction == "SELL")
-           {
-            // Vào lệnh SELL ngay
-            entry_price = bid;
-            sl = sl + total_adjustment;
-            volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
-            tp = entry_price - (sl - entry_price) * tpRRRatio;
-           }
+         entry_price = price;
+      sl = sl - buffer_in_price;
+      volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
+      tp = entry_price + (entry_price - sl) * tpRRRatio;
      }
    else
-      entry_price = price;
+      if(direction == "SELL")
+        {
+         // Vào lệnh SELL ngay
+         if(orderType == "MARKET")
+            entry_price = bid;
+         else
+            entry_price = price;
+         sl = sl + total_adjustment;
+         volume = CalculateLotFromBudget(symbol, direction, entry_price, sl, InpRiskFixedAmountBudget);
+         tp = entry_price - (sl - entry_price) * tpRRRatio;
+        }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
-               symbol, tpRRRatio, sl_price, tp_price);
+
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] [%s] TP recalculated from actual entry: ratio=%.2f slDist=%.5f tp=%.5f",
+                  symbol, tpRRRatio, sl_price, tp_price);
 
 // Normalize volume
    double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
@@ -1396,23 +1441,16 @@ void ExecuteOpenOrder(const string &raw)
             filledEntry = (result.price > 0) ? result.price : request.price;
             positionTicket = (ulong)result.order;
             positionResolved = (filledEntry > 0);
-            if(InpDebugMode) PrintFormat("[PF_FILL_FALLBACK] cmd_id=%s symbol=%s fallback_entry=%.5f", cmdId, symbol, filledEntry);
+            if(InpDebugMode)
+               PrintFormat("[PF_FILL_FALLBACK] cmd_id=%s symbol=%s fallback_entry=%.5f", cmdId, symbol, filledEntry);
            }
 
          if(!positionResolved)
            {
             if(!terminalEventSent)
               {
-               long openedTimeMs = 0;
-               if(!ResolveOpenEventTimeMs((ulong)result.order, (ulong)result.order, (ulong)result.deal, openedTimeMs))
-                 {
-                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
-                  terminalEventSent = true;
-                  g_ordersFailed++;
-                  return;
-                 }
                PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                               volume, result.price, request.sl, request.tp, magic, strategyName, traceId, openedTimeMs);
+                               volume, result.price, request.sl, request.tp, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1430,8 +1468,10 @@ void ExecuteOpenOrder(const string &raw)
 
          tpAfter = NormalizeDouble(tpAfter, symDigits);
 
-         if(InpDebugMode) PrintFormat("[PF_FILL] cmd_id=%s symbol=%s position_ticket=%llu filled_entry=%.5f", cmdId, symbol, positionTicket, filledEntry);
-         if(InpDebugMode) PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
+         if(InpDebugMode)
+            PrintFormat("[PF_FILL] cmd_id=%s symbol=%s position_ticket=%llu filled_entry=%.5f", cmdId, symbol, positionTicket, filledEntry);
+         if(InpDebugMode)
+            PrintFormat("[PF_RECALC] cmd_id=%s symbol=%s tp_before=%.5f tp_after=%.5f rr=%.2f sl=%.5f", cmdId, symbol, tpBefore, tpAfter, tpRRRatio, slFinal);
 
          // Safety layer 2: stop/freeze guards before modify
          long freezeLevel = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
@@ -1456,19 +1496,12 @@ void ExecuteOpenOrder(const string &raw)
          if(!validStops || !validFreeze)
            {
             string guardReason = validStops ? "FREEZE_GUARD" : "INVALID_STOPS";
-            if(InpDebugMode) PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
+            if(InpDebugMode)
+               PrintFormat("[PF_MODIFY_GUARD_BYPASS] cmd_id=%s symbol=%s guard=%s", cmdId, symbol, guardReason);
             if(!terminalEventSent)
               {
-               long openedTimeMs = 0;
-               if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
-                 {
-                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
-                  terminalEventSent = true;
-                  g_ordersFailed++;
-                  return;
-                 }
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId, openedTimeMs);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1479,7 +1512,8 @@ void ExecuteOpenOrder(const string &raw)
          MqlTradeResult modRes;
          ZeroMemory(modReq);
          ZeroMemory(modRes);
-         if(InpDebugMode) PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s position=%llu sl=%.5f tp=%.5f", cmdId, symbol, positionTicket, slFinal, tpAfter);
+         if(InpDebugMode)
+            PrintFormat("[PF_MODIFY_ATTEMPT] cmd_id=%s symbol=%s position=%llu sl=%.5f tp=%.5f", cmdId, symbol, positionTicket, slFinal, tpAfter);
          modReq.action = TRADE_ACTION_SLTP;
          modReq.symbol = symbol;
          modReq.magic = magic;
@@ -1488,24 +1522,18 @@ void ExecuteOpenOrder(const string &raw)
          modReq.position = positionTicket;
 
          bool modOk = OrderSend(modReq, modRes) && modRes.retcode == TRADE_RETCODE_DONE;
-         if(InpDebugMode) PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
+         if(InpDebugMode)
+            PrintFormat("[PF_MODIFY] cmd_id=%s symbol=%s modify_result=retcode:%d", cmdId, symbol, (int)modRes.retcode);
 
          if(!modOk)
            {
             int modRetcode = (int)(modRes.retcode != 0 ? modRes.retcode : result.retcode);
-            if(InpDebugMode) PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
+            if(InpDebugMode)
+               PrintFormat("[PF_MODIFY_BYPASS] cmd_id=%s symbol=%s retcode=%d", cmdId, symbol, modRetcode);
             if(!terminalEventSent)
               {
-               long openedTimeMs = 0;
-               if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
-                 {
-                  PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
-                  terminalEventSent = true;
-                  g_ordersFailed++;
-                  return;
-                 }
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId, openedTimeMs);
+                               volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -1514,16 +1542,8 @@ void ExecuteOpenOrder(const string &raw)
 
          if(!terminalEventSent)
            {
-            long openedTimeMs = 0;
-            if(!ResolveOpenEventTimeMs(positionTicket, (ulong)result.order, (ulong)result.deal, openedTimeMs))
-              {
-               PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
-               terminalEventSent = true;
-               g_ordersFailed++;
-               return;
-              }
             PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
-                            volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId, openedTimeMs);
+                            volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1532,16 +1552,8 @@ void ExecuteOpenOrder(const string &raw)
         {
          if(!terminalEventSent)
            {
-            long openedTimeMs = 0;
-            if(!ResolveOpenEventTimeMs((ulong)result.order, (ulong)result.order, (ulong)result.deal, openedTimeMs))
-              {
-               PushOrderFailed(cmdId, symbol, "MISSING_OPEN_TIME", 0);
-               terminalEventSent = true;
-               g_ordersFailed++;
-               return;
-              }
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                            volume, result.price, sl, tp, magic, strategyName, traceId, openedTimeMs);
+                            volume, result.price, sl, tp, magic, strategyName, traceId);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1557,7 +1569,7 @@ void ExecuteOpenOrder(const string &raw)
         }
      }
 
-   // Safety layer 3: hard terminal event gate (exactly one terminal event)
+// Safety layer 3: hard terminal event gate (exactly one terminal event)
    if(!terminalEventSent)
      {
       PushOrderFailed(cmdId, symbol, "TERMINAL_EVENT_NOT_EMITTED", (int)result.retcode);
@@ -1658,18 +1670,21 @@ void ExecuteRequestOrders(const string &raw)
    long   filterMagic = ParseJSONLong(raw, "magic_number");
    string filterSymbol = ParseJSONString(raw, "symbol");
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_ORDERS: cmdId=%s magic=%lld symbol=%s",
-               cmdId, filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] REQUEST_ORDERS: cmdId=%s magic=%lld symbol=%s",
+                  cmdId, filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
 
    string json = BuildOpenOrdersJSON(filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] ORDERS response sent");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] ORDERS response sent");
      }
    else
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] ERROR: Failed to send ORDERS response");
      }
   }
 
@@ -1720,7 +1735,8 @@ string BuildOpenOrdersJSON(long filterMagic, string filterSymbol)
      }
 
    json += StringFormat("],\"count\":%d}", count);
-   if(InpDebugMode) PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] Built ORDERS JSON: %d positions", count);
    return json;
   }
 
@@ -1740,24 +1756,28 @@ void ExecuteTradeHistoryRequest(const string &raw)
 
    if(fromTime >= toTime)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: invalid time range from=%d to=%d", fromTime, toTime);
       string errorJson = "{\"type\":\"TRADE_HISTORY\",\"trades\":[],\"error\":\"invalid_time_range\"}";
       g_socket.SendJSON(errorJson);
       return;
      }
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
-               TimeToString(fromTime), TimeToString(toTime), filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] REQUEST_TRADE_HISTORY: from=%s to=%s magic=%lld symbol=%s",
+                  TimeToString(fromTime), TimeToString(toTime), filterMagic, filterSymbol != "" ? filterSymbol : "ALL");
 
    string json = BuildTradeHistoryJSON(fromTime, toTime, filterMagic, filterSymbol);
 
    if(g_socket.SendJSON(json))
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] TRADE_HISTORY response sent");
      }
    else
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] ERROR: Failed to send TRADE_HISTORY response");
      }
   }
 
@@ -1779,14 +1799,16 @@ void ProcessIncomingCommands()
 // â”€â”€ Order Commands â”€â”€
    if(StringFind(raw, "\"OPEN_ORDER\"") >= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] Received OPEN_ORDER command");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Received OPEN_ORDER command");
       ExecuteOpenOrder(raw);
       return;
      }
 
    if(StringFind(raw, "\"CLOSE_ORDER\"") >= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Received CLOSE_ORDER command");
       ExecuteCloseOrder(raw);
       return;
      }
@@ -1794,7 +1816,8 @@ void ProcessIncomingCommands()
 // ── Position Report Request ──
    if(StringFind(raw, "\"REQUEST_POSITIONS\"") >= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Received REQUEST_POSITIONS command");
       ExecutePositionsRequest();
       return;
      }
@@ -1804,7 +1827,8 @@ void ProcessIncomingCommands()
       // â"€â"€ Open Orders Request â"€â"€
       if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
         {
-         if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
          ExecuteRequestOrders(raw);
          return;
         }
@@ -1812,7 +1836,8 @@ void ProcessIncomingCommands()
 // â"€â"€ Trade History Request â"€â"€
    if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)
      {
-      if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Received REQUEST_TRADE_HISTORY command");
       ExecuteTradeHistoryRequest(raw);
       return;
      }
@@ -1829,17 +1854,20 @@ void ProcessIncomingCommands()
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
               {
-               if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL_COUNT: %d candles",
-                           cmdSymbol, count);
+               if(InpDebugMode)
+                  PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL_COUNT: %d candles",
+                              cmdSymbol, count);
                DoBackfillCountForSymbol(idx, (int)count);
               }
             else
-               if(InpDebugMode) PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
+               if(InpDebugMode)
+                  PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
            }
          else
            {
             // No symbol specified â†’ backfill all
-            if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
+            if(InpDebugMode)
+               PrintFormat("[AureusProvider] Received REQUEST_BACKFILL_COUNT (all): %d candles", count);
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillCountForSymbol(i, (int)count);
            }
@@ -1865,18 +1893,21 @@ void ProcessIncomingCommands()
             int idx = FindContextIndex(cmdSymbol);
             if(idx >= 0)
               {
-               if(InpDebugMode) PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL range: %s - %s",
-                           cmdSymbol, TimeToString(fromTime), TimeToString(toTime));
+               if(InpDebugMode)
+                  PrintFormat("[AureusProvider] [%s] Received REQUEST_BACKFILL range: %s - %s",
+                              cmdSymbol, TimeToString(fromTime), TimeToString(toTime));
                DoBackfillForSymbol(idx, fromTime, toTime);
               }
             else
-               if(InpDebugMode) PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
+               if(InpDebugMode)
+                  PrintFormat("[AureusProvider] Unknown symbol in command: %s", cmdSymbol);
            }
          else
            {
             // No symbol specified â†’ backfill all
-            if(InpDebugMode) PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
-                        TimeToString(fromTime), TimeToString(toTime));
+            if(InpDebugMode)
+               PrintFormat("[AureusProvider] Received REQUEST_BACKFILL (all): %s - %s",
+                           TimeToString(fromTime), TimeToString(toTime));
             for(int i = 0; i < g_symbolCount; i++)
                DoBackfillForSymbol(i, fromTime, toTime);
            }
@@ -1931,9 +1962,10 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(PositionSelectByTicket(ticket))
       openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
 
-   if(InpDebugMode) PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
-               "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
-               symbol, ticket, direction, profit, magic);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
+                  "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
+                  symbol, ticket, direction, profit, magic);
 
    string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
    string strategyName = dealComment;
@@ -1945,10 +1977,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       traceId = StringSubstr(dealComment, commentSep + 1);
      }
 
-   long exitTimeMs = (long)HistoryDealGetInteger(trans.deal, DEAL_TIME) * 1000;
    PushOrderClosed(symbol, ticket, direction, volume,
                    openPrice, closePrice, profit, commission, swap, magic,
-                   strategyName, traceId, exitTimeMs);
+                   strategyName, traceId);
   }
 
 //+------------------------------------------------------------------+
@@ -1978,7 +2009,8 @@ void OnTimer()
         {
          int downSec = (g_disconnectTime > 0) ? (int)(TimeCurrent() - g_disconnectTime) : 0;
          if(downSec % 10 == 0) // Log every ~10 seconds
-            if(InpDebugMode) PrintFormat("[AureusProvider] Timer: Still disconnected (%d sec)", downSec);
+            if(InpDebugMode)
+               PrintFormat("[AureusProvider] Timer: Still disconnected (%d sec)", downSec);
         }
       return;
      }
