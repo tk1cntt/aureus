@@ -9,6 +9,8 @@ Tài liệu vận hành nhanh cho môi trường dev của Aureus.
 
 ## 1) Quick Start
 
+Tất cả các lệnh npx gitnexus phải được chạy trên môi trường hiện tại. Không được chạy npx gitnexus trên wsl.
+
 ### 1.1 Core backend services
 ```powershell
 wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./scripts/dev-service.sh"
