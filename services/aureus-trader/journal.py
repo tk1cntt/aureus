@@ -138,8 +138,6 @@ def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
         "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1", "cisd_H1"))),
     }
 
-    logger.info("build_signal_snapshot_columns: columns=%s", columns)
-
     return columns
 
 def _normalize_session_code(value):
@@ -381,23 +379,11 @@ class TradeJournalManager:
                         strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
                         symbol = event.get("symbol", journal_row.get("symbol", ""))
                         timeframe = event.get("timeframe", journal_row.get("timeframe", ""))
-                        logger.info(
-                            "on_order_opened: loaded journal row trace_id=%s trade_journal_id=%s strategy=%s symbol=%s",
-                            trace_id,
-                            trade_journal_id,
-                            strategy_name,
-                            symbol,
-                        )
                     else:
                         trade_journal_id = None
                         strategy_name = event.get("strategy_name", "")
                         symbol = event.get("symbol", "")
                         timeframe = event.get("timeframe", "")
-                        logger.warning(
-                            "on_order_opened: journal row not found after update trace_id=%s ticket=%s",
-                            trace_id,
-                            ticket,
-                        )
 
                     score_total_raw = event.get("score_total", event.get("score"))
                     score_total = None

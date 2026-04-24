@@ -81,14 +81,35 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             j.ticket,
             j.strategy_name,
             j.symbol,
-            j.timeframe AS journal_timeframe,
-            ss.timeframe AS snapshot_timeframe,
-            ss.signal_snapshot,
-            ss.cisd_direction,
-            ss.ema21,
-            ss.ema55,
-            ss.created_at,
-            ev.timeframe AS lineage_timeframe,
+            'M1' AS timeframe,
+            ss.atr,
+            ss.ema_21,
+            ss.ema_34,
+            ss.ema_55,
+            ss.ema_89,
+            ss.ema_100,
+            ss.ema_200,
+            ss.vol_sma_20,
+            ss.session,
+            ss.candle_color_d1,
+            ss.candle_color_h1,
+            ss.candle_color_m30,
+            ss.candle_color_m15,
+            ss.candle_color_m5,
+            ss.bb_m1_up,
+            ss.bb_m1_dn,
+            ss.bb_m5_up,
+            ss.bb_m5_dn,
+            ss.bb_m15_up,
+            ss.bb_m15_dn,
+            ss.bb_m30_up,
+            ss.bb_m30_dn,
+            ss.bb_h1_up,
+            ss.bb_h1_dn,
+            ss.cisd_m5,
+            ss.cisd_m15,
+            ss.cisd_m30,
+            ss.cisd_h1,
             ev.score_breakdown
         FROM aureus_trade_journal j
         LEFT JOIN LATERAL (
@@ -99,7 +120,10 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             LIMIT 1
         ) ev ON true
         LEFT JOIN LATERAL (
-            SELECT timeframe, signal_snapshot, cisd_direction, ema21, ema55, created_at
+            SELECT atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
+                   session, candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
+                   bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn, bb_m30_up, bb_m30_dn,
+                   bb_h1_up, bb_h1_dn, cisd_m5, cisd_m15, cisd_m30, cisd_h1
             FROM aureus_trade_signal_snapshots
             WHERE trade_journal_id = j.id
             ORDER BY created_at DESC
@@ -121,8 +145,6 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
     immutable_weights = dict(weights_snapshot or {})
 
     for row in rows:
-        timeframe, _timeframe_source = _select_timeframe_with_lineage(row)
-
         score_input = {
             "quality_gate_passed": True,
             "criteria": row.get("score_breakdown") or {},
@@ -148,7 +170,7 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             score_result.get("missing_data_policy") or "impute_neutral_and_flag",
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            timeframe,
+            row.get("timeframe") or "",
         )
 
         if eval_insert_result == "INSERT 0 1":
@@ -178,27 +200,56 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             """
             INSERT INTO aureus_trade_signal_snapshots (
                 trade_journal_id, trace_id, ticket, strategy_name, symbol,
-                timeframe, signal_schema_version, signal_snapshot,
-                cisd_direction, ema21, ema55, created_at
+                atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
+                session, candle_color_d1, candle_color_h1, candle_color_m30,
+                candle_color_m15, candle_color_m5,
+                bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
+                bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
+                cisd_m5, cisd_m15, cisd_m30, cisd_h1
             ) VALUES (
                 $1, $2, $3, $4, $5,
-                $6, $7, $8::jsonb,
-                $9, $10, $11, $12
+                $6, $7, $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17,
+                $18, $19,
+                $20, $21, $22, $23, $24, $25,
+                $26, $27, $28, $29,
+                $30, $31, $32, $33
             )
-            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
+            ON CONFLICT (trade_journal_id) DO NOTHING
             """,
             row["id"],
             row["trace_id"],
             row["ticket"],
             row.get("strategy_name") or "",
             row.get("symbol") or "",
-            timeframe,
-            signal_schema_version,
-            json.dumps(row.get("signal_snapshot") or {}),
-            row.get("cisd_direction"),
-            row.get("ema21"),
-            row.get("ema55"),
-            row.get("created_at") or _parse_iso8601(start),
+            row.get("atr"),
+            row.get("ema_21"),
+            row.get("ema_34"),
+            row.get("ema_55"),
+            row.get("ema_89"),
+            row.get("ema_100"),
+            row.get("ema_200"),
+            row.get("vol_sma_20"),
+            row.get("session"),
+            row.get("candle_color_d1"),
+            row.get("candle_color_h1"),
+            row.get("candle_color_m30"),
+            row.get("candle_color_m15"),
+            row.get("candle_color_m5"),
+            row.get("bb_m1_up"),
+            row.get("bb_m1_dn"),
+            row.get("bb_m5_up"),
+            row.get("bb_m5_dn"),
+            row.get("bb_m15_up"),
+            row.get("bb_m15_dn"),
+            row.get("bb_m30_up"),
+            row.get("bb_m30_dn"),
+            row.get("bb_h1_up"),
+            row.get("bb_h1_dn"),
+            row.get("cisd_m5"),
+            row.get("cisd_m15"),
+            row.get("cisd_m30"),
+            row.get("cisd_h1"),
         )
 
         if sig_insert_result == "INSERT 0 1":
