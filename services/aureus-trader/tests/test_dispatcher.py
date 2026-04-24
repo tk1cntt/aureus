@@ -324,6 +324,72 @@ class TestOrderDispatcherJournalStrategyMatch:
         assert journal.opened_events[0]["trace_id"] == "trace-generated-late"
 
     @pytest.mark.asyncio
+    async def test_dispatch_order_resolves_trace_id_from_strategy_event_data(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-journal-nested-trace"},
+            {"type": "ORDER_OPENED", "cmd_id": "ord-journal-nested-trace", "ticket": 333, "trace_id": ""},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": "",
+            "symbol": "BTCUSD",
+            "direction": "BUY",
+            "data": {"trace_id": "trace-from-data"},
+        }
+
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-journal-nested-trace",
+            "symbol": "BTCUSD",
+            "trace_id": "",
+            "strategy_event": strategy_event,
+        })
+
+        assert len(journal.opened_events) == 1
+        assert journal.opened_events[0]["trace_id"] == "trace-from-data"
+        assert journal.strategy_events[0]["data"]["trace_id"] == "trace-from-data"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_order_does_not_override_existing_order_opened_trace_id(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-journal-existing-trace"},
+            {"type": "ORDER_OPENED", "cmd_id": "ord-journal-existing-trace", "ticket": 444, "trace_id": "trace-on-opened"},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-journal-existing-trace",
+            "symbol": "ETHUSD",
+            "trace_id": "",
+            "strategy_event": {"type": "STRATEGY_MATCH", "trace_id": "", "symbol": "ETHUSD", "direction": "BUY"},
+        })
+
+        assert len(journal.opened_events) == 1
+        assert journal.opened_events[0]["trace_id"] == "trace-on-opened"
+
+
+    @pytest.mark.asyncio
     async def test_dispatch_order_does_not_call_strategy_match_when_not_order_opened(self):
         from config import TraderConfig
 

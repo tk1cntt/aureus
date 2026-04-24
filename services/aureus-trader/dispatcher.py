@@ -165,11 +165,21 @@ class OrderDispatcher:
                         strategy_event = order.get("strategy_event")
                         if isinstance(strategy_event, dict):
                             strategy_payload = dict(strategy_event)
+                            strategy_data = strategy_payload.get("data") if isinstance(strategy_payload.get("data"), dict) else {}
                             if trace_id and not strategy_payload.get("trace_id"):
                                 strategy_payload["trace_id"] = trace_id
+                            if trace_id and not strategy_data.get("trace_id"):
+                                strategy_data["trace_id"] = trace_id
+                            if strategy_data and strategy_payload.get("data") is not strategy_data:
+                                strategy_payload["data"] = strategy_data
                             await self.journal.on_strategy_match(strategy_payload)
                             if not trace_id:
-                                trace_id = strategy_payload.get("trace_id")
+                                trace_id = (
+                                    strategy_payload.get("trace_id")
+                                    or strategy_data.get("trace_id")
+                                )
+                        if not trace_id:
+                            trace_id = final.get("trace_id")
                         if trace_id:
                             final["trace_id"] = trace_id
                         if isinstance(order.get("signal_snapshot"), dict) and not isinstance(final.get("signal_snapshot"), dict):
