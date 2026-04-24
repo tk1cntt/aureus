@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-24 - Completed quick task 260424-r6b: Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*)
+Last activity: 2026-04-24 - Completed quick task 260424-sbg: Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report
 
 ## Architecture Decision
 
@@ -47,6 +47,7 @@ Last activity: 2026-04-24 - Completed quick task 260424-r6b: Bổ sung data thi
 | 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
 | 260424-qkt | Mapping lại dữ liệu CISD còn thiếu trong _build_signal_snapshot_columns + bổ sung atr/vol_sma_20/session/candle_color mapping | 2026-04-24 | (pending commit) | [260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron](./quick/260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron/) |
 | 260424-r6b | Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*) | 2026-04-24 | (pending commit) | [260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s](./quick/260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s/) |
+| 260424-sbg | Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report | 2026-04-24 | (pending commit) | [260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n](./quick/260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
