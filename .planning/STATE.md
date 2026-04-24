@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-24 - Completed quick task 260424-c55: Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id
+Last activity: 2026-04-24 - Completed quick task 260424-o8f: Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context
 
 ## Architecture Decision
 
@@ -43,6 +43,8 @@ Last activity: 2026-04-24 - Completed quick task 260424-c55: Fix runtime warning
 | 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
 | 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
 | 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
+| 260424-l15 | Extend upstream signal snapshot mapping để persist đầy đủ ema_*/bb_*/cisd_* xuống trade snapshots | 2026-04-24 | (pending commit) | [260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb](./quick/260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb/) |
+| 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
 ## Accumulated Context
 
 ### Roadmap Evolution

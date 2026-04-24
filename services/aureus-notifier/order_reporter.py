@@ -197,6 +197,15 @@ class OrderStatusReporter:
         try:
             journal = await self._resolve_journal_context(event)
 
+            if not journal or not journal.get("strategy_name"):
+                logger.warning(
+                    "Skip ORDER_CLOSED notification: unresolved strategy context "
+                    "trace_id=%s ticket=%s",
+                    event.get("trace_id"),
+                    event.get("ticket"),
+                )
+                return
+
             msg = self._format_close(event, journal)
             if msg:
                 success = await self.sender.send_message(self.chat_id, msg)

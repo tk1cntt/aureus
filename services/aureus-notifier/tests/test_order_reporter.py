@@ -257,3 +257,41 @@ async def test_handle_order_closed_fallback_lookup_by_ticket_without_trace_id():
     reporter._lookup_journal_by_ticket.assert_awaited_once_with(1599466486)
     reporter._format_close.assert_called_once_with(event, {"strategy_name": "SESSION_SWEEP_BULL", "score": 5.0})
     reporter.sender.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_order_closed_skips_when_strategy_unresolved():
+    reporter = OrderStatusReporter(redis_client=None, sender=AsyncMock(), chat_id="test_chat")
+    reporter._resolve_journal_context = AsyncMock(return_value=None)
+    reporter._format_close = MagicMock(return_value="closed_msg")
+
+    event = {
+        "type": "ORDER_CLOSED",
+        "symbol": "GBPUSD",
+        "ticket": 1609766400,
+        "strategy": "[sl 1.34877]",
+    }
+
+    await reporter._handle_order_closed(event)
+
+    reporter._format_close.assert_not_called()
+    reporter.sender.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_order_closed_skips_when_journal_missing_strategy_name():
+    reporter = OrderStatusReporter(redis_client=None, sender=AsyncMock(), chat_id="test_chat")
+    reporter._resolve_journal_context = AsyncMock(return_value={"strategy_name": None})
+    reporter._format_close = MagicMock(return_value="closed_msg")
+
+    event = {
+        "type": "ORDER_CLOSED",
+        "symbol": "GBPUSD",
+        "ticket": 1609766400,
+        "strategy": "[sl 1.34877]",
+    }
+
+    await reporter._handle_order_closed(event)
+
+    reporter._format_close.assert_not_called()
+    reporter.sender.send_message.assert_not_awaited()
