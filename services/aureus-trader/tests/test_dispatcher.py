@@ -181,6 +181,13 @@ class DummyJournal:
         return True
 
 
+class TraceResolvingJournal(DummyJournal):
+    async def on_strategy_match(self, event):
+        if event.get("trace_id") is None:
+            event["trace_id"] = "trace-generated-late"
+        return await super().on_strategy_match(event)
+
+
 class TestOrderDispatcherPayloadContract:
     @pytest.mark.asyncio
     async def test_dispatch_order_publishes_minimal_open_order_payload(self):
@@ -278,6 +285,43 @@ class TestOrderDispatcherJournalStrategyMatch:
         assert len(journal.strategy_events) == 1
         assert len(journal.opened_events) == 1
         assert journal.strategy_events[0]["trace_id"] == "trace-journal-1"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_order_resolves_trace_id_after_strategy_match(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = TraceResolvingJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-journal-late-trace"},
+            {"type": "ORDER_OPENED", "cmd_id": "ord-journal-late-trace", "ticket": 222},
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": None,
+            "symbol": "XAUUSD",
+            "direction": "BUY",
+        }
+
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-journal-late-trace",
+            "symbol": "XAUUSD",
+            "trace_id": None,
+            "strategy_event": strategy_event,
+        })
+
+        assert len(journal.strategy_events) == 1
+        assert len(journal.opened_events) == 1
+        assert journal.strategy_events[0]["trace_id"] == "trace-generated-late"
+        assert journal.opened_events[0]["trace_id"] == "trace-generated-late"
 
     @pytest.mark.asyncio
     async def test_dispatch_order_does_not_call_strategy_match_when_not_order_opened(self):
