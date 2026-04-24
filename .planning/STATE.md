@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-23 - Completed quick task 260424-1d1: Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp
+Last activity: 2026-04-24 - Completed quick task 260424-a6a: Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id
 
 ## Architecture Decision
 
@@ -41,6 +41,7 @@ Last activity: 2026-04-23 - Completed quick task 260424-1d1: Chuyển phần x
 | 260423-t4w | Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết. | 2026-04-23 | ac90ec9 | [260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi](./quick/260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi/) |
 | 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
 | 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
+| 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
