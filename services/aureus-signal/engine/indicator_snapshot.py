@@ -86,16 +86,15 @@ def build_indicator_snapshot_for_telegram(state, m1_df=None) -> Dict[str, Any]:
             if cross:
                 cross_str = str(cross)
                 if "cross_up" in cross_str:
-                    return " \U0001F4C8"  # 📈
+                    return " 📈"
                 if "cross_down" in cross_str:
-                    return " \U0001F4C9"  # 📉
+                    return " 📉"
         return ""
 
     ema_periods = [21, 34, 55, 89, 100, 200]
     ema_values = [_get_ema_val(p) for p in ema_periods]
     ema_markers = [_ema_cross_marker(p) for p in ema_periods]
 
-    # CISD Multi-TF status — extract current status per TF from transient_signals
     cisd_mtf = {}
     for tf_lower in ("m5", "m15", "m30", "h1", "h4"):
         for status in ("bullish", "bearish"):
@@ -121,6 +120,10 @@ def build_indicator_snapshot_for_telegram(state, m1_df=None) -> Dict[str, Any]:
     bb_by_tf = state_bb if isinstance(state_bb, dict) else _build_bb_by_tf_from_m1_df(source_df)
     bb_fields = build_bb_payload(bb_by_tf)
 
+    tpo_profile = getattr(state, "tpo_profile", None) if hasattr(state, "tpo_profile") else None
+    if not isinstance(tpo_profile, dict):
+        tpo_profile = {}
+
     return {
         "emas": {
             "periods": ema_periods,
@@ -131,6 +134,9 @@ def build_indicator_snapshot_for_telegram(state, m1_df=None) -> Dict[str, Any]:
         "vol_sma_20": getattr(state, "vol_sma_20", None),
         "htf_trend": getattr(state, "htf_trend", None),
         "cisd_mtf": cisd_mtf if cisd_mtf else None,
+        "tpo_d1": tpo_profile.get("tpo_d1") if tpo_profile else None,
+        "tpo_h1": tpo_profile.get("tpo_h1") if tpo_profile else None,
+        "tpo_m30": tpo_profile.get("tpo_m30") if tpo_profile else None,
         **candle_color_fields,
         **bb_fields,
         "digits": digits,

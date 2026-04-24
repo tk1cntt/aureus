@@ -25,17 +25,21 @@ class TPOSignal(BaseSignal):
         if not {"t", "h", "l", "c"}.issubset(df.columns):
             return None
 
-        payload = {
-            "tpo_d1": self._compute_tf(df, "D1"),
-            "tpo_h1": self._compute_tf(df, "H1"),
-            "tpo_m30": self._compute_tf(df, "M30"),
-        }
-
         current = df.iloc[-1]
         ts = int(float(current.get("t")))
 
-        if hasattr(state_obj, "tpo_profile"):
-            state_obj.tpo_profile = payload
+        if not hasattr(state_obj, "tpo_profile"):
+            state_obj.tpo_profile = {}
+        if not hasattr(state_obj, "tpo_cache") or not isinstance(getattr(state_obj, "tpo_cache"), dict):
+            state_obj.tpo_cache = {}
+
+        payload = {
+            "tpo_d1": self._compute_d1(df, ts),
+            "tpo_h1": self._compute_sliding(df, ts, tf="H1", count=6, cache=state_obj.tpo_cache),
+            "tpo_m30": self._compute_sliding(df, ts, tf="M30", count=6, cache=state_obj.tpo_cache),
+        }
+
+        state_obj.tpo_profile = payload
 
         return {
             "tag": "tpo",
@@ -43,16 +47,9 @@ class TPOSignal(BaseSignal):
             "t": ts,
         }
 
-    def _compute_tf(self, m1_df: pd.DataFrame, tf: str) -> Optional[Dict[str, Optional[float]]]:
-        tf_df = resample_to_tf(m1_df, tf)
-        if tf_df is None or len(tf_df) < 2:
-            return None
-
-        closed = tf_df.iloc[-2]
-        start_ts = self._start_ts(tf, int(float(closed["t"])))
-        end_ts = int(float(closed["t"]))
-
-        session = m1_df[(m1_df["t"] >= start_ts) & (m1_df["t"] <= end_ts)]
+    def _compute_d1(self, m1_df: pd.DataFrame, now_ts: int) -> Optional[Dict[str, Optional[float]]]:
+        day_start = now_ts - (now_ts % 86400)
+        session = m1_df[(m1_df["t"] >= day_start) & (m1_df["t"] <= now_ts)]
         if session is None or len(session) == 0:
             return None
 
@@ -61,11 +58,46 @@ class TPOSignal(BaseSignal):
             return None
 
         poc, vah, val = profile
-        return {
-            "POC": poc,
-            "VAH": vah,
-            "VAL": val,
-        }
+        return {"POC": poc, "VAH": vah, "VAL": val}
+
+    def _compute_sliding(self, m1_df: pd.DataFrame, now_ts: int, tf: str, count: int, cache: Dict[str, Tuple[float, float, float]]) -> Optional[Dict[str, Optional[float]]]:
+        tf_df = resample_to_tf(m1_df, tf)
+        if tf_df is None or len(tf_df) == 0:
+            return None
+
+        bucket_seconds = 3600 if tf.upper() == "H1" else 1800
+        tf_df = tf_df.copy()
+        tf_df["bucket_start"] = tf_df["t"].astype(int) - bucket_seconds + 60
+
+        recent = tf_df.tail(count)
+        if recent is None or len(recent) == 0:
+            return None
+
+        profiles = []
+        for _, row in recent.iterrows():
+            bucket_start = int(row["bucket_start"])
+            bucket_end = int(row["t"])
+            bucket_key = f"{tf.upper()}:{bucket_start}"
+            is_current_bucket = bucket_start <= now_ts <= bucket_end
+
+            if not is_current_bucket and bucket_key in cache:
+                profile = cache.get(bucket_key)
+            else:
+                session = m1_df[(m1_df["t"] >= bucket_start) & (m1_df["t"] <= min(bucket_end, now_ts))]
+                if session is None or len(session) == 0:
+                    continue
+                profile = self._build_profile(session)
+                if profile and not is_current_bucket:
+                    cache[bucket_key] = profile
+
+            if profile:
+                profiles.append(profile)
+
+        if not profiles:
+            return None
+
+        poc, vah, val = profiles[-1]
+        return {"POC": poc, "VAH": vah, "VAL": val}
 
     def _build_profile(self, session_df: pd.DataFrame) -> Optional[Tuple[float, float, float]]:
         high_max = float(session_df["h"].max())

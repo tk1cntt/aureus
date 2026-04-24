@@ -206,24 +206,31 @@ def test_format_signal_event_with_indicator_snapshot():
                 "emas": {
                     "periods": [21, 34, 55, 89, 100, 200],
                     "values": [2341.20, 2343.50, 2346.80, 2351.00, 2355.40, 2370.10],
-                    "cross_markers": ["", " \U0001F4C8", "", "", "", ""],
+                    "cross_markers": ["", " 📈", "", "", "", ""],
                 },
                 "atr_14": 12.34,
                 "vol_sma_20": 1500.0,
                 "htf_trend": "BULLISH",
+                "tpo_d1": {"POC": 2010.1, "VAH": 2012.3, "VAL": 2008.7},
+                "tpo_h1": {"POC": 2009.9, "VAH": 2011.0, "VAL": 2008.2},
+                "tpo_m30": {"POC": 2010.0, "VAH": 2010.8, "VAL": 2009.1},
             },
         },
     }
     result = format_signal_event(event)
-    assert "\U0001F4C8 Indicator Snapshot" in result
+    assert "📈 Indicator Snapshot" in result
     assert "EMA(21/34/55/89/100/200)" in result
     assert "2341.20" in result
     assert "ATR(14)" in result
     assert "12.34" in result
     assert "Vol SMA(20)" in result
     assert "HTF Trend" in result
-    assert "\U0001F7E2" in result  # green circle for BULLISH
-    assert "\U0001F4C8" in result  # cross up marker on EMA line
+    assert "TPO" in result
+    assert "POC:2010.10" in result
+    assert "VAH:2012.30" in result
+    assert "VAL:2008.70" in result
+    assert "🟢" in result
+    assert "📈" in result
     assert len(result) <= 4095
 
 
@@ -239,7 +246,7 @@ def test_format_signal_event_no_indicator_snapshot():
         },
     }
     result = format_signal_event(event)
-    assert "\U0001F4CA" in result  # 📊 SIGNAL ALERT emoji
+    assert "📊" in result
     assert "SIGNAL ALERT" in result
     assert "Active Signals" in result
     assert "Indicator Snapshot" not in result
@@ -263,11 +270,14 @@ def test_format_signal_event_indicator_snapshot_none_values():
                 "atr_14": None,
                 "vol_sma_20": None,
                 "htf_trend": None,
+                "tpo_d1": None,
+                "tpo_h1": None,
+                "tpo_m30": None,
             },
         },
     }
     result = format_signal_event(event)
-    assert "\u2014" in result  # em dash
+    assert "—" in result
 
 
 def test_format_signal_event_bearish_trend():
@@ -291,7 +301,7 @@ def test_format_signal_event_bearish_trend():
         },
     }
     result = format_signal_event(event)
-    assert "\U0001F534" in result  # red circle for BEARISH
+    assert "🔴" in result
     assert "BEARISH" in result
 
 
@@ -375,8 +385,8 @@ def test_format_signal_event_cisd_mtf_display():
     assert "CISD MTF" in result
     assert "M5:" in result
     assert "M15:" in result
-    assert "\U0001F7E2" in result  # green for bullish
-    assert "\U0001F534" in result  # red for bearish
+    assert "🟢" in result
+    assert "🔴" in result
     assert "Bullish" in result
     assert "Bearish" in result
 
@@ -440,7 +450,7 @@ def test_format_signal_event_cisd_mtf_all_dashes_when_no_tracking():
     assert "CISD MTF" in result
     assert "M5:" in result
     assert "H1:" in result
-    assert "\u2014" in result  # em dash for no tracking
+    assert "—" in result
 
 
 def test_format_signal_event_cisd_mtf_filtered_from_active_signals():
@@ -477,11 +487,9 @@ def test_format_signal_event_cisd_mtf_filtered_from_active_signals():
         },
     }
     result = format_signal_event(event)
-    # Active Signals section should NOT contain cisd_mtf tags
-    active_signals_section = result.split("\U0001F4C8 Indicator Snapshot:")[0]
+    active_signals_section = result.split("📈 Indicator Snapshot:")[0]
     assert "cisd_m5" not in active_signals_section
     assert "cisd_m15" not in active_signals_section
     assert "cisd_m30" not in active_signals_section
     assert "cisd_h1" not in active_signals_section
-    # But other signals should still be there
     assert "choch_up" in active_signals_section

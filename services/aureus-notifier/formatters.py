@@ -84,6 +84,20 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
         else:
             lines.append(f"  \u2022 {tf}: \u2014")
 
+    def _fmt_tpo(block: dict | None) -> str:
+        if not block or not isinstance(block, dict):
+            return "\u2014"
+        poc = block.get("POC")
+        vah = block.get("VAH")
+        val = block.get("VAL")
+        if poc is None or vah is None or val is None:
+            return "\u2014"
+        return html.escape(f"POC:{poc:.{precision}f} VAH:{vah:.{precision}f} VAL:{val:.{precision}f}")
+
+    lines.append("\u2022 <b>TPO</b>:")
+    for tf in ("D1", "H1", "M30"):
+        lines.append(f"  \u2022 {tf}: {_fmt_tpo(snapshot.get(f'tpo_{tf.lower()}'))}")
+
     # Bollinger Bands MTF
     def _fmt_bb(bb: dict | None) -> str:
         if not bb or not isinstance(bb, dict):

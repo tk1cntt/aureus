@@ -48,8 +48,7 @@ def test_tpo_signal_returns_required_blocks_and_fields():
         assert block["VAL"] <= block["POC"] <= block["VAH"]
 
 
-def test_tpo_signal_returns_none_blocks_when_data_insufficient():
-    # very short window so chưa đủ 2 nến đóng cho D1/H1/M30
+def test_tpo_signal_short_data_still_returns_realtime_blocks():
     df = _build_m1_df(minutes=10)
     sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
     state = MockState()
@@ -57,9 +56,40 @@ def test_tpo_signal_returns_none_blocks_when_data_insufficient():
     res = sig.calculate(df, state)
 
     assert res is not None
-    assert res["value"]["tpo_d1"] is None
-    assert res["value"]["tpo_h1"] is None
-    assert res["value"]["tpo_m30"] is None
+    assert res["value"]["tpo_d1"] is not None
+    assert res["value"]["tpo_h1"] is not None
+    assert res["value"]["tpo_m30"] is not None
+
+
+def test_tpo_signal_caches_closed_h1_buckets():
+    df = _build_m1_df(minutes=500)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    state = MockState()
+
+    first = sig.calculate(df, state)
+    assert first is not None
+    assert hasattr(state, "tpo_cache")
+    assert any(key.startswith("H1:") for key in state.tpo_cache.keys())
+
+    cache_size = len(state.tpo_cache)
+    second = sig.calculate(df, state)
+    assert second is not None
+    assert len(state.tpo_cache) >= cache_size
+
+
+def test_tpo_signal_uses_today_only_for_d1():
+    # two days of data; D1 should only use current day window
+    start = 1700000000
+    df = _build_m1_df(minutes=3000, start_ts=start)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    state = MockState()
+
+    res = sig.calculate(df, state)
+    assert res is not None
+    d1 = res["value"]["tpo_d1"]
+    assert d1 is not None
+    assert set(d1.keys()) == {"POC", "VAH", "VAL"}
+    assert d1["VAL"] <= d1["POC"] <= d1["VAH"]
 
 
 def test_tpo_poc_tiebreak_is_deterministic():

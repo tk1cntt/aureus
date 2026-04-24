@@ -10,6 +10,7 @@ class MockState:
     vol_sma_20 = None
     htf_trend = None
     transient_signals = {}
+    tpo_profile = {}
 
 
 def _make_state(**overrides):
@@ -36,6 +37,7 @@ def test_returns_expected_keys():
     snap = build_indicator_snapshot_for_telegram(state)
     expected = {
         'emas', 'atr_14', 'vol_sma_20', 'htf_trend', 'cisd_mtf', 'digits',
+        'tpo_d1', 'tpo_h1', 'tpo_m30',
         'candle_color_d1', 'candle_color_h1', 'candle_color_m30', 'candle_color_m15', 'candle_color_m5',
         'bb_m1', 'bb_m5', 'bb_m15', 'bb_m30', 'bb_h1',
     }
@@ -173,3 +175,25 @@ def test_all_values_primitives_with_cisd_mtf():
     }
     snap = build_indicator_snapshot_for_telegram(state)
     json.dumps(snap)  # Should not raise
+
+
+def test_tpo_profile_fields_are_included():
+    state = _make_state()
+    state.tpo_profile = {
+        'tpo_d1': {'POC': 2010.1, 'VAH': 2012.3, 'VAL': 2008.7},
+        'tpo_h1': {'POC': 2009.9, 'VAH': 2011.0, 'VAL': 2008.2},
+        'tpo_m30': {'POC': 2010.0, 'VAH': 2010.8, 'VAL': 2009.1},
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['tpo_d1'] == state.tpo_profile['tpo_d1']
+    assert snap['tpo_h1'] == state.tpo_profile['tpo_h1']
+    assert snap['tpo_m30'] == state.tpo_profile['tpo_m30']
+
+
+def test_tpo_profile_defaults_to_none_when_missing():
+    state = _make_state()
+    state.tpo_profile = None
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['tpo_d1'] is None
+    assert snap['tpo_h1'] is None
+    assert snap['tpo_m30'] is None
