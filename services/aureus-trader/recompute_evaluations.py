@@ -200,28 +200,34 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             """
             INSERT INTO aureus_trade_signal_snapshots (
                 trade_journal_id, trace_id, ticket, strategy_name, symbol,
+                timeframe, signal_schema_version,
                 atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
                 session, candle_color_d1, candle_color_h1, candle_color_m30,
                 candle_color_m15, candle_color_m5,
                 bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
                 bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
-                cisd_m5, cisd_m15, cisd_m30, cisd_h1
+                cisd_m5, cisd_m15, cisd_m30, cisd_h1,
+                created_at
             ) VALUES (
                 $1, $2, $3, $4, $5,
-                $6, $7, $8, $9, $10, $11, $12, $13,
-                $14, $15, $16, $17,
-                $18, $19,
-                $20, $21, $22, $23, $24, $25,
-                $26, $27, $28, $29,
-                $30, $31, $32, $33
+                $6, $7,
+                $8, $9, $10, $11, $12, $13, $14, $15,
+                $16, $17, $18, $19,
+                $20, $21,
+                $22, $23, $24, $25, $26, $27,
+                $28, $29, $30, $31,
+                $32, $33, $34, $35,
+                now()
             )
-            ON CONFLICT (trade_journal_id) DO NOTHING
+            ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
             """,
             row["id"],
             row["trace_id"],
             row["ticket"],
             row.get("strategy_name") or "",
             row.get("symbol") or "",
+            row.get("timeframe") or "M1",
+            signal_schema_version,
             row.get("atr"),
             row.get("ema_21"),
             row.get("ema_34"),

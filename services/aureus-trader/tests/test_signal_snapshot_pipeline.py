@@ -63,7 +63,6 @@ async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_mana
     assert "symbol" in snapshot_query_text
     assert "timeframe" in snapshot_query_text
     assert "signal_schema_version" in snapshot_query_text
-    assert "signal_snapshot" in snapshot_query_text
     assert "session" in snapshot_query_text
     assert "candle_color_m15" in snapshot_query_text
     assert "bb_m15_up" in snapshot_query_text
@@ -80,14 +79,14 @@ async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_mana
     assert snapshot_args[2] == 123456789
     assert snapshot_args[5] == "M1"
     assert snapshot_args[6] == "sig-v2.0.0"
-    assert snapshot_args[9] == 3345.12
-    assert snapshot_args[11] == 3338.40
-    assert snapshot_args[16] == 2
-    assert snapshot_args[20] == 1
-    assert snapshot_args[26] == 3352.55
-    assert snapshot_args[27] == 3331.12
-    assert snapshot_args[33] == -1
-    assert str(snapshot_args[36]).startswith("2026-04-01")
+    assert snapshot_args[8] == 3345.12
+    assert snapshot_args[10] == 3338.40
+    assert snapshot_args[15] == 2
+    assert snapshot_args[19] == 1
+    assert snapshot_args[25] == 3352.55
+    assert snapshot_args[26] == 3331.12
+    assert snapshot_args[32] == -1
+    assert str(snapshot_args[35]).startswith("2026-04-01")
 
 
 @pytest.mark.asyncio
@@ -164,8 +163,8 @@ async def test_signal_snapshot_defaults_timeframe_to_m1_when_missing(journal_man
     assert len(snapshot_queries) == 1
     assert snapshot_queries[0][2][5] == "M1"
     assert snapshot_queries[0][2][6] == "sig-v2.0.0"
-    assert snapshot_queries[0][2][9] == 3340.0
-    assert snapshot_queries[0][2][11] == 3330.0
+    assert snapshot_queries[0][2][8] == 3340.0
+    assert snapshot_queries[0][2][10] == 3330.0
 
 
 @pytest.mark.asyncio
@@ -272,7 +271,7 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
             """
             INSERT INTO aureus_trade_signal_snapshots (
                 trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
-                signal_schema_version, signal_snapshot,
+                signal_schema_version,
                 atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                 vol_sma_20, session,
                 candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
@@ -282,13 +281,13 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
                 created_at
             ) VALUES (
                 $1, $2, $3, $4, $5, 'M1',
-                'sig-v2.0.0', $6::jsonb,
-                1.23, $7, $8, $9, $10, $11, $12,
+                'sig-v2.0.0',
+                1.23, $6, $7, $8, $9, $10, $11,
                 0.0, 2,
                 NULL, NULL, NULL, 1, NULL,
-                $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22,
-                $23, $24, $25, $26,
+                $12, $13, $14, $15, $16, $17,
+                $18, $19, $20, $21,
+                $22, $23, $24, $25,
                 now()
             )
             """,
@@ -297,7 +296,6 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
             ticket,
             "E2E_SIGNAL_MAPPING",
             "XAUUSD",
-            json.dumps(signal_snapshot),
             signal_snapshot["ema_21"],
             signal_snapshot["ema_34"],
             signal_snapshot["ema_55"],
@@ -327,8 +325,7 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
                 ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                 bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
                 bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
-                cisd_m5, cisd_m15, cisd_m30, cisd_h1,
-                jsonb_typeof(signal_snapshot) AS snapshot_type
+                cisd_m5, cisd_m15, cisd_m30, cisd_h1
             FROM aureus_trade_signal_snapshots
             WHERE trade_journal_id = $1
             """,
@@ -337,7 +334,6 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
 
         assert row is not None
         assert row["signal_schema_version"] == "sig-v2.0.0"
-        assert row["snapshot_type"] == "object"
         assert row["ema_21"] == pytest.approx(signal_snapshot["ema_21"])
         assert row["ema_34"] == pytest.approx(signal_snapshot["ema_34"])
         assert row["ema_55"] == pytest.approx(signal_snapshot["ema_55"])
@@ -429,11 +425,11 @@ async def test_signal_snapshot_mapping_from_json_string_active_signals(journal_m
         if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
     ][0]
     args = snapshot_query[2]
-    assert args[9] == pytest.approx(555.21)
-    assert args[11] == pytest.approx(555.55)
-    assert args[26] == pytest.approx(560.1)
-    assert args[27] == pytest.approx(550.1)
-    assert args[33] == 1
+    assert args[8] == pytest.approx(555.21)
+    assert args[10] == pytest.approx(555.55)
+    assert args[25] == pytest.approx(560.1)
+    assert args[26] == pytest.approx(550.1)
+    assert args[32] == 1
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
@@ -487,18 +483,18 @@ async def test_signal_snapshot_mapping_supports_bullish_bearish_and_extra_column
     ][0]
     args = snapshot_query[2]
 
-    assert args[8] == pytest.approx(12.34)      # atr
-    assert args[15] == pytest.approx(9876.5)    # vol_sma_20
-    assert args[16] == 2                         # session LONDON
-    assert args[17] == 1                         # candle_color_d1
-    assert args[18] == -1                        # candle_color_h1
-    assert args[19] == 1                         # candle_color_m30
-    assert args[20] == -1                        # candle_color_m15
-    assert args[21] == 1                         # candle_color_m5
-    assert args[32] == 1                         # cisd_m5
-    assert args[33] == -1                        # cisd_m15
-    assert args[34] == 1                         # cisd_m30
-    assert args[35] == -1                        # cisd_h1
+    assert args[7] == pytest.approx(12.34)      # atr
+    assert args[14] == pytest.approx(9876.5)    # vol_sma_20
+    assert args[15] == 2                         # session LONDON
+    assert args[16] == 1                         # candle_color_d1
+    assert args[17] == -1                        # candle_color_h1
+    assert args[18] == 1                         # candle_color_m30
+    assert args[19] == -1                        # candle_color_m15
+    assert args[20] == 1                         # candle_color_m5
+    assert args[31] == 1                         # cisd_m5
+    assert args[32] == -1                        # cisd_m15
+    assert args[33] == 1                         # cisd_m30
+    assert args[34] == -1                        # cisd_h1
 
 
 @pytest.mark.asyncio

@@ -497,14 +497,13 @@ class TradeJournalManager:
 
                     signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
                     snapshot_columns = _build_signal_snapshot_columns(signal_snapshot, event)
-                    signal_snapshot_payload = signal_snapshot if signal_snapshot else {"timeframe": timeframe}
 
                     if trade_journal_id is not None:
                         snapshot_insert_result = await conn.execute(
                             """
                             INSERT INTO aureus_trade_signal_snapshots (
                                 trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
-                                signal_schema_version, signal_snapshot,
+                                signal_schema_version,
                                 atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                                 vol_sma_20, session,
                                 candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
@@ -514,14 +513,14 @@ class TradeJournalManager:
                                 created_at
                             ) VALUES (
                                 $1, $2, $3, $4, $5, $6,
-                                $7, $8::jsonb,
-                                $9, $10, $11, $12, $13, $14, $15,
-                                $16, $17,
-                                $18, $19, $20, $21, $22,
-                                $23, $24, $25, $26, $27, $28,
-                                $29, $30, $31, $32,
-                                $33, $34, $35, $36,
-                                $37
+                                $7,
+                                $8, $9, $10, $11, $12, $13, $14,
+                                $15, $16,
+                                $17, $18, $19, $20, $21,
+                                $22, $23, $24, $25, $26, $27,
+                                $28, $29, $30, $31,
+                                $32, $33, $34, $35,
+                                $36
                             )
                             ON CONFLICT (trade_journal_id) DO NOTHING
                             """,
@@ -532,7 +531,6 @@ class TradeJournalManager:
                             symbol,
                             timeframe,
                             signal_schema_version,
-                            json.dumps(signal_snapshot_payload),
                             snapshot_columns["atr"],
                             snapshot_columns["ema_21"],
                             snapshot_columns["ema_34"],

@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from recompute_evaluations import recompute_batch
@@ -19,10 +17,34 @@ class MockConn:
                 "strategy_name": "chandelier_breakout",
                 "symbol": "XAUUSD",
                 "timeframe": "M5",
-                "signal_snapshot": {"cisd_direction": "bull", "ema_21": 3345.12, "ema_55": 3338.40},
-                "cisd_direction": "bull",
-                "ema21": 3345.12,
-                "ema55": 3338.40,
+                "atr": 1.23,
+                "ema_21": 3345.12,
+                "ema_34": 3343.12,
+                "ema_55": 3338.40,
+                "ema_89": 3335.0,
+                "ema_100": 3332.0,
+                "ema_200": 3320.0,
+                "vol_sma_20": 2000.0,
+                "session": 2,
+                "candle_color_d1": 1,
+                "candle_color_h1": -1,
+                "candle_color_m30": 1,
+                "candle_color_m15": 1,
+                "candle_color_m5": -1,
+                "bb_m1_up": 3350.1,
+                "bb_m1_dn": 3340.1,
+                "bb_m5_up": 3360.1,
+                "bb_m5_dn": 3330.1,
+                "bb_m15_up": 3370.1,
+                "bb_m15_dn": 3320.1,
+                "bb_m30_up": 3380.1,
+                "bb_m30_dn": 3310.1,
+                "bb_h1_up": 3390.1,
+                "bb_h1_dn": 3300.1,
+                "cisd_m5": 1,
+                "cisd_m15": -1,
+                "cisd_m30": 1,
+                "cisd_h1": -1,
                 "created_at": "2026-04-01T00:00:00Z",
                 "score_breakdown": {"criteria": {"signal_quality": 0.8}},
             }
@@ -77,10 +99,8 @@ async def test_recompute_signal_snapshot_append_history_and_preserve_old_version
     assert len(snapshot_inserts) == 1
     assert snapshot_inserts[0][1][5] == "M5"
     assert snapshot_inserts[0][1][6] == "sig-v1.1.0"
-    assert json.loads(snapshot_inserts[0][1][7])["cisd_direction"] == "bull"
-    assert snapshot_inserts[0][1][9] == 3345.12
+    assert snapshot_inserts[0][1][8] == 3345.12
     assert snapshot_inserts[0][1][10] == 3338.40
-    assert snapshot_inserts[0][1][11] == "2026-04-01T00:00:00Z"
 
 
 @pytest.mark.asyncio

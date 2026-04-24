@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import json
 import os
 from datetime import datetime
 
@@ -34,14 +33,10 @@ async def run_backfill(conn, start: str, end: str, batch_size: int, signal_schem
             j.strategy_name,
             j.symbol,
             COALESCE(ss.timeframe, 'M15') AS timeframe,
-            ss.signal_snapshot,
-            ss.cisd_direction,
-            ss.ema21,
-            ss.ema55,
             ss.created_at
         FROM aureus_trade_journal j
         LEFT JOIN LATERAL (
-            SELECT timeframe, signal_snapshot, cisd_direction, ema21, ema55, created_at
+            SELECT timeframe, created_at
             FROM aureus_trade_signal_snapshots ss
             WHERE ss.trade_journal_id = j.id
             ORDER BY ss.created_at DESC
@@ -59,26 +54,15 @@ async def run_backfill(conn, start: str, end: str, batch_size: int, signal_schem
 
     inserted = 0
     for row in rows:
-        snapshot_payload = row.get("signal_snapshot") or {}
-        if isinstance(snapshot_payload, str):
-            try:
-                snapshot_payload = json.loads(snapshot_payload)
-            except json.JSONDecodeError:
-                snapshot_payload = {}
-
-        if not isinstance(snapshot_payload, dict) or not snapshot_payload:
-            continue
 
         result = await conn.execute(
             """
             INSERT INTO aureus_trade_signal_snapshots (
                 trade_journal_id, trace_id, ticket, strategy_name, symbol,
-                timeframe, signal_schema_version, signal_snapshot,
-                cisd_direction, ema21, ema55, created_at
+                timeframe, signal_schema_version, created_at
             ) VALUES (
                 $1, $2, $3, $4, $5,
-                $6, $7, $8::jsonb,
-                $9, $10, $11, $12
+                $6, $7, $8
             )
             ON CONFLICT (trade_journal_id, signal_schema_version) DO NOTHING
             """,
@@ -89,10 +73,6 @@ async def run_backfill(conn, start: str, end: str, batch_size: int, signal_schem
             row.get("symbol") or "",
             row.get("timeframe") or "M15",
             signal_schema_version,
-            json.dumps(snapshot_payload),
-            row.get("cisd_direction"),
-            row.get("ema21"),
-            row.get("ema55"),
             row.get("created_at") or _parse_iso8601(start),
         )
         if result == "INSERT 0 1":

@@ -25,8 +25,7 @@ def test_signal_snapshot_hybrid_columns_exist():
     snapshot_sql = _snapshot_table_sql(sql)
     required_cols = [
         "trade_journal_id", "trace_id", "ticket", "strategy_name", "symbol",
-        "timeframe", "signal_schema_version", "signal_snapshot", "cisd_direction",
-        "ema21", "ema55", "created_at",
+        "timeframe", "signal_schema_version", "created_at",
     ]
     for col in required_cols:
         assert re.search(rf"\b{col}\b", snapshot_sql, re.IGNORECASE)
