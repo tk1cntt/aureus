@@ -114,6 +114,99 @@ class TestPublishStrategyMatch:
         assert payload["data"]["score_version"] == "scor-v1.0.0"
         assert payload["data"]["signal_schema_version"] == "sig-v2.0.0"
 
+    async def test_publish_strategy_match_derives_indicator_fields_into_signal_snapshot(self):
+        mock_redis = AsyncMock()
+        mock_redis.publish = AsyncMock(return_value=1)
+
+        strategy_result = {
+            "strategy": "CHOCH_UP",
+            "strategy_id": 10,
+            "t": 1700000000,
+            "origin_timestamp": 1700000000,
+            "normalized_signal_snapshot": {"zigzag_state": {"status": "OK"}},
+            "indicator_snapshot": {
+                "emas": {"values": [3345.12, 3344.34, 3343.55, 3342.89, 3342.10, 3341.20]},
+                "bb_m15": {"upper": 3352.55, "middle": 3342.0, "lower": 3331.12},
+                "bb_m5": {"upper": 3350.55, "middle": 3341.0, "lower": 3332.12},
+                "cisd_mtf": {"M15": "bearish", "M5": "bullish"},
+            },
+        }
+
+        result = await publish_strategy_match(mock_redis, "XAUUSD", strategy_result)
+        assert result is True
+
+        payload = json.loads(mock_redis.publish.call_args[0][1])
+        snapshot = payload["data"]["signal_snapshot"]
+        assert snapshot["ema_21"] == 3345.12
+        assert snapshot["ema_55"] == 3343.55
+        assert snapshot["bb_m15_up"] == 3352.55
+        assert snapshot["bb_m15_dn"] == 3331.12
+        assert snapshot["bb_m5_up"] == 3350.55
+        assert snapshot["bb_m5_dn"] == 3332.12
+        assert snapshot["cisd_m15"] == "BEARISH"
+        assert snapshot["cisd_m5"] == "BULLISH"
+        assert "zigzag_state" in snapshot
+
+    async def test_publish_strategy_match_derives_extra_indicator_fields_into_signal_snapshot(self):
+        mock_redis = AsyncMock()
+        mock_redis.publish = AsyncMock(return_value=1)
+
+        strategy_result = {
+            "strategy": "CHOCH_UP",
+            "strategy_id": 10,
+            "t": 1700000000,
+            "origin_timestamp": 1700000000,
+            "normalized_signal_snapshot": {},
+            "indicator_snapshot": {
+                "atr_14": "2.75",
+                "vol_sma20": 12345.0,
+                "session": "LONDON",
+                "candle_color_d1": "BULLISH",
+                "candle_color_H1": "BEARISH",
+                "candle_color_M30": "BULL",
+                "candle_color_M15": "BEAR",
+                "candle_color_m5": 1,
+            },
+        }
+
+        result = await publish_strategy_match(mock_redis, "XAUUSD", strategy_result)
+        assert result is True
+
+        payload = json.loads(mock_redis.publish.call_args[0][1])
+        snapshot = payload["data"]["signal_snapshot"]
+        assert snapshot["atr"] == pytest.approx(2.75)
+        assert snapshot["vol_sma_20"] == pytest.approx(12345.0)
+        assert snapshot["session"] == 2
+        assert snapshot["candle_color_d1"] == 1
+        assert snapshot["candle_color_h1"] == -1
+        assert snapshot["candle_color_m30"] == 1
+        assert snapshot["candle_color_m15"] == -1
+        assert snapshot["candle_color_m5"] == 1
+
+    async def test_publish_strategy_match_keeps_existing_snapshot_values_on_conflict(self):
+        mock_redis = AsyncMock()
+        mock_redis.publish = AsyncMock(return_value=1)
+
+        strategy_result = {
+            "strategy": "CHOCH_UP",
+            "strategy_id": 10,
+            "t": 1700000000,
+            "origin_timestamp": 1700000000,
+            "normalized_signal_snapshot": {"ema_21": 9999.0, "bb_m15_up": 4444.0},
+            "indicator_snapshot": {
+                "emas": {"values": [3345.12, 3344.34, 3343.55, 3342.89, 3342.10, 3341.20]},
+                "bb_m15": {"upper": 3352.55, "middle": 3342.0, "lower": 3331.12},
+            },
+        }
+
+        result = await publish_strategy_match(mock_redis, "XAUUSD", strategy_result)
+        assert result is True
+
+        payload = json.loads(mock_redis.publish.call_args[0][1])
+        snapshot = payload["data"]["signal_snapshot"]
+        assert snapshot["ema_21"] == 9999.0
+        assert snapshot["bb_m15_up"] == 4444.0
+
     async def test_publish_strategy_match_with_missing_fields(self):
         mock_redis = AsyncMock()
         mock_redis.publish = AsyncMock(return_value=0)

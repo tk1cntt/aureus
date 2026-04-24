@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-24 - Completed quick task 260424-o8f: Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context
+Last activity: 2026-04-24 - Completed quick task 260424-r6b: Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*)
 
 ## Architecture Decision
 
@@ -45,6 +45,8 @@ Last activity: 2026-04-24 - Completed quick task 260424-o8f: Fix ORDER_CLOSED Te
 | 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
 | 260424-l15 | Extend upstream signal snapshot mapping để persist đầy đủ ema_*/bb_*/cisd_* xuống trade snapshots | 2026-04-24 | (pending commit) | [260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb](./quick/260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb/) |
 | 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
+| 260424-qkt | Mapping lại dữ liệu CISD còn thiếu trong _build_signal_snapshot_columns + bổ sung atr/vol_sma_20/session/candle_color mapping | 2026-04-24 | (pending commit) | [260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron](./quick/260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron/) |
+| 260424-r6b | Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*) | 2026-04-24 | (pending commit) | [260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s](./quick/260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
