@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-24 - Completed quick task 260424-a6a: Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id
+Last activity: 2026-04-24 - Completed quick task 260424-c55: Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id
 
 ## Architecture Decision
 
@@ -42,6 +42,7 @@ Last activity: 2026-04-24 - Completed quick task 260424-a6a: Vẫn lỗi trace
 | 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
 | 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
 | 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
+| 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
