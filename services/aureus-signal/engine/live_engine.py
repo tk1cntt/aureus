@@ -35,6 +35,7 @@ from engine.signals.news_provider import NewsProvider
 from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
 from engine.event_policy import evaluate_ai_trigger_events
+from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
 from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime, SymbolRuntimeHealthManager
 
 logger = get_logger(__name__)
@@ -838,6 +839,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     "transient_signals": state.transient_signals or {},
                     "swing_points": state.swing_points or [],
                     "signals_snapshot": signals_snapshot,
+                    "indicator_snapshot": build_indicator_snapshot_for_telegram(state, m1_df=df),
                 }
                 await r.xadd(
                     f"aureus:stream:{symbol}:signals",
@@ -852,9 +854,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     triggers = evaluate_ai_trigger_events(state.transient_signals)
                     if triggers:
                         from engine.signal_event_publisher import publish_signal_event
-                        from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
                         signal_event_payload = {"signals": state.transient_signals}
-                        signal_event_payload["indicator_snapshot"] = build_indicator_snapshot_for_telegram(state, m1_df=df)
+                        signal_event_payload["indicator_snapshot"] = signal_payload.get("indicator_snapshot")
                         await publish_signal_event(r, symbol, "SIGNAL_EVENT", ts_unix, signal_event_payload)
 
             has_event = has_structural_event(state, trade_manager)

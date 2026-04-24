@@ -163,6 +163,7 @@ class OrderDispatcher:
                     if self.journal:
                         trace_id = order.get("trace_id")
                         strategy_event = order.get("strategy_event")
+                        strategy_data = {}
                         if isinstance(strategy_event, dict):
                             strategy_payload = dict(strategy_event)
                             strategy_data = strategy_payload.get("data") if isinstance(strategy_payload.get("data"), dict) else {}
@@ -182,8 +183,24 @@ class OrderDispatcher:
                             trace_id = final.get("trace_id")
                         if trace_id:
                             final["trace_id"] = trace_id
-                        if isinstance(order.get("signal_snapshot"), dict) and not isinstance(final.get("signal_snapshot"), dict):
-                            final["signal_snapshot"] = order.get("signal_snapshot")
+
+                        fallback_signal_snapshot = order.get("signal_snapshot") if isinstance(order.get("signal_snapshot"), dict) else None
+                        if fallback_signal_snapshot is None and isinstance(strategy_data, dict):
+                            strategy_snapshot = strategy_data.get("signal_snapshot")
+                            if isinstance(strategy_snapshot, dict):
+                                fallback_signal_snapshot = strategy_snapshot
+                            else:
+                                strategy_active_signals = strategy_data.get("active_signals")
+                                strategy_context_filters = strategy_data.get("context_filters")
+                                if strategy_active_signals is not None or strategy_context_filters is not None:
+                                    fallback_signal_snapshot = {}
+                                    if strategy_active_signals is not None:
+                                        fallback_signal_snapshot["active_signals"] = strategy_active_signals
+                                    if strategy_context_filters is not None:
+                                        fallback_signal_snapshot["context_filters"] = strategy_context_filters
+
+                        if isinstance(fallback_signal_snapshot, dict) and not isinstance(final.get("signal_snapshot"), dict):
+                            final["signal_snapshot"] = fallback_signal_snapshot
                         for key in (
                             "score_total",
                             "score_breakdown",

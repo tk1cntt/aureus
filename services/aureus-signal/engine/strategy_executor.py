@@ -646,6 +646,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                                 if tp_ratio is not None:
                                     res['tp_rr_ratio'] = tp_ratio
                                 res['entry_price'] = float(computed_ep)
+                                res['indicator_snapshot'] = payload.get("indicator_snapshot") if isinstance(payload.get("indicator_snapshot"), dict) else {}
                                 await publish_strategy_match(r, symbol, res, active_signals=signals_snapshot)
 
                         if execution_mode == "simulated":

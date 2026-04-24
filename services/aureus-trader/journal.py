@@ -69,6 +69,11 @@ def _first_present(snapshot: dict, event: dict, keys: tuple[str, ...]):
 
 def _extract_active_signal_fields(active_signals) -> dict:
     extracted = {}
+    if isinstance(active_signals, str):
+        try:
+            active_signals = json.loads(active_signals)
+        except (TypeError, ValueError):
+            active_signals = []
     if not isinstance(active_signals, list):
         return extracted
 
@@ -103,20 +108,20 @@ def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
         merged_snapshot["session"] = context_filters.get("session")
 
     columns = {
-        "atr": _to_float_or_none(_first_present(merged_snapshot, src_event, ("atr",))),
+        "atr": _to_float_or_none(_first_present(merged_snapshot, src_event, ("atr", "atr_14"))),
         "ema_21": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_21", "ema21"))),
         "ema_34": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_34", "ema34"))),
         "ema_55": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_55", "ema55"))),
         "ema_89": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_89", "ema89"))),
         "ema_100": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_100", "ema100"))),
         "ema_200": _to_float_or_none(_first_present(merged_snapshot, src_event, ("ema_200", "ema200"))),
-        "vol_sma_20": _to_float_or_none(_first_present(merged_snapshot, src_event, ("vol_sma_20", "volSma20"))),
-        "session": _normalize_session_code(_first_present(merged_snapshot, src_event, ("session",))),
-        "candle_color_d1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_d1",))),
-        "candle_color_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_h1",))),
-        "candle_color_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m30",))),
-        "candle_color_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m15",))),
-        "candle_color_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m5",))),
+        "vol_sma_20": _to_float_or_none(_first_present(merged_snapshot, src_event, ("vol_sma_20", "volSma20", "vol_sma20"))),
+        "session": _normalize_session_code(_first_present(merged_snapshot, src_event, ("session", "market_session"))),
+        "candle_color_d1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_d1", "candle_color_D1"))),
+        "candle_color_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_h1", "candle_color_H1"))),
+        "candle_color_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m30", "candle_color_M30"))),
+        "candle_color_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m15", "candle_color_M15"))),
+        "candle_color_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("candle_color_m5", "candle_color_M5"))),
         "bb_m1_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m1_up",))),
         "bb_m1_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m1_dn",))),
         "bb_m5_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m5_up",))),
@@ -127,10 +132,10 @@ def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
         "bb_m30_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_m30_dn",))),
         "bb_h1_up": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_h1_up",))),
         "bb_h1_dn": _to_float_or_none(_first_present(merged_snapshot, src_event, ("bb_h1_dn",))),
-        "cisd_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m5",))),
-        "cisd_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m15",))),
-        "cisd_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m30",))),
-        "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1",))),
+        "cisd_m5": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m5", "cisd_M5"))),
+        "cisd_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m15", "cisd_M15"))),
+        "cisd_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m30", "cisd_M30"))),
+        "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1", "cisd_H1"))),
     }
 
     logger.info("build_signal_snapshot_columns: columns=%s", columns)
@@ -154,9 +159,9 @@ def _normalize_polarity_code(value):
         code = int(value)
         return code if code in (-1, 1) else None
     text = str(value).strip().upper()
-    if text == "BULL":
+    if text in {"BULL", "BULLISH"}:
         return 1
-    if text == "BEAR":
+    if text in {"BEAR", "BEARISH"}:
         return -1
     return None
 
@@ -438,6 +443,13 @@ class TradeJournalManager:
                         timeframe = "M1"
 
                     score_version = event.get("score_version") or "scor-v1.0.0"
+                    signal_schema_version_raw = event.get("signal_schema_version")
+                    if isinstance(signal_schema_version_raw, str):
+                        signal_schema_version = signal_schema_version_raw.strip() or "sig-v2.0.0"
+                    elif signal_schema_version_raw:
+                        signal_schema_version = str(signal_schema_version_raw)
+                    else:
+                        signal_schema_version = "sig-v2.0.0"
 
                     if not missing_core_fields:
                         eval_insert_result = await conn.execute(
@@ -499,12 +511,14 @@ class TradeJournalManager:
 
                     signal_snapshot = _strip_excluded_signal_states(signal_snapshot)
                     snapshot_columns = _build_signal_snapshot_columns(signal_snapshot, event)
+                    signal_snapshot_payload = signal_snapshot if signal_snapshot else {"timeframe": timeframe}
 
                     if trade_journal_id is not None:
                         snapshot_insert_result = await conn.execute(
                             """
                             INSERT INTO aureus_trade_signal_snapshots (
                                 trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
+                                signal_schema_version, signal_snapshot,
                                 atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200,
                                 vol_sma_20, session,
                                 candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
@@ -514,13 +528,14 @@ class TradeJournalManager:
                                 created_at
                             ) VALUES (
                                 $1, $2, $3, $4, $5, $6,
-                                $7, $8, $9, $10, $11, $12, $13,
-                                $14, $15,
-                                $16, $17, $18, $19, $20,
-                                $21, $22, $23, $24, $25, $26,
-                                $27, $28, $29, $30,
-                                $31, $32, $33, $34,
-                                $35
+                                $7, $8::jsonb,
+                                $9, $10, $11, $12, $13, $14, $15,
+                                $16, $17,
+                                $18, $19, $20, $21, $22,
+                                $23, $24, $25, $26, $27, $28,
+                                $29, $30, $31, $32,
+                                $33, $34, $35, $36,
+                                $37
                             )
                             ON CONFLICT (trade_journal_id) DO NOTHING
                             """,
@@ -530,6 +545,8 @@ class TradeJournalManager:
                             strategy_name,
                             symbol,
                             timeframe,
+                            signal_schema_version,
+                            json.dumps(signal_snapshot_payload),
                             snapshot_columns["atr"],
                             snapshot_columns["ema_21"],
                             snapshot_columns["ema_34"],
