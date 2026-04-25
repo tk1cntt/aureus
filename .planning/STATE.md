@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-dep: Fix ORDER_OPENED journal UndefinedColumnError timeframe
+Last activity: 2026-04-25 - Completed quick task 260425-duy: Remove aureus_trade_evaluations table and related code
 
 ## Architecture Decision
 
@@ -57,6 +57,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-dep: Fix ORDER_OPENED jo
 | 260425-ch4 | Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging | 2026-04-25 | 5ea1fa8 | [260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-](./quick/260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-/) |
 | 260425-cyn | Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram | 2026-04-25 | 842dcb7 | [260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-](./quick/260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-/) |
 | 260425-dep | Fix ORDER_OPENED journal UndefinedColumnError timeframe | 2026-04-25 | d27f2fa | [260425-dep-fix-bug-journal-on-order-opened-undefine](./quick/260425-dep-fix-bug-journal-on-order-opened-undefine/) |
+| 260425-duy | Remove aureus_trade_evaluations table and related code | 2026-04-25 | fde8984 | [260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s](./quick/260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
