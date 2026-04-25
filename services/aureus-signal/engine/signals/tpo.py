@@ -124,49 +124,104 @@ class TPOSignal(BaseSignal):
         if n == 0:
             return "D", 0.0, {shape: 0.0 for shape in SHAPES}
 
-        total = float(sum(counts))
+        total = float(sum(max(0, c) for c in counts))
         if total <= EPSILON:
             return "D", 0.0, {shape: 0.0 for shape in SHAPES}
 
+        poc_idx = max(0, min(int(poc_idx), n - 1))
+        max_count = float(max(counts))
+        usable_bins = sum(1 for c in counts if c > 0)
+        coverage = usable_bins / float(n)
+        maturity = min(1.0, total / 20.0)
+        usable_quality = min(1.0, usable_bins / 5.0)
+        data_quality = max(0.15, min(1.0, coverage * 1.4, maturity, usable_quality))
+
         upper_mass = float(sum(counts[poc_idx + 1:]))
         lower_mass = float(sum(counts[:poc_idx]))
+        poc_mass = float(counts[poc_idx])
         skew = (upper_mass - lower_mass) / (total + EPSILON)
 
-        max_count = max(counts)
-        prominences = []
+        pair_weight = 0.0
+        pair_delta = 0.0
+        max_dist = max(poc_idx, n - 1 - poc_idx, 1)
+        for dist in range(1, max_dist + 1):
+            left = poc_idx - dist
+            right = poc_idx + dist
+            left_count = float(counts[left]) if left >= 0 else 0.0
+            right_count = float(counts[right]) if right < n else 0.0
+            pair_total = left_count + right_count
+            pair_weight += pair_total
+            pair_delta += abs(left_count - right_count)
+        symmetry = 1.0 - (pair_delta / (pair_weight + EPSILON)) if pair_weight > EPSILON else 0.0
+
+        near_low = max(0, poc_idx - max(1, n // 4))
+        near_high = min(n, poc_idx + max(1, n // 4) + 1)
+        compactness = float(sum(counts[near_low:near_high])) / (total + EPSILON)
+
+        peaks = []
+        min_prominence = max(2.0, max_count * 0.45)
         for i, c in enumerate(counts):
             left = counts[i - 1] if i > 0 else -1
             right = counts[i + 1] if i < n - 1 else -1
-            if c >= left and c >= right:
-                prominences.append(c)
-        prominences.sort(reverse=True)
-        p1 = float(prominences[0]) if prominences else 0.0
-        p2 = float(prominences[1]) if len(prominences) > 1 else 0.0
-        dual_peak_ratio = p2 / (p1 + EPSILON)
+            if c >= min_prominence and c >= left and c >= right:
+                peaks.append((i, float(c)))
 
-        upper_tail = counts[max(0, n - max(1, n // 5)):]
-        lower_tail = counts[:max(1, n // 5)]
-        upper_tail_mean = (sum(upper_tail) / len(upper_tail)) if upper_tail else 0.0
-        lower_tail_mean = (sum(lower_tail) / len(lower_tail)) if lower_tail else 0.0
+        b_evidence = 0.0
+        for first_idx, first_count in peaks:
+            for second_idx, second_count in peaks:
+                if second_idx <= first_idx:
+                    continue
+                separation = second_idx - first_idx
+                if separation < 3:
+                    continue
+                valley = min(float(c) for c in counts[first_idx + 1:second_idx]) if second_idx > first_idx + 1 else max_count
+                weaker_peak = min(first_count, second_count)
+                peak_balance = weaker_peak / (max(first_count, second_count) + EPSILON)
+                valley_depth = max(0.0, 1.0 - (valley / (weaker_peak + EPSILON)))
+                separation_score = min(1.0, separation / max(3.0, n / 3.0))
+                b_evidence = max(b_evidence, peak_balance * valley_depth * separation_score)
 
-        scores = {
-            "D": max(0.0, 1.0 - abs(skew) - max(0.0, dual_peak_ratio - 0.45)),
-            "B": max(0.0, min(1.0, dual_peak_ratio - 0.35) + max(0.0, 0.25 - abs(skew))),
-            "p": max(0.0, skew + max(0.0, (lower_tail_mean - upper_tail_mean) / (max_count + EPSILON))),
-            "b": max(0.0, -skew + max(0.0, (upper_tail_mean - lower_tail_mean) / (max_count + EPSILON))),
-        }
+        tail_width = max(1, n // 3)
+        upper_tail = counts[n - tail_width:]
+        lower_tail = counts[:tail_width]
+        upper_tail_mean = float(sum(upper_tail)) / len(upper_tail)
+        lower_tail_mean = float(sum(lower_tail)) / len(lower_tail)
+        tail_delta = (lower_tail_mean - upper_tail_mean) / (max_count + EPSILON)
+        upper_share = upper_mass / (total - poc_mass + EPSILON)
+        lower_share = lower_mass / (total - poc_mass + EPSILON)
 
+        d_score = max(0.0, (0.55 * symmetry) + (0.45 * compactness) - (0.55 * b_evidence) - (0.45 * abs(skew)))
+        b_score = max(0.0, b_evidence * (0.8 + (0.2 * symmetry)))
+        p_score = max(0.0, (upper_share - lower_share) + (0.8 * -tail_delta) + max(0.0, skew * 0.25))
+        b_lower_score = max(0.0, (lower_share - upper_share) + (0.8 * tail_delta) + max(0.0, -skew * 0.25))
+        if b_evidence > 0.0:
+            p_score *= 1.0 - min(0.8, b_evidence)
+            b_lower_score *= 1.0 - min(0.8, b_evidence)
+
+        scores = {"D": d_score, "B": b_score, "p": p_score, "b": b_lower_score}
         score_sum = sum(scores.values())
         if score_sum <= EPSILON:
             normalized = {shape: 25.0 for shape in SHAPES}
-            return "D", 25.0, normalized
+            return "D", round(25.0 * data_quality, 2), normalized
 
-        normalized = {
-            shape: round((scores[shape] / score_sum) * 100.0, 2)
-            for shape in SHAPES
-        }
-        best_shape = max(SHAPES, key=lambda shape: normalized[shape])
-        best_confidence = normalized[best_shape]
+        normalized = {shape: round((scores[shape] / score_sum) * 100.0, 2) for shape in SHAPES}
+        ranked = sorted(SHAPES, key=lambda shape: normalized[shape], reverse=True)
+        best_shape = ranked[0]
+        top_score = normalized[best_shape]
+        runner_up = normalized[ranked[1]] if len(ranked) > 1 else 0.0
+        margin = max(0.0, top_score - runner_up)
+        margin_factor = min(1.0, margin / 35.0)
+        if margin < 20.0:
+            margin_factor *= 0.45
+        confidence_cap = 20.0 + (75.0 * data_quality)
+        if b_evidence > 0.0 and b_score < d_score:
+            confidence_cap = min(confidence_cap, 50.0)
+        if usable_bins < 5 or total < 20.0:
+            confidence_cap = min(confidence_cap, 35.0)
+        if 0.0 < b_evidence < 0.85:
+            confidence_cap = min(confidence_cap, 50.0)
+        best_confidence = min(top_score, confidence_cap) * (0.45 + (0.55 * margin_factor))
+        best_confidence = round(max(0.0, min(100.0, best_confidence)), 2)
         return best_shape, best_confidence, normalized
 
     def _build_levels_and_counts(self, session_df: pd.DataFrame) -> Optional[Tuple[List[float], List[int]]]:
