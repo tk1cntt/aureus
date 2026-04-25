@@ -358,7 +358,7 @@ class TradeJournalManager:
                     tp_initial = $7,
                     updated_at = now()
                 WHERE trace_id = $8 AND status = 'TRIGGERED'
-                RETURNING id, strategy_name, symbol, active_signals, context_filters, timeframe
+                RETURNING id, strategy_name, symbol, active_signals, context_filters
             """
 
             updated = False
@@ -375,7 +375,7 @@ class TradeJournalManager:
                         trade_journal_id = journal_row.get("id")
                         strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
                         symbol = event.get("symbol", journal_row.get("symbol", ""))
-                        timeframe = event.get("timeframe", journal_row.get("timeframe", ""))
+                        timeframe = event.get("timeframe", "")
                     else:
                         trade_journal_id = None
                         strategy_name = event.get("strategy_name", "")
@@ -421,7 +421,7 @@ class TradeJournalManager:
                         )
                         return False
 
-                    timeframe = event.get("timeframe") or (journal_row.get("timeframe") if journal_row else None) or "M1"
+                    timeframe = event.get("timeframe") or "M1"
                     if not isinstance(timeframe, str) or not timeframe.strip():
                         timeframe = "M1"
 
