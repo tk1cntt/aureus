@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-m1y: Implement calibrated TPO shape classifier core theo requirements 260425-lqo
+Last activity: 2026-04-25 - Completed quick task 260425-mfv: Integrate calibrated TPO shape metadata into indicator snapshot, Telegram, and replay baseline
 
 ## Architecture Decision
 
@@ -72,6 +72,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-m1y: Implement calibrate
 | 260425-kwd | Phân tích hàm _classify_shape, tầm quan trọng của nó trong hệ thống TPO; đề xuất 3-4 phương pháp cải thiện classify shape; chỉ report, chưa implement | 2026-04-25 | 8b1b282 |  | [260425-kwd-ph-n-t-ch-h-m-classify-shape-t-m-quan-tr](./quick/260425-kwd-ph-n-t-ch-h-m-classify-shape-t-m-quan-tr/) |
 | 260425-lqo | Tư vấn kiến trúc độc lập 4 bước cho cải thiện TPO shape classification dựa trên report 260425-kwd | 2026-04-25 | (pending commit) |  | [260425-lqo-d-a-va-o-report-na-y-planning-quick-2604](./quick/260425-lqo-d-a-va-o-report-na-y-planning-quick-2604/) |
 | 260425-m1y | Implement calibrated TPO shape classifier core theo requirements 260425-lqo | 2026-04-25 | 8e97d09 | Needs Review | [260425-m1y-implement-calibrated-tpo-shape-classifie](./quick/260425-m1y-implement-calibrated-tpo-shape-classifie/) |
+| 260425-mfv | Integrate calibrated TPO shape metadata into indicator snapshot, Telegram, and replay baseline | 2026-04-25 | 7c01219 | Verified | [260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o](./quick/260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
