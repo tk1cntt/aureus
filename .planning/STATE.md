@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
-last_updated: "2026-04-25T02:05:00.000Z"
+last_updated: "2026-04-25T02:40:00.000Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 4
@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-bnh: Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental
+Last activity: 2026-04-25 - Completed quick task 260425-bs6: Cải thiện TPO single-pass profile build và full-block cache
 
 ## Architecture Decision
 
@@ -52,6 +52,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-bnh: Phân tích thuật
 | 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
 | 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
 | 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | 2e90c5e | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
+| 260425-bs6 | Cải thiện TPO single-pass profile build và full-block cache cho closed buckets | 2026-04-25 | ddcd8ea | [260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ](./quick/260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
