@@ -80,6 +80,75 @@ def test_tpo_signal_caches_closed_h1_buckets():
     assert len(state.tpo_cache) >= cache_size
 
 
+def test_tpo_closed_bucket_cache_hit_does_not_rebuild(monkeypatch):
+    df = _build_m1_df(minutes=180)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    state = MockState()
+
+    first = sig.calculate(df, state)
+    assert first is not None
+    cached_keys = [key for key in state.tpo_cache if key.startswith("H1:")]
+    cached_key = cached_keys[-1]
+    cached_h1 = state.tpo_cache[cached_key]
+
+    def fail_rebuild(session_df):
+        raise AssertionError("closed bucket cache hit should not rebuild")
+
+    monkeypatch.setattr(sig, "_build_tpo_block", fail_rebuild)
+    bucket_start = int(cached_key.split(":", 1)[1])
+    bucket_end = bucket_start + 3600 - 60
+
+    df_closed = df[df["t"] <= bucket_end]
+    second = sig._compute_sliding(df_closed, bucket_end + 60, tf="H1", count=1, cache=state.tpo_cache)
+
+    assert second == cached_h1
+
+
+def test_tpo_current_bucket_still_updates_with_new_candle():
+    df = _build_m1_df(minutes=70)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    state = MockState()
+
+    first = sig.calculate(df, state)
+    assert first is not None
+    first_h1 = first["value"]["tpo_h1"]
+    assert first_h1 is not None
+
+    next_row = df.iloc[-1].copy()
+    next_row["t"] = int(next_row["t"]) + 60
+    next_row["h"] = float(next_row["h"]) + 20.0
+    next_row["l"] = float(next_row["l"]) + 20.0
+    next_row["o"] = float(next_row["o"]) + 20.0
+    next_row["c"] = float(next_row["c"]) + 20.0
+    df2 = pd.concat([df, pd.DataFrame([next_row])], ignore_index=True)
+
+    second = sig.calculate(df2, state)
+    assert second is not None
+    second_h1 = second["value"]["tpo_h1"]
+    assert second_h1 is not None
+    assert second_h1 != first_h1
+
+
+def test_tpo_block_build_uses_counts_once(monkeypatch):
+    df = _build_m1_df(minutes=80)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    calls = 0
+    original = sig._build_levels_and_counts
+
+    def wrapped(session_df):
+        nonlocal calls
+        calls += 1
+        return original(session_df)
+
+    monkeypatch.setattr(sig, "_build_levels_and_counts", wrapped)
+
+    block = sig._build_tpo_block(df)
+
+    assert block is not None
+    assert calls == 1
+    assert set(block.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
+
+
 def test_tpo_signal_uses_today_only_for_d1():
     # two days of data; D1 should only use current day window
     start = 1700000000

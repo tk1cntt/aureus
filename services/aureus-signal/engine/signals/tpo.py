@@ -58,7 +58,7 @@ class TPOSignal(BaseSignal):
 
         return self._build_tpo_block(session)
 
-    def _compute_sliding(self, m1_df: pd.DataFrame, now_ts: int, tf: str, count: int, cache: Dict[str, Tuple[float, float, float]]) -> Optional[Dict[str, Any]]:
+    def _compute_sliding(self, m1_df: pd.DataFrame, now_ts: int, tf: str, count: int, cache: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         tf_df = resample_to_tf(m1_df, tf)
         if tf_df is None or len(tf_df) == 0:
             return None
@@ -78,36 +78,36 @@ class TPOSignal(BaseSignal):
             bucket_key = f"{tf.upper()}:{bucket_start}"
             is_current_bucket = bucket_start <= now_ts <= bucket_end
 
+            cached_block = cache.get(bucket_key) if not is_current_bucket else None
+            if cached_block is not None:
+                latest_block = cached_block
+                continue
+
             session = m1_df[(m1_df["t"] >= bucket_start) & (m1_df["t"] <= min(bucket_end, now_ts))]
             if session is None or len(session) == 0:
                 continue
 
-            profile = cache.get(bucket_key) if (not is_current_bucket and bucket_key in cache) else None
-            if profile is None:
-                profile = self._build_profile(session)
-                if profile and not is_current_bucket:
-                    cache[bucket_key] = profile
+            block = self._build_tpo_block(session)
+            if block is None:
+                continue
 
-            if profile:
-                latest_block = self._build_tpo_block(session)
+            if not is_current_bucket:
+                cache[bucket_key] = block
+            latest_block = block
 
         return latest_block
 
     def _build_tpo_block(self, session_df: pd.DataFrame) -> Optional[Dict[str, Any]]:
-        profile = self._build_profile(session_df)
+        built = self._build_levels_and_counts(session_df)
+        if built is None:
+            return None
+
+        levels, counts = built
+        profile = self._build_profile_from_counts(levels, counts)
         if profile is None:
             return None
 
-        poc, vah, val = profile
-        built = self._build_levels_and_counts(session_df)
-        if built is None:
-            return {"POC": poc, "VAH": vah, "VAL": val}
-
-        levels, counts = built
-        if not levels or not counts:
-            return {"POC": poc, "VAH": vah, "VAL": val}
-
-        poc_idx = min(range(len(levels)), key=lambda i: abs(levels[i] - poc))
+        poc, vah, val, poc_idx = profile
         shape, confidence_pct, scores = self._classify_shape(levels, counts, poc_idx)
 
         return {
@@ -200,7 +200,14 @@ class TPOSignal(BaseSignal):
         if built is None:
             return None
 
-        levels, counts = built
+        profile = self._build_profile_from_counts(*built)
+        if profile is None:
+            return None
+
+        poc, vah, val, _ = profile
+        return poc, vah, val
+
+    def _build_profile_from_counts(self, levels: List[float], counts: List[int]) -> Optional[Tuple[float, float, float, int]]:
         levels_count = len(levels)
         if levels_count == 0:
             return None
@@ -252,7 +259,7 @@ class TPOSignal(BaseSignal):
         poc = round(levels[poc_idx], 8)
         vah = round(levels[high_idx], 8)
         val = round(levels[low_idx], 8)
-        return poc, vah, val
+        return poc, vah, val, poc_idx
 
     @staticmethod
     def _start_ts(tf: str, end_ts: int) -> int:
