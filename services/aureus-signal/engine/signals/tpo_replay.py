@@ -21,6 +21,7 @@ def replay_tpo_calibration(rows: Iterable[Dict[str, Any]], thresholds=(0.75,)) -
         "setup_counts": _empty_setup_counts(),
         "regime_breakdown": {},
         "threshold_sensitivity": {},
+        "shape_baseline": _shape_baseline(row_list),
     }
 
     for row, row_candidates in zip(row_list, candidates_by_row):
@@ -48,6 +49,55 @@ def replay_tpo_calibration(rows: Iterable[Dict[str, Any]], thresholds=(0.75,)) -
         }
 
     return report
+
+
+def _shape_baseline(rows: list[Dict[str, Any]]) -> Dict[str, Any]:
+    baseline = {}
+    for tf in ("D1", "H1", "M30"):
+        shapes = []
+        confidences = []
+        for row in rows:
+            block = row.get("context", {}).get("timeframes", {}).get(tf)
+            if not isinstance(block, dict):
+                continue
+            shape = block.get("shape")
+            if shape in {"D", "B", "p", "b"}:
+                shapes.append(shape)
+            confidence = block.get("shape_confidence_pct")
+            if isinstance(confidence, (int, float)):
+                confidences.append(float(confidence))
+        comparisons = max(len(shapes) - 1, 0)
+        flips = sum(1 for previous, current in zip(shapes, shapes[1:]) if previous != current)
+        baseline[tf] = {
+            "valid_shape_count": len(shapes),
+            "shape_flip_count": flips,
+            "shape_flip_rate": round(flips / comparisons, 4) if comparisons else 0.0,
+            "confidence_distribution": _confidence_distribution(confidences),
+        }
+    return baseline
+
+
+def _confidence_distribution(values: list[float]) -> Dict[str, Any]:
+    buckets = {"0-20": 0, "20-40": 0, "40-60": 0, "60-80": 0, "80-100": 0}
+    for value in values:
+        bounded = max(0.0, min(100.0, value))
+        if bounded < 20.0:
+            buckets["0-20"] += 1
+        elif bounded < 40.0:
+            buckets["20-40"] += 1
+        elif bounded < 60.0:
+            buckets["40-60"] += 1
+        elif bounded < 80.0:
+            buckets["60-80"] += 1
+        else:
+            buckets["80-100"] += 1
+    return {
+        "count": len(values),
+        "min": round(min(values), 2) if values else None,
+        "max": round(max(values), 2) if values else None,
+        "avg": round(sum(values) / len(values), 2) if values else None,
+        "buckets": buckets,
+    }
 
 
 def _detect_row_candidates(row: Dict[str, Any]) -> list[Dict[str, Any]]:

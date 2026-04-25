@@ -172,6 +172,28 @@ def test_replay_report_threshold_sensitivity_records_tags_and_conflicts():
     }
 
 
+def test_replay_report_includes_shape_baseline_flip_rate_and_confidence_distribution():
+    rows = _fixture_rows()
+    rows[0]["context"]["timeframes"]["D1"] = _tf(shape="D", poc=100.0)
+    rows[1]["context"]["timeframes"]["D1"] = _tf(shape="D", poc=101.0)
+    rows[2]["context"]["timeframes"]["D1"] = _tf(shape="B", poc=102.0)
+    rows[3]["context"]["timeframes"]["D1"] = _tf(shape="B", poc=103.0)
+    rows[4]["context"]["timeframes"]["D1"] = _tf(shape="B", poc=104.0)
+
+    report = replay_tpo_calibration(rows, thresholds=(0.75,))
+
+    baseline = report["shape_baseline"]
+    assert baseline["D1"]["valid_shape_count"] == 5
+    assert baseline["D1"]["shape_flip_count"] == 1
+    assert baseline["D1"]["shape_flip_rate"] == 0.25
+    assert baseline["D1"]["confidence_distribution"]["count"] == 5
+    assert baseline["D1"]["confidence_distribution"]["min"] == 80.0
+    assert baseline["D1"]["confidence_distribution"]["max"] == 80.0
+    assert baseline["D1"]["confidence_distribution"]["avg"] == 80.0
+    assert baseline["D1"]["confidence_distribution"]["buckets"]["80-100"] == 5
+    assert set(baseline) == {"D1", "H1", "M30"}
+
+
 def test_replay_import_scope_excludes_production_persistence_and_runtime_modules():
     loaded = set(sys.modules)
 
