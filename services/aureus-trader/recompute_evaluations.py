@@ -15,9 +15,6 @@ SIGNAL_ENGINE_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "..", "aureus-sig
 if SIGNAL_ENGINE_PATH not in sys.path:
     sys.path.insert(0, SIGNAL_ENGINE_PATH)
 
-from compute import compute_trade_score
-
-
 def _parse_iso8601(value: str) -> datetime:
     if not value:
         raise ValueError("datetime value is required")
@@ -25,8 +22,6 @@ def _parse_iso8601(value: str) -> datetime:
 
 
 def _validate_args(args):
-    if not args.score_version:
-        raise ValueError("--score-version is required")
     if not args.signal_schema_version:
         raise ValueError("--signal-schema-version is required")
     if args.batch_size <= 0:
@@ -68,8 +63,6 @@ def _select_timeframe_with_lineage(row):
 async def recompute_batch(conn, score_version, signal_schema_version, start, end, batch_size=500, weights_snapshot=None):
     if batch_size <= 0:
         raise ValueError("batch_size must be > 0")
-    if not score_version:
-        raise ValueError("score_version is required")
     if not signal_schema_version:
         raise ValueError("signal_schema_version is required")
 
@@ -109,16 +102,8 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
             ss.cisd_m5,
             ss.cisd_m15,
             ss.cisd_m30,
-            ss.cisd_h1,
-            ev.score_breakdown
+            ss.cisd_h1
         FROM aureus_trade_journal j
-        LEFT JOIN LATERAL (
-            SELECT score_breakdown
-            FROM aureus_trade_evaluations
-            WHERE trade_journal_id = j.id
-            ORDER BY evaluated_at DESC
-            LIMIT 1
-        ) ev ON true
         LEFT JOIN LATERAL (
             SELECT atr, ema_21, ema_34, ema_55, ema_89, ema_100, ema_200, vol_sma_20,
                    session, candle_color_d1, candle_color_h1, candle_color_m30, candle_color_m15, candle_color_m5,
@@ -140,62 +125,8 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
         batch_size,
     )
 
-    eval_inserted = 0
     sig_inserted = 0
-    immutable_weights = dict(weights_snapshot or {})
-
     for row in rows:
-        score_input = {
-            "quality_gate_passed": True,
-            "criteria": row.get("score_breakdown") or {},
-        }
-        score_result = compute_trade_score(score_input, score_version, immutable_weights)
-
-        eval_insert_result = await conn.execute(
-            """
-            INSERT INTO aureus_trade_evaluations (
-                trade_journal_id, trace_id, ticket, score_version, score_total,
-                score_breakdown, weights_snapshot, missing_data_policy,
-                strategy_name, symbol, timeframe, computed_at, evaluated_at, is_current
-            ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, now(), now(), TRUE)
-            ON CONFLICT (trade_journal_id, score_version) DO NOTHING
-            """,
-            row["id"],
-            row["trace_id"],
-            row["ticket"],
-            score_version,
-            float(score_result.get("score_total") or 0.0),
-            json.dumps(score_result),
-            json.dumps(score_result.get("weights_snapshot") or immutable_weights),
-            score_result.get("missing_data_policy") or "impute_neutral_and_flag",
-            row.get("strategy_name") or "",
-            row.get("symbol") or "",
-            row.get("timeframe") or "",
-        )
-
-        if eval_insert_result == "INSERT 0 1":
-            eval_inserted += 1
-            await conn.execute(
-                """
-                UPDATE aureus_trade_evaluations
-                SET is_current = FALSE
-                WHERE trade_journal_id = $1
-                  AND score_version <> $2
-                """,
-                row["id"],
-                score_version,
-            )
-            await conn.execute(
-                """
-                UPDATE aureus_trade_evaluations
-                SET is_current = TRUE
-                WHERE trade_journal_id = $1
-                  AND score_version = $2
-                """,
-                row["id"],
-                score_version,
-            )
-
         sig_insert_result = await conn.execute(
             """
             INSERT INTO aureus_trade_signal_snapshots (
@@ -263,7 +194,6 @@ async def recompute_batch(conn, score_version, signal_schema_version, start, end
 
     return {
         "processed": len(rows),
-        "evaluation_inserted": eval_inserted,
         "signal_snapshot_inserted": sig_inserted,
     }
 
@@ -280,7 +210,7 @@ async def _run(args):
                 start=args.start,
                 end=args.end,
                 batch_size=args.batch_size,
-                weights_snapshot=json.loads(args.weights_snapshot),
+                weights_snapshot=None,
             )
             print(json.dumps(stats, ensure_ascii=False))
     finally:
@@ -288,17 +218,13 @@ async def _run(args):
 
 
 def _build_parser():
-    parser = argparse.ArgumentParser(description="Recompute trade evaluations and signal snapshots")
+    parser = argparse.ArgumentParser(description="Backfill trade signal snapshots")
     parser.add_argument("--dsn", required=True)
-    parser.add_argument("--score-version", required=True)
+    parser.add_argument("--score-version", required=False)
     parser.add_argument("--signal-schema-version", required=True)
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--batch-size", type=int, default=500)
-    parser.add_argument(
-        "--weights-snapshot",
-        default='{"profit_outcome":0.30,"signal_quality":0.35,"timing_quality":0.20,"volatility_session":0.15}',
-    )
     return parser
 
 

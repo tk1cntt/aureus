@@ -3,35 +3,47 @@ import pytest
 from recompute_evaluations import recompute_batch
 
 
-class CaptureWarningLogger:
-    def __init__(self):
-        self.calls = []
-
-    def warning(self, message, *args):
-        self.calls.append((message, args))
-
-
 class MockConn:
-    def __init__(self, rows=None):
+    def __init__(self):
         self.fetch_calls = []
         self.execute_calls = []
-        self.inserted_eval = set()
-        self.rows = rows or [
+        self.inserted_snapshots = set()
+        self.rows = [
             {
                 "id": 101,
                 "trace_id": "tr-55-001",
                 "ticket": 123456789,
                 "strategy_name": "chandelier_breakout",
                 "symbol": "XAUUSD",
-                "lineage_timeframe": "M5",
-                "journal_timeframe": "M15",
-                "snapshot_timeframe": "H1",
-                "signal_snapshot": {},
-                "cisd_direction": None,
-                "ema21": None,
-                "ema55": None,
-                "created_at": None,
-                "score_breakdown": {"criteria": {"signal_quality": 0.8}},
+                "timeframe": "M5",
+                "atr": 1.23,
+                "ema_21": 3345.12,
+                "ema_34": 3343.12,
+                "ema_55": 3338.40,
+                "ema_89": 3335.0,
+                "ema_100": 3332.0,
+                "ema_200": 3320.0,
+                "vol_sma_20": 2000.0,
+                "session": 2,
+                "candle_color_d1": 1,
+                "candle_color_h1": -1,
+                "candle_color_m30": 1,
+                "candle_color_m15": 1,
+                "candle_color_m5": -1,
+                "bb_m1_up": 3350.1,
+                "bb_m1_dn": 3340.1,
+                "bb_m5_up": 3360.1,
+                "bb_m5_dn": 3330.1,
+                "bb_m15_up": 3370.1,
+                "bb_m15_dn": 3320.1,
+                "bb_m30_up": 3380.1,
+                "bb_m30_dn": 3310.1,
+                "bb_h1_up": 3390.1,
+                "bb_h1_dn": 3300.1,
+                "cisd_m5": 1,
+                "cisd_m15": -1,
+                "cisd_m30": 1,
+                "cisd_h1": -1,
             }
         ]
 
@@ -41,41 +53,18 @@ class MockConn:
 
     async def execute(self, query, *args):
         self.execute_calls.append((query, args))
-        if "INSERT INTO aureus_trade_evaluations" in query:
-            key = (args[0], args[3])
-            if key in self.inserted_eval:
-                return "INSERT 0 0"
-            self.inserted_eval.add(key)
-            return "INSERT 0 1"
         if "INSERT INTO aureus_trade_signal_snapshots" in query:
+            key = (args[0], args[6])
+            if key in self.inserted_snapshots:
+                return "INSERT 0 0"
+            self.inserted_snapshots.add(key)
             return "INSERT 0 1"
         return "UPDATE 1"
 
 
-def _fake_compute_trade_score(input_payload, score_version, weights_snapshot):
-    return {
-        "score_total": 0.812345,
-        "criteria": [{"name": "signal_quality", "normalized": 0.8}],
-        "weights_snapshot": weights_snapshot,
-        "missing_data_policy": "impute_neutral_and_flag",
-    }
-
-
-def _weights():
-    return {
-        "profit_outcome": 0.30,
-        "signal_quality": 0.35,
-        "timing_quality": 0.20,
-        "volatility_session": 0.15,
-    }
-
-
 @pytest.mark.asyncio
-async def test_recompute_prefers_canonical_lineage_timeframe(monkeypatch):
+async def test_recompute_does_not_read_or_write_removed_evaluation_table():
     conn = MockConn()
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", _fake_compute_trade_score)
-    warning_logger = CaptureWarningLogger()
-    monkeypatch.setattr("recompute_evaluations.logger", warning_logger)
 
     stats = await recompute_batch(
         conn=conn,
@@ -84,92 +73,18 @@ async def test_recompute_prefers_canonical_lineage_timeframe(monkeypatch):
         start="2026-04-01T00:00:00Z",
         end="2026-04-30T23:59:59Z",
         batch_size=500,
-        weights_snapshot=_weights(),
+        weights_snapshot={},
     )
 
-    assert stats["evaluation_inserted"] == 1
-    eval_inserts = [q for q in conn.execute_calls if "INSERT INTO aureus_trade_evaluations" in q[0]]
-    assert eval_inserts[0][1][10] == "M5"
-    assert warning_logger.calls == []
+    assert stats == {"processed": 1, "signal_snapshot_inserted": 1}
+    removed_table = "aureus_trade_" + "evaluations"
+    assert removed_table not in conn.fetch_calls[0][0]
+    assert all(removed_table not in query for query, _ in conn.execute_calls)
 
 
 @pytest.mark.asyncio
-async def test_recompute_fallback_emits_structured_warning(monkeypatch):
-    conn = MockConn(
-        rows=[
-            {
-                "id": 202,
-                "trace_id": "tr-55-fallback",
-                "ticket": 123456789,
-                "strategy_name": "chandelier_breakout",
-                "symbol": "XAUUSD",
-                "lineage_timeframe": None,
-                "journal_timeframe": None,
-                "snapshot_timeframe": None,
-                "signal_snapshot": {},
-                "cisd_direction": None,
-                "ema21": None,
-                "ema55": None,
-                "created_at": None,
-                "score_breakdown": {"criteria": {"signal_quality": 0.8}},
-            }
-        ]
-    )
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", _fake_compute_trade_score)
-    warning_logger = CaptureWarningLogger()
-    monkeypatch.setattr("recompute_evaluations.logger", warning_logger)
-
-    stats = await recompute_batch(
-        conn=conn,
-        score_version="scor-v1.1.0",
-        signal_schema_version="sig-v1.1.0",
-        start="2026-04-01T00:00:00Z",
-        end="2026-04-30T23:59:59Z",
-        batch_size=500,
-        weights_snapshot=_weights(),
-    )
-
-    assert stats["evaluation_inserted"] == 1
-    eval_inserts = [q for q in conn.execute_calls if "INSERT INTO aureus_trade_evaluations" in q[0]]
-    assert eval_inserts[0][1][10] == "M1"
-
-    rendered = [msg % args if args else msg for msg, args in warning_logger.calls]
-    assert any("TIMEFRAME_LINEAGE_FALLBACK" in msg for msg in rendered)
-    assert any("trace_id=tr-55-fallback" in msg for msg in rendered)
-    assert any("trade_journal_id=202" in msg for msg in rendered)
-    assert any("fallback_source=default_M1" in msg for msg in rendered)
-
-
-@pytest.mark.asyncio
-async def test_recompute_evaluation_append_history_and_flip_is_current(monkeypatch):
+async def test_recompute_snapshot_rerun_same_schema_version_is_idempotent():
     conn = MockConn()
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", _fake_compute_trade_score)
-
-    stats = await recompute_batch(
-        conn=conn,
-        score_version="scor-v1.1.0",
-        signal_schema_version="sig-v1.1.0",
-        start="2026-04-01T00:00:00Z",
-        end="2026-04-30T23:59:59Z",
-        batch_size=500,
-        weights_snapshot=_weights(),
-    )
-
-    assert stats["evaluation_inserted"] == 1
-    eval_inserts = [q for q in conn.execute_calls if "INSERT INTO aureus_trade_evaluations" in q[0]]
-    assert len(eval_inserts) == 1
-    assert eval_inserts[0][1][3] == "scor-v1.1.0"
-
-    demote_updates = [q for q in conn.execute_calls if "SET is_current = FALSE" in q[0]]
-    promote_updates = [q for q in conn.execute_calls if "SET is_current = TRUE" in q[0]]
-    assert len(demote_updates) == 1
-    assert len(promote_updates) == 1
-
-
-@pytest.mark.asyncio
-async def test_recompute_evaluation_rerun_same_version_is_idempotent(monkeypatch):
-    conn = MockConn()
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", _fake_compute_trade_score)
 
     first = await recompute_batch(
         conn=conn,
@@ -178,7 +93,7 @@ async def test_recompute_evaluation_rerun_same_version_is_idempotent(monkeypatch
         start="2026-04-01T00:00:00Z",
         end="2026-04-30T23:59:59Z",
         batch_size=500,
-        weights_snapshot=_weights(),
+        weights_snapshot={},
     )
     second = await recompute_batch(
         conn=conn,
@@ -187,8 +102,8 @@ async def test_recompute_evaluation_rerun_same_version_is_idempotent(monkeypatch
         start="2026-04-01T00:00:00Z",
         end="2026-04-30T23:59:59Z",
         batch_size=500,
-        weights_snapshot=_weights(),
+        weights_snapshot={},
     )
 
-    assert first["evaluation_inserted"] == 1
-    assert second["evaluation_inserted"] == 0
+    assert first["signal_snapshot_inserted"] == 1
+    assert second["signal_snapshot_inserted"] == 0

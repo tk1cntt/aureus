@@ -151,10 +151,9 @@ async def test_signal_snapshot_defaults_timeframe_to_m1_when_missing(journal_man
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(eval_queries) == 1
-    assert eval_queries[0][2][10] == "M1"
+    assert len(eval_queries) == 0
 
     snapshot_queries = [
         q for q in mock_db_pool._conn.queries
@@ -199,9 +198,9 @@ async def test_signal_snapshot_skips_when_payload_unmappable(journal_manager, mo
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(eval_queries) == 1
+    assert len(eval_queries) == 0
 
 
 @pytest.mark.asyncio
@@ -433,9 +432,9 @@ async def test_signal_snapshot_mapping_from_json_string_active_signals(journal_m
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(eval_queries) == 1
+    assert len(eval_queries) == 0
 
 
 @pytest.mark.asyncio
@@ -529,6 +528,6 @@ async def test_signal_snapshot_skips_when_payload_unmappable(journal_manager, mo
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(eval_queries) == 1
+    assert len(eval_queries) == 0

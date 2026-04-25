@@ -58,24 +58,14 @@ class MockConn:
                 return "INSERT 0 0"
             self.inserted_snapshots.add(key)
             return "INSERT 0 1"
-        if "INSERT INTO aureus_trade_evaluations" in query:
+        if "INSERT INTO removed_evaluation_table" in query:
             return "INSERT 0 1"
         return "UPDATE 1"
 
 
 @pytest.mark.asyncio
-async def test_recompute_signal_snapshot_append_history_and_preserve_old_version(monkeypatch):
+async def test_recompute_signal_snapshot_append_history_and_preserve_old_version():
     conn = MockConn()
-
-    def fake_compute_trade_score(input_payload, score_version, weights_snapshot):
-        return {
-            "score_total": 0.812345,
-            "criteria": [{"name": "signal_quality", "normalized": 0.8}],
-            "weights_snapshot": weights_snapshot,
-            "missing_data_policy": "impute_neutral_and_flag",
-        }
-
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", fake_compute_trade_score)
 
     weights = {
         "profit_outcome": 0.30,
@@ -104,18 +94,8 @@ async def test_recompute_signal_snapshot_append_history_and_preserve_old_version
 
 
 @pytest.mark.asyncio
-async def test_recompute_signal_snapshot_rerun_same_schema_version_is_idempotent(monkeypatch):
+async def test_recompute_signal_snapshot_rerun_same_schema_version_is_idempotent():
     conn = MockConn()
-
-    def fake_compute_trade_score(input_payload, score_version, weights_snapshot):
-        return {
-            "score_total": 0.812345,
-            "criteria": [{"name": "signal_quality", "normalized": 0.8}],
-            "weights_snapshot": weights_snapshot,
-            "missing_data_policy": "impute_neutral_and_flag",
-        }
-
-    monkeypatch.setattr("recompute_evaluations.compute_trade_score", fake_compute_trade_score)
 
     weights = {
         "profit_outcome": 0.30,

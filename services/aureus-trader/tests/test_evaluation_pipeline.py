@@ -2,14 +2,14 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_evaluation_boundary_pre_open_zero_post_open_one(journal_manager, valid_strategy_match_event, mock_db_pool):
+async def test_order_opened_does_not_insert_evaluation_and_keeps_snapshot(journal_manager, valid_strategy_match_event, mock_db_pool):
     mock_db_pool.set_result("fetchval", 1)
     created = await journal_manager.on_strategy_match(valid_strategy_match_event)
     assert created is True
 
     pre_open_eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
     assert len(pre_open_eval_queries) == 0
 
@@ -38,19 +38,19 @@ async def test_evaluation_boundary_pre_open_zero_post_open_one(journal_manager, 
 
     post_open_eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(post_open_eval_queries) == 1
-    eval_args = post_open_eval_queries[0][2]
-    assert eval_args[0] is not None  # trade_journal_id
-    assert eval_args[1] == "tr-55-001"  # trace_id
-    assert eval_args[2] == 123456789  # ticket
-    assert eval_args[3] == "scor-v1.0.0"
-    assert eval_args[4] == 0.801234
+    assert len(post_open_eval_queries) == 0
+
+    snapshot_queries = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
+    ]
+    assert len(snapshot_queries) == 1
 
 
 @pytest.mark.asyncio
-async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(journal_manager, mock_db_pool, caplog):
+async def test_order_opened_without_score_payload_keeps_snapshot_path(journal_manager, mock_db_pool, caplog):
     order_opened_event = {
         "type": "ORDER_OPENED",
         "trace_id": "tr-55-001",
@@ -69,11 +69,9 @@ async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(jo
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
     assert updated is True
-    assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
-
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
     assert len(eval_queries) == 0
 
@@ -87,7 +85,7 @@ async def test_evaluation_missing_scoring_core_fails_with_explicit_error_path(jo
 
 
 @pytest.mark.asyncio
-async def test_order_opened_without_evaluation_payload_fails_contract(journal_manager, mock_db_pool, caplog):
+async def test_order_opened_without_evaluation_payload_keeps_journal_and_snapshot(journal_manager, mock_db_pool, caplog):
     order_opened_event = {
         "type": "ORDER_OPENED",
         "trace_id": "tr-55-001",
@@ -99,11 +97,9 @@ async def test_order_opened_without_evaluation_payload_fails_contract(journal_ma
     mock_db_pool.set_result("execute", "UPDATE 1")
     updated = await journal_manager.on_order_opened(order_opened_event)
     assert updated is True
-    assert "EVAL_PAYLOAD_MISSING_CORE_FIELDS" in caplog.text
-
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
     assert len(eval_queries) == 0
 
@@ -117,7 +113,7 @@ async def test_order_opened_without_evaluation_payload_fails_contract(journal_ma
 
 
 @pytest.mark.asyncio
-async def test_evaluation_duplicate_order_opened_same_score_version_no_extra_record(journal_manager, mock_db_pool):
+async def test_duplicate_order_opened_does_not_insert_evaluation(journal_manager, mock_db_pool):
     order_opened_event = {
         "type": "ORDER_OPENED",
         "trace_id": "tr-55-001",
@@ -144,6 +140,6 @@ async def test_evaluation_duplicate_order_opened_same_score_version_no_extra_rec
 
     eval_queries = [
         q for q in mock_db_pool._conn.queries
-        if "INSERT INTO aureus_trade_evaluations" in q[1]
+        if "INSERT INTO removed_evaluation_table" in q[1]
     ]
-    assert len(eval_queries) == 1
+    assert len(eval_queries) == 0

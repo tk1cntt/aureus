@@ -1,5 +1,5 @@
 """
-Trade Journal Manager — captures strategy match context and updates trade lifecycle events.
+Trade Journal Manager â€” captures strategy match context and updates trade lifecycle events.
 
 Integration points:
 - on_strategy_match(): Called when trader receives STRATEGY_MATCH from Redis
@@ -190,7 +190,7 @@ class TradeJournalManager:
     async def on_strategy_match(self, event: dict) -> bool:
         """Create journal entry when strategy match is received.
 
-        Called before order is enqueued — creates TRIGGERED entry.
+        Called before order is enqueued â€” creates TRIGGERED entry.
 
         :param event: STRATEGY_MATCH event dict from Redis
         :return: True if entry created, False on error (does NOT block dispatch)
@@ -382,50 +382,10 @@ class TradeJournalManager:
                         symbol = event.get("symbol", "")
                         timeframe = event.get("timeframe", "")
 
-                    score_total_raw = event.get("score_total", event.get("score"))
-                    score_total = None
-                    if score_total_raw is not None:
-                        try:
-                            score_total = float(score_total_raw)
-                        except (TypeError, ValueError):
-                            logger.warning("on_order_opened: score_total is not numeric")
-
-                    score_breakdown = event.get("score_breakdown")
-                    weights_snapshot = event.get("weights_snapshot")
-                    missing_data_policy = event.get("missing_data_policy")
-
-                    missing_core_fields = [
-                        name
-                        for name, value in (
-                            ("score_total", score_total),
-                            ("score_breakdown", score_breakdown),
-                            ("weights_snapshot", weights_snapshot),
-                            ("missing_data_policy", missing_data_policy),
-                        )
-                        if value is None
-                    ]
-
-                    if missing_core_fields:
-                        logger.warning(
-                            "EVAL_PAYLOAD_MISSING_CORE_FIELDS: trace_id=%s ticket=%s missing=%s -- skipping evaluation insert, continuing snapshot persist",
-                            trace_id,
-                            ticket,
-                            ",".join(missing_core_fields),
-                        )
-
-                    if trade_journal_id is None:
-                        logger.error(
-                            "EVAL_PERSIST_MISSING_TRADE_JOURNAL_ID: trace_id=%s ticket=%s",
-                            trace_id,
-                            ticket,
-                        )
-                        return False
-
                     timeframe = event.get("timeframe") or "M1"
                     if not isinstance(timeframe, str) or not timeframe.strip():
                         timeframe = "M1"
 
-                    score_version = event.get("score_version") or "scor-v1.0.0"
                     signal_schema_version_raw = event.get("signal_schema_version")
                     if isinstance(signal_schema_version_raw, str):
                         signal_schema_version = signal_schema_version_raw.strip() or "sig-v2.0.0"
@@ -433,42 +393,6 @@ class TradeJournalManager:
                         signal_schema_version = str(signal_schema_version_raw)
                     else:
                         signal_schema_version = "sig-v2.0.0"
-
-                    if not missing_core_fields:
-                        eval_insert_result = await conn.execute(
-                        """
-                        INSERT INTO aureus_trade_evaluations (
-                            trade_journal_id, trace_id, ticket, score_version, score_total,
-                            score_breakdown, weights_snapshot, missing_data_policy,
-                            strategy_name, symbol, timeframe
-                        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
-                        ON CONFLICT (trade_journal_id, score_version) DO NOTHING
-                        """,
-                        trade_journal_id,
-                        trace_id,
-                        ticket,
-                        score_version,
-                        score_total,
-                        json.dumps(score_breakdown),
-                        json.dumps(weights_snapshot),
-                        missing_data_policy,
-                        strategy_name,
-                        symbol,
-                        timeframe,
-                    )
-                        logger.info(
-                            "on_order_opened: evaluation_insert trace_id=%s ticket=%s result=%s",
-                            trace_id,
-                            ticket,
-                            eval_insert_result,
-                        )
-                    else:
-                        logger.info(
-                            "on_order_opened: evaluation_insert skipped trace_id=%s ticket=%s missing_core_fields=%s",
-                            trace_id,
-                            ticket,
-                            missing_core_fields,
-                        )
 
                     raw_signal_snapshot = event.get("signal_snapshot")
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
