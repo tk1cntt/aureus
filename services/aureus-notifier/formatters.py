@@ -98,7 +98,7 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
         shape = block.get("shape")
         confidence = block.get("shape_confidence_pct")
         if shape in {"D", "B", "p", "b"} and isinstance(confidence, (int, float)):
-            base = f"{base} Shape:{shape} ({float(confidence):.1f}%)"
+            base = f"{base} Shape:{shape} (heuristic {float(confidence):.1f}%)"
 
         return html.escape(base)
 
