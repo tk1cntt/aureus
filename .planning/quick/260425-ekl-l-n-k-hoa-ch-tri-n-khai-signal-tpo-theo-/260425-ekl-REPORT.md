@@ -89,22 +89,41 @@ Chưa có các detector độc lập như:
 - `POCMagnetDetector` (có thể để sau)
 - `BalanceImbalanceDetector` (có thể để sau)
 
-### 2.6. Thiếu scorer và final signal contract
+### 2.6. Thiếu scorer và strategy template contract
 
-Chưa có lớp tổng hợp để sinh signal chuẩn hóa:
+Chưa có lớp tổng hợp để emit các TPO signal tags và chưa có strategy templates tương ứng trong format hiện hành của `services/aureus-signal/engine/strategies/seed_strategies.py`.
+
+Thiết kế TPO strategy không nên tạo contract trade riêng ngoài hệ thống. Nó phải đi qua cùng format seed strategy đang dùng:
 
 ```python
 {
-  "side": "long" | "short" | "flat",
-  "setup": "va_rejection" | "va_breakout_acceptance" | "trend_pullback",
-  "entry_type": "market" | "limit" | "stop",
-  "entry_price": ...,
-  "stop_loss": ...,
-  "take_profit": [...],
-  "confidence": ...,
-  "reasons": [...]
+  "name": "TPO_VA_REJECTION_BULL",
+  "is_active": True,
+  "description": "...",
+  "min_score": 6.0,
+  "config": {
+    "min_score_threshold": 6.0,
+    "context_filters": [{"type": "tpo_context", "setup": "va_rejection"}],
+    "sequence": [
+      {"tag": "tpo_va_rejection_bull", "weight": 4.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_va_rejection_bear"]}
+    ],
+    "trade_execution": {
+      "direction": "BUY",
+      "entry_type": "MARKET",
+      "entry_method": "CURRENT",
+      "size_mode": "RISK_FIXED_AMOUNT",
+      "size_value": 50.0,
+      "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+      "tp": {"type": "RR_RATIO", "value": 1.5},
+      "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
+      "capital_risk_pct": 1.0,
+      "early_exits": ["tpo_va_rejection_bear"]
+    }
+  }
 }
 ```
+
+TPO layer nên emit tags như `tpo_va_rejection_bull/bear`, `tpo_va_breakout_bull/bear`, `tpo_trend_pullback_bull/bear`; strategy engine dùng `context_filters`, `sequence`, `trade_execution` để quyết định entry như các strategy hiện tại.
 
 ### 2.7. Thiếu backtest/calibration trước production
 
