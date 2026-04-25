@@ -106,6 +106,11 @@ def _is_fvg_enabled() -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_tpo_enabled() -> bool:
+    raw = os.getenv("AUREUS_ENABLE_TPO_SIGNAL", "1")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
     """
     Creates the full set of signal calculators for a given symbol.
@@ -154,11 +159,14 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
             min_length=cfg.get("cisd_min_length", 0),
             max_length=cfg.get("cisd_max_length", 100),
         ),
-        "tpo": TPOSignal(
+    }
+
+    if _is_tpo_enabled():
+        signal_set["tpo"] = TPOSignal(
             value_area_pct=cfg.get("tpo_value_area_pct", 0.7),
             tick_size=cfg.get("tpo_tick_size", cfg.get("point", 0.01)),
-        ),
-    }
+            symbol=symbol,
+        )
 
     # Multi-timeframe CISD (optional, per-symbol config)
     cisd_mtf_cfg = cfg.get("cisd_htf")

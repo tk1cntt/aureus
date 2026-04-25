@@ -36,10 +36,16 @@ from engine.feature_flags import FeatureFlags
 from engine.event_filter import has_structural_event
 from engine.event_policy import evaluate_ai_trigger_events
 from engine.indicator_snapshot import build_indicator_snapshot_for_telegram
+from engine.signals.tpo_context import TPOContextBuilder
+from engine.signals.tpo_detectors import TrendPullbackDetector, VABreakoutAcceptanceDetector, VARejectionDetector
+from engine.signals.tpo_strategy import tpo_strategy_tags_from_candidates
 from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime, SymbolRuntimeHealthManager
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
+TPO_LIVE_TAGS_ENABLED = str(os.getenv("AUREUS_ENABLE_TPO_LIVE_TAGS", "1")).strip().lower() in {"1", "true", "yes", "on"}
+TPO_TAG_MIN_SCORE = float(os.getenv("AUREUS_TPO_TAG_MIN_SCORE", "0.75"))
+TPO_SLOW_SIGNAL_MS = float(os.getenv("AUREUS_TPO_SLOW_SIGNAL_MS", "250"))
 
 # --- Phase 39: Supervised background task wrapper & safe wrappers ---
 
@@ -84,6 +90,31 @@ def load_symbols_config(path="symbols.json"):
 
 
 
+def _maybe_emit_tpo_strategy_tags(tpo_value: Any, df: Any, state: Any, symbol: str) -> None:
+    if not TPO_LIVE_TAGS_ENABLED or not isinstance(tpo_value, dict) or df is None or len(df) < 2:
+        return
+
+    try:
+        current_close = float(df.iloc[-1]["c"])
+        previous_close = float(df.iloc[-2]["c"])
+        acceptance_closes = [float(df.iloc[-1]["c"])]
+        context = TPOContextBuilder().build(tpo_value, close=current_close)
+        candidates = [
+            VARejectionDetector().detect(context, previous_close=previous_close, current_close=current_close),
+            VABreakoutAcceptanceDetector().detect(context, current_close=current_close, acceptance_closes=acceptance_closes),
+            TrendPullbackDetector().detect(context, previous_close=previous_close, current_close=current_close),
+        ]
+        result = tpo_strategy_tags_from_candidates(candidates, min_score=TPO_TAG_MIN_SCORE)
+        for tag in result.get("tags") or []:
+            state.transient_signals[tag] = {
+                "category": "tpo_strategy",
+                "source": "tpo",
+                "debug": result.get("debug", []),
+            }
+    except Exception as e:
+        logger.warning(f"[{symbol}] [tpo_strategy_tags] failed: {e}")
+
+
 def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, redis_client: Any) -> None:
     """Executes all signal calculators for current candle and appends one normalized CandleRecord.
 
@@ -103,6 +134,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
     skipped_count = 0
 
     for signal_name, signal_calc in signals.items():
+        t_signal = time.perf_counter_ns()
         try:
             # --- Phase 44.3: Dirty-Flag skip ---
             current_hash = _compute_signal_input_hash(signal_name, df, state)
@@ -113,9 +145,12 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
                     skipped_count += 1
                     continue
 
-            t_signal = time.perf_counter_ns()
             res = signal_calc.calculate(df, state, redis_client=redis_client, symbol=symbol)
-            timing[signal_name] = time.perf_counter_ns() - t_signal
+            elapsed_ns = time.perf_counter_ns() - t_signal
+            timing[signal_name] = elapsed_ns
+            elapsed_ms = elapsed_ns / 1_000_000
+            if signal_name == "tpo" and elapsed_ms >= TPO_SLOW_SIGNAL_MS:
+                logger.warning(f"[{symbol}] [execute_signals_for_candle] slow TPO calc: {elapsed_ms:.2f}ms t={ts_unix}")
 
             # Store hash after successful calculation
             if current_hash is not None and hasattr(state, '_signal_hash'):
@@ -130,8 +165,10 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
                         value=res.get("value"),
                         data=res.get("data"),
                     )
+                if emitted_tag == "tpo":
+                    _maybe_emit_tpo_strategy_tags(res.get("value"), df, state, symbol)
         except Exception as e:
-            logger.error(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
+            logger.exception(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
             timing[signal_name] = time.perf_counter_ns() - t_signal
 
     timing["_total"] = time.perf_counter_ns() - t_start
@@ -142,7 +179,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
     state._profiling_candle_count = candle_count
     if candle_count % 100 == 0:
         # Timing metrics (nanoseconds → milliseconds)
-        timing_ms = {k: round(v / 100 / 1_000_000, 4) for k, v in timing.items() if k != "_skipped"}
+        timing_ms = {k: round(v / 1_000_000, 4) for k, v in timing.items() if k != "_skipped"}
         logger.info(
             f"[PROFILING] [{symbol}] candle={candle_count} avg_ms={json.dumps(timing_ms)} "
             f"skipped={skipped_count}"

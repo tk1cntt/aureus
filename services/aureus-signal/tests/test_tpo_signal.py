@@ -135,10 +135,10 @@ def test_tpo_block_build_uses_counts_once(monkeypatch):
     calls = 0
     original = sig._build_levels_and_counts
 
-    def wrapped(session_df):
+    def wrapped(session_df, **kwargs):
         nonlocal calls
         calls += 1
-        return original(session_df)
+        return original(session_df, **kwargs)
 
     monkeypatch.setattr(sig, "_build_levels_and_counts", wrapped)
 

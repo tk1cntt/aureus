@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 EPSILON = 1e-9
@@ -16,11 +17,20 @@ class TPOSignal(BaseSignal):
     signal_type = SignalType.INDICATOR
 
     _TFS = ("D1", "H1", "M30")
+    _SYMBOL_TICK_SIZE_FLOORS = {
+        "BTC": 1.0,
+        "ETH": 0.1,
+        "USTEC": 1.0,
+        "XAU": 0.1,
+        "JPY": 0.001,
+    }
 
-    def __init__(self, value_area_pct: float = 0.7, tick_size: float = 0.1):
+    def __init__(self, value_area_pct: float = 0.7, tick_size: float = 0.1, symbol: Optional[str] = None):
         super().__init__("TPO")
         self.value_area_pct = max(0.01, min(float(value_area_pct), 1.0))
         self.tick_size = max(float(tick_size), 1e-9)
+        self.symbol = str(symbol or "").upper()
+        self.max_levels = max(100, int(os.getenv("AUREUS_TPO_MAX_LEVELS", "5000")))
 
     def calculate(self, df: pd.DataFrame, state_obj: Any, **kwargs) -> Optional[Dict[str, Any]]:
         if df is None or len(df) < 2:
@@ -36,10 +46,12 @@ class TPOSignal(BaseSignal):
         if not hasattr(state_obj, "tpo_cache") or not isinstance(getattr(state_obj, "tpo_cache"), dict):
             state_obj.tpo_cache = {}
 
+        symbol = str(kwargs.get("symbol") or self.symbol or "").upper()
+
         payload = {
-            "tpo_d1": self._compute_d1(df, ts),
-            "tpo_h1": self._compute_sliding(df, ts, tf="H1", count=6, cache=state_obj.tpo_cache),
-            "tpo_m30": self._compute_sliding(df, ts, tf="M30", count=6, cache=state_obj.tpo_cache),
+            "tpo_d1": self._compute_d1(df, ts, symbol=symbol),
+            "tpo_h1": self._compute_sliding(df, ts, tf="H1", count=6, cache=state_obj.tpo_cache, symbol=symbol),
+            "tpo_m30": self._compute_sliding(df, ts, tf="M30", count=6, cache=state_obj.tpo_cache, symbol=symbol),
         }
 
         state_obj.tpo_profile = payload
@@ -50,15 +62,15 @@ class TPOSignal(BaseSignal):
             "t": ts,
         }
 
-    def _compute_d1(self, m1_df: pd.DataFrame, now_ts: int) -> Optional[Dict[str, Any]]:
+    def _compute_d1(self, m1_df: pd.DataFrame, now_ts: int, symbol: str = "") -> Optional[Dict[str, Any]]:
         day_start = now_ts - (now_ts % 86400)
         session = m1_df[(m1_df["t"] >= day_start) & (m1_df["t"] <= now_ts)]
         if session is None or len(session) == 0:
             return None
 
-        return self._build_tpo_block(session)
+        return self._build_tpo_block(session, symbol=symbol)
 
-    def _compute_sliding(self, m1_df: pd.DataFrame, now_ts: int, tf: str, count: int, cache: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _compute_sliding(self, m1_df: pd.DataFrame, now_ts: int, tf: str, count: int, cache: Dict[str, Dict[str, Any]], symbol: str = "") -> Optional[Dict[str, Any]]:
         tf_df = resample_to_tf(m1_df, tf)
         if tf_df is None or len(tf_df) == 0:
             return None
@@ -87,7 +99,7 @@ class TPOSignal(BaseSignal):
             if session is None or len(session) == 0:
                 continue
 
-            block = self._build_tpo_block(session)
+            block = self._build_tpo_block(session, symbol=symbol)
             if block is None:
                 continue
 
@@ -97,8 +109,8 @@ class TPOSignal(BaseSignal):
 
         return latest_block
 
-    def _build_tpo_block(self, session_df: pd.DataFrame) -> Optional[Dict[str, Any]]:
-        built = self._build_levels_and_counts(session_df)
+    def _build_tpo_block(self, session_df: pd.DataFrame, symbol: str = "") -> Optional[Dict[str, Any]]:
+        built = self._build_levels_and_counts(session_df, symbol=symbol)
         if built is None:
             return None
 
@@ -166,9 +178,14 @@ class TPOSignal(BaseSignal):
             if c >= min_prominence and c >= left and c >= right:
                 peaks.append((i, float(c)))
 
+        peak_pair_candidates = peaks
+        if len(peak_pair_candidates) > 64:
+            peak_pair_candidates = sorted(peak_pair_candidates, key=lambda item: item[1], reverse=True)[:64]
+            peak_pair_candidates.sort(key=lambda item: item[0])
+
         b_evidence = 0.0
-        for first_idx, first_count in peaks:
-            for second_idx, second_count in peaks:
+        for first_idx, first_count in peak_pair_candidates:
+            for second_idx, second_count in peak_pair_candidates:
                 if second_idx <= first_idx:
                     continue
                 separation = second_idx - first_idx
@@ -224,7 +241,23 @@ class TPOSignal(BaseSignal):
         best_confidence = round(max(0.0, min(100.0, best_confidence)), 2)
         return best_shape, best_confidence, normalized
 
-    def _build_levels_and_counts(self, session_df: pd.DataFrame) -> Optional[Tuple[List[float], List[int]]]:
+    def _symbol_tick_floor(self, symbol: str) -> float:
+        symbol_upper = str(symbol or self.symbol or "").upper()
+        for prefix, tick_floor in self._SYMBOL_TICK_SIZE_FLOORS.items():
+            if prefix in symbol_upper:
+                return max(float(tick_floor), self.tick_size)
+        return self.tick_size
+
+    def _effective_tick_size(self, high_max: float, low_min: float, symbol: str = "") -> float:
+        price_range = max(0.0, high_max - low_min)
+        tick_floor = self._symbol_tick_floor(symbol)
+        if price_range <= EPSILON:
+            return tick_floor
+        target_levels = max(1, self.max_levels - 1)
+        range_tick = price_range / float(target_levels)
+        return max(tick_floor, range_tick, self.tick_size)
+
+    def _build_levels_and_counts(self, session_df: pd.DataFrame, symbol: str = "") -> Optional[Tuple[List[float], List[int]]]:
         high_max = float(session_df["h"].max())
         low_min = float(session_df["l"].min())
 
@@ -233,20 +266,28 @@ class TPOSignal(BaseSignal):
         if high_max < low_min:
             return None
 
-        levels_count = int(math.floor((high_max - low_min) / self.tick_size)) + 1
-        levels_count = max(levels_count, 1)
-        levels = [low_min + (i * self.tick_size) for i in range(levels_count)]
-        counts = [0 for _ in levels]
+        effective_tick_size = self._effective_tick_size(high_max, low_min, symbol=symbol)
+        levels_count = int(math.floor((high_max - low_min) / effective_tick_size)) + 1
+        levels_count = max(1, min(levels_count, self.max_levels))
+
+        levels = [low_min + (i * effective_tick_size) for i in range(levels_count)]
+        deltas = [0 for _ in range(levels_count + 1)]
 
         for _, row in session_df.iterrows():
             h = float(row["h"])
             l = float(row["l"])
             if h < l:
                 continue
-            start_idx = max(0, int(math.floor((l - low_min) / self.tick_size)))
-            end_idx = min(levels_count - 1, int(math.floor((h - low_min) / self.tick_size)))
-            for idx in range(start_idx, end_idx + 1):
-                counts[idx] += 1
+            start_idx = max(0, int(math.floor((l - low_min) / effective_tick_size)))
+            end_idx = min(levels_count - 1, int(math.floor((h - low_min) / effective_tick_size)))
+            deltas[start_idx] += 1
+            deltas[end_idx + 1] -= 1
+
+        counts = []
+        running = 0
+        for idx in range(levels_count):
+            running += deltas[idx]
+            counts.append(running)
 
         return levels, counts
 
