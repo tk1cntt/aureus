@@ -7,7 +7,7 @@ Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thốn
 
 Khi tạo phase mới phải tạo từ phase tiếp theo đang làm. K được tạo phase 1000 trở đi.
 
-Tên của từng phase phải là tiếng anh và ngắn gọn.
+Tên slug của từng phase hay quick phải là tiếng anh và ngắn gọn.
 
 Khi sửa bất kỳ tính năng nào liên quan tới database phải test e2e với database để xác nhận đã chỉnh sửa và tạo data thành công.
 
