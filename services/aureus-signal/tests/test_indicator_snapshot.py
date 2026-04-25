@@ -190,6 +190,54 @@ def test_tpo_profile_fields_are_included():
     assert snap['tpo_m30'] == state.tpo_profile['tpo_m30']
 
 
+def test_tpo_profile_shape_metadata_is_preserved_for_display_only():
+    state = _make_state()
+    state.tpo_profile = {
+        'tpo_d1': {
+            'POC': 2010.1,
+            'VAH': 2012.3,
+            'VAL': 2008.7,
+            'shape': 'D',
+            'shape_confidence_pct': 82.5,
+            'shape_scores_pct': {'D': 82.5, 'B': 7.5, 'p': 5.0, 'b': 5.0},
+        },
+        'tpo_h1': {
+            'POC': 2009.9,
+            'VAH': 2011.0,
+            'VAL': 2008.2,
+            'shape': 'B',
+            'shape_confidence_pct': 74.0,
+            'shape_scores_pct': {'D': 10.0, 'B': 74.0, 'p': 9.0, 'b': 7.0},
+        },
+        'tpo_m30': {
+            'POC': 2010.0,
+            'VAH': 2010.8,
+            'VAL': 2009.1,
+            'shape': 'p',
+            'shape_confidence_pct': 66.25,
+            'shape_scores_pct': {'D': 12.0, 'B': 11.75, 'p': 66.25, 'b': 10.0},
+        },
+    }
+    snap = build_indicator_snapshot_for_telegram(state)
+    for key in ('tpo_d1', 'tpo_h1', 'tpo_m30'):
+        assert snap[key] == state.tpo_profile[key]
+        assert 'shape' in snap[key]
+        assert 'shape_confidence_pct' in snap[key]
+        assert 'shape_scores_pct' in snap[key]
+    assert 'shape_score_weight' not in snap
+    assert 'strategy_score' not in snap
+    assert 'shape_signal' not in snap
+
+
+def test_tpo_profile_malformed_blocks_are_safe():
+    state = _make_state()
+    state.tpo_profile = {'tpo_d1': 'bad-block', 'tpo_h1': None, 'tpo_m30': ['bad']}
+    snap = build_indicator_snapshot_for_telegram(state)
+    assert snap['tpo_d1'] is None
+    assert snap['tpo_h1'] is None
+    assert snap['tpo_m30'] is None
+
+
 def test_tpo_profile_defaults_to_none_when_missing():
     state = _make_state()
     state.tpo_profile = None

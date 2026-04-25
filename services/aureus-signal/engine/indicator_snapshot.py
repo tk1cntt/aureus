@@ -124,6 +124,10 @@ def build_indicator_snapshot_for_telegram(state, m1_df=None) -> Dict[str, Any]:
     if not isinstance(tpo_profile, dict):
         tpo_profile = {}
 
+    def _get_tpo_block(key: str):
+        block = tpo_profile.get(key) if tpo_profile else None
+        return block if isinstance(block, dict) else None
+
     return {
         "emas": {
             "periods": ema_periods,
@@ -134,9 +138,9 @@ def build_indicator_snapshot_for_telegram(state, m1_df=None) -> Dict[str, Any]:
         "vol_sma_20": getattr(state, "vol_sma_20", None),
         "htf_trend": getattr(state, "htf_trend", None),
         "cisd_mtf": cisd_mtf if cisd_mtf else None,
-        "tpo_d1": tpo_profile.get("tpo_d1") if tpo_profile else None,
-        "tpo_h1": tpo_profile.get("tpo_h1") if tpo_profile else None,
-        "tpo_m30": tpo_profile.get("tpo_m30") if tpo_profile else None,
+        "tpo_d1": _get_tpo_block("tpo_d1"),
+        "tpo_h1": _get_tpo_block("tpo_h1"),
+        "tpo_m30": _get_tpo_block("tpo_m30"),
         **candle_color_fields,
         **bb_fields,
         "digits": digits,
