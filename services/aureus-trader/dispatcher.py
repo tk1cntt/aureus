@@ -261,7 +261,8 @@ class OrderDispatcher:
                             if event.get("close_time") is not None:
                                 event["close_time"] = _normalize_mt5_unix_time(event.get("close_time"))
                             # Fire-and-forget: don't block event resolution
-                            asyncio.create_task(self.journal.on_order_closed(event))
+                            task = asyncio.create_task(self.journal.on_order_closed(event))
+                            task.add_done_callback(self._log_journal_task_result)
 
                     cmd_id = event.get("cmd_id")
                     if cmd_id and cmd_id in self._pending_responses:
@@ -276,6 +277,15 @@ class OrderDispatcher:
             logger.info("Event listener cancelled")
         finally:
             await pubsub.unsubscribe(EVENTS_CHANNEL)
+
+    @staticmethod
+    def _log_journal_task_result(task: asyncio.Task):
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            logger.warning("Journal ORDER_CLOSED task was cancelled")
+        except Exception:
+            logger.exception("Journal ORDER_CLOSED task failed")
 
     @staticmethod
     def _extract_mt5_execution_payload(order: dict) -> dict:

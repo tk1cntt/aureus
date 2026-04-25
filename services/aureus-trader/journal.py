@@ -358,23 +358,20 @@ class TradeJournalManager:
                     tp_initial = $7,
                     updated_at = now()
                 WHERE trace_id = $8 AND status = 'TRIGGERED'
+                RETURNING id, strategy_name, symbol, active_signals, context_filters, timeframe
             """
 
+            updated = False
             async with self.db.acquire() as conn:
-                rows = await conn.execute(
-                    query,
-                    ticket, entry_price, entry_time, position_id,
-                    volume, sl, tp, trace_id
-                )
-
-                if rows and "UPDATE 1" in rows:
+                async with conn.transaction():
                     journal_row = await conn.fetchrow(
-                        "SELECT id, strategy_name, symbol, active_signals, context_filters "
-                        "FROM aureus_trade_journal WHERE trace_id = $1",
-                        trace_id,
+                        query,
+                        ticket, entry_price, entry_time, position_id,
+                        volume, sl, tp, trace_id
                     )
 
                     if journal_row:
+                        updated = True
                         trade_journal_id = journal_row.get("id")
                         strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
                         symbol = event.get("symbol", journal_row.get("symbol", ""))
@@ -575,7 +572,7 @@ class TradeJournalManager:
                             snapshot_source,
                         )
 
-            if rows and "UPDATE 1" in rows:
+            if updated:
                 logger.info(
                     f"Journal updated: trace_id={trace_id} ticket={ticket} "
                     f"entry_price={entry_price}"

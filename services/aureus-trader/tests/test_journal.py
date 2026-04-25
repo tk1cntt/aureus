@@ -235,7 +235,6 @@ class TestOutboundOrderOpened:
     @pytest.mark.asyncio
     async def test_TJ_OUT_02_update_order_opened_fields(self, journal_manager, valid_order_opened_event, mock_db_pool):
         """Verify all ORDER_OPENED fields are passed correctly."""
-        mock_db_pool.set_result("execute", "UPDATE 1")
         result = await journal_manager.on_order_opened(valid_order_opened_event)
         assert result is True
 

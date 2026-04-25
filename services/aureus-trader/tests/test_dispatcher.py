@@ -188,6 +188,11 @@ class TraceResolvingJournal(DummyJournal):
         return await super().on_strategy_match(event)
 
 
+class FailingCloseJournal(DummyJournal):
+    async def on_order_closed(self, event):
+        raise RuntimeError("close persist failed")
+
+
 class TestOrderDispatcherPayloadContract:
     @pytest.mark.asyncio
     async def test_dispatch_order_publishes_minimal_open_order_payload(self):
@@ -501,4 +506,27 @@ class TestOrderDispatcherMt5TimeMapping:
 
         # cleanup tasks spawned by event_listener
         await asyncio.sleep(0.05)
+
+    @pytest.mark.asyncio
+    async def test_event_listener_logs_order_closed_task_failure(self, caplog):
+        from config import TraderConfig
+
+        message = {
+            "type": "message",
+            "data": '{"type":"ORDER_CLOSED","ticket":123456,"symbol":"XAUUSD","t":1744102800}',
+        }
+        redis_mock = EventRedisMock(messages=[message])
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=FailingCloseJournal())
+
+        task = asyncio.create_task(dispatcher.event_listener())
+        await asyncio.sleep(0.05)
+        if not task.done():
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            await task
+
+        await asyncio.sleep(0.05)
+        assert "Journal ORDER_CLOSED task failed" in caplog.text
 

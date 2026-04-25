@@ -29,6 +29,10 @@ class MockDBConnection:
 
     async def fetchrow(self, query, *args):
         self.queries.append(("fetchrow", query, args))
+        if "UPDATE aureus_trade_journal" in query and "RETURNING" in query:
+            execute_result = self.results.get("execute", "UPDATE 1")
+            if execute_result != "UPDATE 1":
+                return None
         return self.results.get("fetchrow", {
             "id": 1,
             "trace_id": args[0],
@@ -36,12 +40,17 @@ class MockDBConnection:
             "direction": "BUY",
             "symbol": "XAUUSD",
             "active_signals": [{"tag": "liquidity_sweep", "status": "active"}],
-            "context_filters": {"session": "london"}
+            "context_filters": {"session": "london"},
+            "strategy_name": "chandelier_breakout",
+            "timeframe": None,
         })
 
     async def execute(self, query, *args):
         self.queries.append(("execute", query, args))
         return self.results.get("execute", "UPDATE 1")
+
+    def transaction(self):
+        return _MockDBContextManager(self)
 
 
 class MockDBPool:
