@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-evw: Nghiên cứu TPO implementation plan với tư vấn kiến trúc độc lập 4 bước và cập nhật tài liệu yêu cầu
+Last activity: 2026-04-25 - Completed quick task 260425-fcx: Implement TPOContextBuilder foundation
 
 ## Architecture Decision
 
@@ -33,33 +33,34 @@ Last activity: 2026-04-25 - Completed quick task 260425-evw: Nghiên cứu TPO i
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
-| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
-| 260422-v1s | Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null. | 2026-04-22 | e8afd3c | [260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh](./quick/260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh/) |
-| 260423-t4w | Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết. | 2026-04-23 | ac90ec9 | [260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi](./quick/260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi/) |
-| 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
-| 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
-| 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
-| 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
-| 260424-l15 | Extend upstream signal snapshot mapping để persist đầy đủ ema_*/bb_*/cisd_* xuống trade snapshots | 2026-04-24 | (pending commit) | [260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb](./quick/260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb/) |
-| 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
-| 260424-qkt | Mapping lại dữ liệu CISD còn thiếu trong _build_signal_snapshot_columns + bổ sung atr/vol_sma_20/session/candle_color mapping | 2026-04-24 | (pending commit) | [260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron](./quick/260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron/) |
-| 260424-r6b | Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*) | 2026-04-24 | (pending commit) | [260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s](./quick/260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s/) |
-| 260424-sbg | Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report | 2026-04-24 | (pending commit) | [260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n](./quick/260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n/) |
-| 260425-055 | Tối ưu tính toán TPO (D1 today-only, H1/M30 sliding+cache) và đưa TPO vào Indicator Snapshot của SIGNAL ALERT Telegram | 2026-04-25 | fcfc187 | [260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv](./quick/260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv/) |
-| 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
-| 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
-| 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | 2e90c5e | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
-| 260425-bs6 | Cải thiện TPO single-pass profile build và full-block cache cho closed buckets | 2026-04-25 | ddcd8ea | [260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ](./quick/260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ/) |
-| 260425-c5f | Phân tích journal.py và đề xuất tối ưu kiến trúc lifecycle persistence | 2026-04-25 | bd9f36a | [260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser](./quick/260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser/) |
-| 260425-ch4 | Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging | 2026-04-25 | 5ea1fa8 | [260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-](./quick/260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-/) |
-| 260425-cyn | Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram | 2026-04-25 | 842dcb7 | [260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-](./quick/260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-/) |
-| 260425-dep | Fix ORDER_OPENED journal UndefinedColumnError timeframe | 2026-04-25 | d27f2fa | [260425-dep-fix-bug-journal-on-order-opened-undefine](./quick/260425-dep-fix-bug-journal-on-order-opened-undefine/) |
-| 260425-duy | Remove aureus_trade_evaluations table and related code | 2026-04-25 | fde8984 | [260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s](./quick/260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s/) |
-| 260425-ekl | Plan TPO signal implementation from tpo_indi | 2026-04-25 | 5a92034 | [260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-](./quick/260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-/) |
-| 260425-evw | Nghiên cứu TPO implementation plan với tư vấn kiến trúc độc lập 4 bước và cập nhật tài liệu yêu cầu | 2026-04-25 | 02cd3a4 | [260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t](./quick/260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 |  | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
+| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 |  | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
+| 260422-v1s | Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null. | 2026-04-22 | e8afd3c |  | [260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh](./quick/260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh/) |
+| 260423-t4w | Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết. | 2026-04-23 | ac90ec9 |  | [260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi](./quick/260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi/) |
+| 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 |  | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
+| 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 |  | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
+| 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 |  | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
+| 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 |  | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
+| 260424-l15 | Extend upstream signal snapshot mapping để persist đầy đủ ema_*/bb_*/cisd_* xuống trade snapshots | 2026-04-24 | (pending commit) |  | [260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb](./quick/260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb/) |
+| 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) |  | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
+| 260424-qkt | Mapping lại dữ liệu CISD còn thiếu trong _build_signal_snapshot_columns + bổ sung atr/vol_sma_20/session/candle_color mapping | 2026-04-24 | (pending commit) |  | [260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron](./quick/260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron/) |
+| 260424-r6b | Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*) | 2026-04-24 | (pending commit) |  | [260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s](./quick/260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s/) |
+| 260424-sbg | Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report | 2026-04-24 | (pending commit) |  | [260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n](./quick/260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n/) |
+| 260425-055 | Tối ưu tính toán TPO (D1 today-only, H1/M30 sliding+cache) và đưa TPO vào Indicator Snapshot của SIGNAL ALERT Telegram | 2026-04-25 | fcfc187 |  | [260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv](./quick/260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv/) |
+| 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb |  | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
+| 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 |  | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
+| 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | 2e90c5e |  | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
+| 260425-bs6 | Cải thiện TPO single-pass profile build và full-block cache cho closed buckets | 2026-04-25 | ddcd8ea |  | [260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ](./quick/260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ/) |
+| 260425-c5f | Phân tích journal.py và đề xuất tối ưu kiến trúc lifecycle persistence | 2026-04-25 | bd9f36a |  | [260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser](./quick/260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser/) |
+| 260425-ch4 | Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging | 2026-04-25 | 5ea1fa8 |  | [260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-](./quick/260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-/) |
+| 260425-cyn | Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram | 2026-04-25 | 842dcb7 |  | [260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-](./quick/260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-/) |
+| 260425-dep | Fix ORDER_OPENED journal UndefinedColumnError timeframe | 2026-04-25 | d27f2fa |  | [260425-dep-fix-bug-journal-on-order-opened-undefine](./quick/260425-dep-fix-bug-journal-on-order-opened-undefine/) |
+| 260425-duy | Remove aureus_trade_evaluations table and related code | 2026-04-25 | fde8984 |  | [260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s](./quick/260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s/) |
+| 260425-ekl | Plan TPO signal implementation from tpo_indi | 2026-04-25 | 5a92034 |  | [260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-](./quick/260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-/) |
+| 260425-evw | Nghiên cứu TPO implementation plan với tư vấn kiến trúc độc lập 4 bước và cập nhật tài liệu yêu cầu | 2026-04-25 | 02cd3a4 |  | [260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t](./quick/260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t/) |
+| 260425-fcx | Implement TPOContextBuilder foundation | 2026-04-25 | (pending commit) | Verified | [260425-fcx-implement-tpocontextbuilder-foundation-f](./quick/260425-fcx-implement-tpocontextbuilder-foundation-f/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
