@@ -55,7 +55,11 @@ def test_va_rejection_detects_long_reclaim_from_val():
 
 def test_va_rejection_detects_short_reject_from_vah():
     candidate = VARejectionDetector().detect(
-        _context(d1_bias="bearish", m30=_tf(poc=101.0, vah=107.0, val=97.0, shape="p")),
+        _context(
+            d1_bias="bearish",
+            h1=_tf(poc=100.0, vah=110.0, val=96.0),
+            m30=_tf(poc=101.0, vah=107.0, val=97.0, shape="p"),
+        ),
         previous_close=108.0,
         current_close=103.0,
     )
