@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-mfv: Integrate calibrated TPO shape metadata into indicator snapshot, Telegram, and replay baseline
+Last activity: 2026-04-25 - Completed quick task 260425-n8f: Add INVALID_PRICE entry/ask/bid diagnostics to AureusProvider ORDER_FAILED
 
 ## Architecture Decision
 
@@ -73,6 +73,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-mfv: Integrate calibrate
 | 260425-lqo | Tư vấn kiến trúc độc lập 4 bước cho cải thiện TPO shape classification dựa trên report 260425-kwd | 2026-04-25 | (pending commit) |  | [260425-lqo-d-a-va-o-report-na-y-planning-quick-2604](./quick/260425-lqo-d-a-va-o-report-na-y-planning-quick-2604/) |
 | 260425-m1y | Implement calibrated TPO shape classifier core theo requirements 260425-lqo | 2026-04-25 | 8e97d09 | Needs Review | [260425-m1y-implement-calibrated-tpo-shape-classifie](./quick/260425-m1y-implement-calibrated-tpo-shape-classifie/) |
 | 260425-mfv | Integrate calibrated TPO shape metadata into indicator snapshot, Telegram, and replay baseline | 2026-04-25 | 7c01219 | Verified | [260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o](./quick/260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o/) |
+| 260425-n8f | Add INVALID_PRICE entry/ask/bid diagnostics to AureusProvider ORDER_FAILED | 2026-04-25 | a4065d3 |  | [260425-n8f-update-file-mql5-aureusprovider-mq5-khi-](./quick/260425-n8f-update-file-mql5-aureusprovider-mq5-khi-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
