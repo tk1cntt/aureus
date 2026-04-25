@@ -256,3 +256,61 @@ Khi user chọn hướng POC, nên đo tối thiểu:
 ## 9. Kết luận
 
 Logic hiện tại neutral nhiều vì dùng hai gate cứng: EMA 200 chậm và OB count delta `>= 2`. Hướng POC hợp lý nhất là hybrid scoring nhẹ, trong đó structure/pivot và CHOCH đóng vai trò trend source chính, EMA stack/slope là filter momentum, OB/sweep là confirmation/risk control. Báo cáo này chỉ phân tích và khuyến nghị; không implement, không sửa source code.
+
+## 10. Decision Addendum
+
+Addendum này ghi quyết định kiến trúc từ advisory `260425-ka4-ARCHITECTURE-ADVISORY.md` để làm cơ sở lập plan implement/test sau này. Đây vẫn là hướng POC cần kiểm chứng, không phải kết luận live-data.
+
+### Primary recommendation
+
+Chọn **Hybrid scoring/voting nhẹ**:
+
+- Structure/CHOCH là trend source chính: pivot shift `HH/HL` hoặc `LH/LL` và CHOCH gần nhất định hướng regime.
+- EMA21/55 slope/alignment là momentum filter: xác nhận động lượng, tránh thay thế EMA200 bằng một gate cứng khác.
+- OB recency/quality/status là confidence: ưu tiên OB mới, quality tốt, status phù hợp; không dùng count delta thô làm điều kiện duy nhất.
+- Sweep/stop-hunt là confirmation/anti-false-break: `clean_breakout_*` tăng confidence, sweep/stop-hunt ngược hướng giảm confidence hoặc trì hoãn flip.
+- EMA200 chỉ là macro penalty/filter mềm, không ép output về `NEUTRAL` nếu structure và confirmation đủ mạnh.
+
+Contract bắt buộc giữ nguyên: set `state_obj.htf_trend` và emit event tag `htf_trend` với semantic hiện tại (`BULLISH`, `BEARISH`, `NEUTRAL`). Nếu POC thêm score/confidence thì chỉ là metadata phụ, không phá downstream.
+
+### Backup
+
+Nếu hybrid scoring quá phức tạp cho vòng POC đầu tiên, chọn **POC Shift pivot/structure**:
+
+- Dùng confirmed pivots để nhận diện shift `HH/HL` hoặc `LH/LL`.
+- Chỉ bổ sung EMA/sweep filter tối thiểu nếu false flip trong range quá cao.
+- Giữ non-repaint bằng cách chỉ dùng candle-close và confirmed pivots.
+
+### Các quyết định không chọn
+
+- Không chọn EMA stack/slope đơn thuần làm giải pháp chính vì dù giảm detection latency, rủi ro whipsaw/false flip trong sideways cao và không tận dụng CHOCH/OB/sweep.
+- Không chọn sweep/stop-hunt làm trend source độc lập vì tín hiệu sparse và phụ thuộc OB lifecycle.
+- Không giữ EMA200 như hard gate chính vì đây là nguyên nhân delay và `NEUTRAL` sai trong report này.
+
+### Implementation/testing implications
+
+POC tương lai cần đo tối thiểu:
+
+1. **detection latency**: số candle từ CHOCH/pivot shift đến khi `state_obj.htf_trend` đổi, so với baseline EMA200.
+2. **false flip rate**: số lần `BULLISH` ↔ `BEARISH` đảo rồi quay lại trong N candle.
+3. Tỷ lệ giảm `NEUTRAL` sai trên các đoạn có trend rõ.
+4. Compatibility downstream: `state_obj.htf_trend` và `htf_trend` vẫn được set/emit đúng semantic.
+5. Explainability score: mỗi decision phải chỉ ra contribution từ structure, EMA, OB hoặc sweep.
+6. Non-repaint behavior: chỉ dùng candle-close, confirmed pivots và CHOCH/OB đã xác nhận; không dùng tentative pivot/lookahead.
+
+### Guardrails và kill criteria
+
+Guardrails bắt buộc:
+
+- Có hysteresis hoặc threshold vào/ra khác nhau để hạn chế whipsaw.
+- Có minimum hold hoặc cooldown nếu false flip tăng trong range.
+- Không thêm dependency mới ở vòng POC đầu tiên.
+- Không thay đổi output contract `state_obj.htf_trend` / `htf_trend`.
+- Log được lý do trend decision để phục vụ backtest/debug.
+
+Kill criteria:
+
+- Hybrid scoring phức tạp/overfit nhưng không cải thiện rõ detection latency hoặc tỷ lệ giảm `NEUTRAL` sai so với baseline.
+- false flip rate tăng đáng kể so với baseline, đặc biệt trong sideways/news spike.
+- POC cần thay contract downstream hoặc thêm dependency mới.
+- Decision không explain được bằng contribution cụ thể từ structure/EMA/OB/sweep.
