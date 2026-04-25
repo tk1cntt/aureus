@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-ch4: Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging
+Last activity: 2026-04-25 - Completed quick task 260425-cyn: Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram
 
 ## Architecture Decision
 
@@ -55,6 +55,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-ch4: Tối ưu journal.p
 | 260425-bs6 | Cải thiện TPO single-pass profile build và full-block cache cho closed buckets | 2026-04-25 | ddcd8ea | [260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ](./quick/260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ/) |
 | 260425-c5f | Phân tích journal.py và đề xuất tối ưu kiến trúc lifecycle persistence | 2026-04-25 | bd9f36a | [260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser](./quick/260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser/) |
 | 260425-ch4 | Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging | 2026-04-25 | 5ea1fa8 | [260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-](./quick/260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-/) |
+| 260425-cyn | Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram | 2026-04-25 | 842dcb7 | [260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-](./quick/260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
