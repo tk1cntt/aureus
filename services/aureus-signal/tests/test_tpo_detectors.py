@@ -272,7 +272,7 @@ def test_trend_pullback_invalid_context_conflict_missing_legs_and_shape_only():
         current_close=99.0,
     )
     missing_pullback = TrendPullbackDetector().detect(
-        _context(d1_bias="bullish", h1=_tf(distance_to_val_ticks=20.0), m30=_tf(val=98.0)),
+        _context(d1_bias="bullish", h1=_tf(poc=120.0, val=110.0, distance_to_poc_ticks=20.0, distance_to_val_ticks=20.0), m30=_tf(val=98.0)),
         previous_close=97.0,
         current_close=99.0,
     )
