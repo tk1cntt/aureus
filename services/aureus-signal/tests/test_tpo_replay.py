@@ -78,7 +78,7 @@ def _fixture_rows():
                 h1=_tf(poc=104.0, vah=106.0, val=96.0, shape="b", poc_shift="up"),
                 m30=_tf(poc=101.0, vah=107.0, val=97.0, shape="D"),
             ),
-            "previous_close": 104.0,
+            "previous_close": 107.5,
             "current_close": 107.0,
             "acceptance_closes": [106.5, 108.0],
         },
@@ -86,10 +86,10 @@ def _fixture_rows():
             "regime": "high_volatility",
             "context": _context(
                 d1_bias="bullish",
-                h1=_tf(poc=100.0, vah=106.0, val=96.0, shape="D", distance_to_poc_ticks=1.0),
+                h1=_tf(poc=100.0, vah=106.0, val=96.0, shape="D", distance_to_poc_ticks=3.0, distance_to_val_ticks=3.0),
                 m30=_tf(poc=100.0, vah=107.0, val=97.0, shape="D"),
             ),
-            "previous_close": 95.0,
+            "previous_close": 100.1,
             "current_close": 100.5,
             "acceptance_closes": [],
         },
@@ -104,8 +104,8 @@ def _fixture_rows():
             "regime": "high_volatility",
             "context": _context(
                 d1_bias="bearish",
-                h1=_tf(poc=100.0, vah=110.0, val=96.0, shape="D", distance_to_poc_ticks=1.0),
-                m30=_tf(poc=100.0, vah=107.0, val=97.0, shape="p"),
+                h1=_tf(poc=100.0, vah=107.0, val=96.0, shape="neutral", distance_to_poc_ticks=1.0),
+                m30=_tf(poc=100.0, vah=104.0, val=97.0, shape="p"),
             ),
             "previous_close": 108.0,
             "current_close": 103.0,
@@ -143,7 +143,7 @@ def test_replay_report_groups_nested_counts_by_input_regime_labels():
     assert set(report["regime_breakdown"]) == {"trend", "range", "high_volatility", "low_volatility"}
     assert report["regime_breakdown"]["trend"]["va_rejection"]["long"]["valid"] == 1
     assert report["regime_breakdown"]["range"]["va_breakout_acceptance"]["long"]["valid"] == 1
-    assert report["regime_breakdown"]["high_volatility"]["trend_pullback"]["long"]["valid"] == 1
+    assert report["regime_breakdown"]["high_volatility"]["trend_pullback"]["short"]["valid"] == 1
     assert report["regime_breakdown"]["high_volatility"]["va_rejection"]["short"]["valid"] == 1
     assert report["regime_breakdown"]["low_volatility"]["va_rejection"]["invalid"] == 1
 
@@ -167,7 +167,7 @@ def test_replay_report_threshold_sensitivity_records_tags_and_conflicts():
                 "tpo_va_breakout_bull": 1,
                 "tpo_va_rejection_bull": 1,
             },
-            "suppressed_conflict_count": 0,
+            "suppressed_conflict_count": 1,
         },
     }
 
