@@ -92,7 +92,15 @@ def _format_indicator_section(snapshot: dict, precision: int = 2) -> str:
         val = block.get("VAL")
         if poc is None or vah is None or val is None:
             return "\u2014"
-        return html.escape(f"POC:{poc:.{precision}f} VAH:{vah:.{precision}f} VAL:{val:.{precision}f}")
+
+        base = f"POC:{poc:.{precision}f} VAH:{vah:.{precision}f} VAL:{val:.{precision}f}"
+
+        shape = block.get("shape")
+        confidence = block.get("shape_confidence_pct")
+        if shape in {"D", "B", "p", "b"} and isinstance(confidence, (int, float)):
+            base = f"{base} Shape:{shape} ({float(confidence):.1f}%)"
+
+        return html.escape(base)
 
     lines.append("\u2022 <b>TPO</b>:")
     for tf in ("D1", "H1", "M30"):

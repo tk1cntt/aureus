@@ -44,8 +44,11 @@ def test_tpo_signal_returns_required_blocks_and_fields():
         assert key in res["value"]
         block = res["value"][key]
         assert block is not None
-        assert set(block.keys()) == {"POC", "VAH", "VAL"}
+        assert set(block.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
         assert block["VAL"] <= block["POC"] <= block["VAH"]
+        assert block["shape"] in {"D", "B", "p", "b"}
+        assert 0.0 <= block["shape_confidence_pct"] <= 100.0
+        assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
 
 
 def test_tpo_signal_short_data_still_returns_realtime_blocks():
@@ -88,8 +91,10 @@ def test_tpo_signal_uses_today_only_for_d1():
     assert res is not None
     d1 = res["value"]["tpo_d1"]
     assert d1 is not None
-    assert set(d1.keys()) == {"POC", "VAH", "VAL"}
+    assert set(d1.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
     assert d1["VAL"] <= d1["POC"] <= d1["VAH"]
+    assert d1["shape"] in {"D", "B", "p", "b"}
+    assert 0.0 <= d1["shape_confidence_pct"] <= 100.0
 
 
 def test_tpo_poc_tiebreak_is_deterministic():
@@ -111,3 +116,35 @@ def test_tpo_poc_tiebreak_is_deterministic():
     assert p1 is not None
     assert p2 is not None
     assert p1 == p2
+
+
+def test_tpo_block_includes_shape_confidence_and_scores():
+    df = _build_m1_df(minutes=800)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    state = MockState()
+
+    res = sig.calculate(df, state)
+
+    assert res is not None
+    d1 = res["value"]["tpo_d1"]
+    assert d1 is not None
+    assert d1["shape"] in {"D", "B", "p", "b"}
+    assert 0.0 <= d1["shape_confidence_pct"] <= 100.0
+    assert set(d1["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+
+    total_scores = round(sum(d1["shape_scores_pct"].values()), 2)
+    assert 99.0 <= total_scores <= 101.0
+
+
+def test_tpo_classify_shape_returns_valid_probability_distribution():
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+    levels = [100.0, 100.1, 100.2, 100.3, 100.4]
+    counts = [2, 4, 8, 4, 2]
+
+    shape, confidence, scores = sig._classify_shape(levels, counts, poc_idx=2)
+
+    assert shape in {"D", "B", "p", "b"}
+    assert 0.0 <= confidence <= 100.0
+    assert set(scores.keys()) == {"D", "B", "p", "b"}
+    assert abs(sum(scores.values()) - 100.0) <= 0.1
+    assert scores[shape] == confidence

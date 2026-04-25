@@ -211,7 +211,13 @@ def test_format_signal_event_with_indicator_snapshot():
                 "atr_14": 12.34,
                 "vol_sma_20": 1500.0,
                 "htf_trend": "BULLISH",
-                "tpo_d1": {"POC": 2010.1, "VAH": 2012.3, "VAL": 2008.7},
+                "tpo_d1": {
+                    "POC": 2010.1,
+                    "VAH": 2012.3,
+                    "VAL": 2008.7,
+                    "shape": "D",
+                    "shape_confidence_pct": 82.5,
+                },
                 "tpo_h1": {"POC": 2009.9, "VAH": 2011.0, "VAL": 2008.2},
                 "tpo_m30": {"POC": 2010.0, "VAH": 2010.8, "VAL": 2009.1},
             },
@@ -229,6 +235,7 @@ def test_format_signal_event_with_indicator_snapshot():
     assert "POC:2010.10" in result
     assert "VAH:2012.30" in result
     assert "VAL:2008.70" in result
+    assert "Shape:D (82.5%)" in result
     assert "🟢" in result
     assert "📈" in result
     assert len(result) <= 4095
