@@ -42,7 +42,6 @@ class MockDBConnection:
             "active_signals": [{"tag": "liquidity_sweep", "status": "active"}],
             "context_filters": {"session": "london"},
             "strategy_name": "chandelier_breakout",
-            "timeframe": None,
         })
 
     async def execute(self, query, *args):

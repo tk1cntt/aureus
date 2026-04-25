@@ -238,6 +238,10 @@ class TestOutboundOrderOpened:
         result = await journal_manager.on_order_opened(valid_order_opened_event)
         assert result is True
 
+        update_query = mock_db_pool._conn.queries[0][1]
+        returning_clause = update_query.split("RETURNING", 1)[1]
+        assert "timeframe" not in returning_clause.lower()
+
         query_args = mock_db_pool._conn.queries[0][2]
         assert query_args[0] == 12345      # ticket
         assert query_args[1] == 3250.50    # entry_price
