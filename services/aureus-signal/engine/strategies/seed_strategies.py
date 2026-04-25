@@ -510,6 +510,7 @@ async def seed_system_strategies(pool=None, conn=None):
 
     async def _seed_with_conn(conn):
         template_upserts = 0
+        template_failures = []
         for strat in strategies:
             try:
                 query = """
@@ -529,7 +530,11 @@ async def seed_system_strategies(pool=None, conn=None):
                 )
                 template_upserts += 1
             except Exception as e:
+                template_failures.append(strat['name'])
                 logger.error(f"[GLOBAL] [seed_system_strategies] Error: Failed to seed strategy {strat['name']}: {e}")
+
+        if template_failures:
+            raise RuntimeError(f"Failed to seed strategy templates: {', '.join(template_failures)}")
 
         symbols_env = os.getenv("SYMBOLS", "XAUUSD")
         symbols_list = [s.strip() for s in symbols_env.split(",") if s.strip()]

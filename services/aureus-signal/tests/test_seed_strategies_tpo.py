@@ -1,5 +1,12 @@
 import ast
+import os
+import sys
+import pytest
 from pathlib import Path
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from engine.strategies.seed_strategies import seed_system_strategies
 
 
 SEED_PATH = Path(__file__).resolve().parents[1] / "engine" / "strategies" / "seed_strategies.py"
@@ -65,3 +72,27 @@ def test_tpo_seed_templates_match_contract_shape():
         for sequence_item in config["sequence"]:
             assert SEQUENCE_KEYS <= set(sequence_item)
         assert TRADE_KEYS <= set(config["trade_execution"])
+
+
+class FailingTemplateConn:
+    def __init__(self):
+        self.fetch_calls = 0
+
+    async def execute(self, query, *args):
+        if "aureus_strategy_templates" in query:
+            raise RuntimeError("template upsert failed")
+        raise AssertionError("symbol strategy activation should not run after template failure")
+
+    async def fetch(self, *args):
+        self.fetch_calls += 1
+        raise AssertionError("symbol strategy fetch should not run after template failure")
+
+
+@pytest.mark.asyncio
+async def test_seed_template_upsert_failure_raises_before_symbol_strategy_sync():
+    conn = FailingTemplateConn()
+
+    with pytest.raises(RuntimeError, match="Failed to seed strategy templates"):
+        await seed_system_strategies(conn=conn)
+
+    assert conn.fetch_calls == 0
