@@ -18,7 +18,7 @@ Giả định/phạm vi:
 | `aureus-signal` | Tạo/publish `STRATEGY_MATCH` lên Redis channel `aureus:signals:{symbol}`; tạo `trace_id` theo `symbol:strategy_id:origin_timestamp`. | `services/aureus-signal/engine/signal_event_publisher.py` |
 | `aureus-trader` main loop | Subscribe signal channels, lọc `STRATEGY_MATCH`, validate, build `OPEN_ORDER`, gắn lại `strategy_event`, dedup `cmd_id`, enqueue order. | `services/aureus-trader/main.py`, `validator.py`, `order_builder.py`, `idempotency.py` |
 | `OrderDispatcher` | Pop queue, publish payload tối thiểu sang `aureus:mt5:commands`, chờ ACK/NACK và final result, gọi journal hooks. | `services/aureus-trader/dispatcher.py` |
-| `TradeJournalManager` | Persist `aureus_trade_journal`, `aureus_trade_evaluations`, `aureus_trade_signal_snapshots`; update lifecycle `TRIGGERED` → `EXECUTED` → `CLOSED`. | `services/aureus-trader/journal.py` |
+| `TradeJournalManager` | Persist `aureus_trade_journal`, `aureus_trade_signal_snapshots`; update lifecycle `TRIGGERED` → `EXECUTED` → `CLOSED`. | `services/aureus-trader/journal.py` |
 | MT5 bridge/terminal/EA | Nhận `OPEN_ORDER` command, trả `ACK`/`NACK`, `ORDER_OPENED`/`ORDER_FAILED`, và event close qua `aureus:mt5:events`. | Contract thể hiện ở `dispatcher.py`; chi tiết EA chưa xác định từ source đã đọc. |
 | `aureus-notifier` | Subscribe signal channels để gửi `SIGNAL_EVENT`/`STRATEGY_MATCH`; đồng thời `OrderStatusReporter` subscribe `aureus:mt5:events` để gửi order lifecycle Telegram. | `services/aureus-notifier/main.py`, `rate_limiter.py`, `formatters.py`, `order_reporter.py` |
 
@@ -69,7 +69,6 @@ Giả định/phạm vi:
 6. `on_strategy_match` yêu cầu `trace_id`, `strategy_name`, `direction` hợp lệ (`BUY`/`SELL`), `symbol`; sau đó insert `aureus_trade_journal` với `trace_id`, strategy metadata, `active_signals`, `context_filters`, `origin_timestamp`, `ON CONFLICT DO NOTHING`.
 7. `on_order_opened` yêu cầu `trace_id`, `ticket`, `entry_price`, MT5 open time. Trong một transaction, function:
    - update `aureus_trade_journal` từ `TRIGGERED` sang `EXECUTED` với ticket, entry price/time, position id, lot, SL/TP;
-   - insert `aureus_trade_evaluations` nếu đủ core fields scoring;
    - build/persist `aureus_trade_signal_snapshots` từ `event.signal_snapshot` hoặc fallback `active_signals`/`context_filters` từ journal, sau khi strip state tags không persist.
 
 ### 3.5 ORDER_CLOSED và journal close
@@ -106,11 +105,11 @@ Có hai nhánh Telegram chính:
 
 | Payload/data | Field chính | Đi đâu | Ghi chú factual |
 |---|---|---|---|
-| `STRATEGY_MATCH.data` | `trace_id`, `symbol`, `strategy`, `strategy_id`, `strategy_name`, `side`/`direction`, `entry_type`, `size_value`, `size_mode`, `risk_amount`, `tp_rr_ratio`, `magic_number`, `sl`/`tp`, `entry_price`, `active_signals`, `signal_snapshot`, score/evaluation fields | Redis signal channel; trader; notifier strategy formatter | `trace_id` được tạo ở signal publisher và nằm trong `data`; trader giữ lại full event trong `strategy_event` nội bộ. |
+| `STRATEGY_MATCH.data` | `trace_id`, `symbol`, `strategy`, `strategy_id`, `strategy_name`, `side`/`direction`, `entry_type`, `size_value`, `size_mode`, `risk_amount`, `tp_rr_ratio`, `magic_number`, `sl`/`tp`, `entry_price`, `active_signals`, `signal_snapshot`, score fields | Redis signal channel; trader; notifier strategy formatter | `trace_id` được tạo ở signal publisher và nằm trong `data`; trader giữ lại full event trong `strategy_event` nội bộ. |
 | Internal `order_cmd` | `OPEN_ORDER` command fields + `strategy_event` | Trader queue nội bộ | Dùng cho dedup, dispatch và journal enrich; không đồng nghĩa payload gửi MT5. |
 | MT5 execution payload | `type`, `symbol`, `cmd_id`, `direction`, `order_type`, `volume`, `price`, `sl`, `tp`, `magic`, `comment`, `tp_rr_ratio`, `size_mode`, `risk_amount` | `aureus:mt5:commands` | Whitelist bởi `_extract_mt5_execution_payload`; không gửi `signal_snapshot`/score payload sang MT5 command channel. |
 | Journal trigger row | `trace_id`, `strategy_name`, `strategy_id`, `direction`, `symbol`, `score`, `active_signals`, `context_filters`, `origin_timestamp` | `aureus_trade_journal` | Insert trong `on_strategy_match`, `ON CONFLICT DO NOTHING`. |
-| Journal opened/evaluation/snapshot | `ticket`, `entry_price`, `entry_time`, `position_id`, `lot_size`, `sl_initial`, `tp_initial`; evaluation score payload; normalized snapshot columns | `aureus_trade_journal`, `aureus_trade_evaluations`, `aureus_trade_signal_snapshots` | Persist trong `on_order_opened` sau `ORDER_OPENED`. |
+| Journal opened/snapshot | `ticket`, `entry_price`, `entry_time`, `position_id`, `lot_size`, `sl_initial`, `tp_initial`; normalized snapshot columns | `aureus_trade_journal`, `aureus_trade_signal_snapshots` | Persist trong `on_order_opened` sau `ORDER_OPENED`. |
 | Journal close | `exit_price`, `exit_time`, `exit_reason`, `duration_seconds`, `pnl`, `pnl_pips`, `commission`, `swap`, `result` | `aureus_trade_journal` | Persist trong `on_order_closed` sau `ORDER_CLOSED`; fallback lookup by ticket khi thiếu trace_id. |
 | Telegram `STRATEGY_MATCH` | symbol, strategy/id, direction, entry, SL, TP, size, reason, time | Signal/strategy bot | Format bởi `format_strategy_match`. |
 | Telegram order lifecycle | journal strategy/score/signals + MT5 event order fields | Order bot | Format bởi `OrderStatusReporter._format_opened/_format_close`; close notification bị skip nếu thiếu journal context. |
@@ -155,7 +154,7 @@ sequenceDiagram
         Dispatch->>Journal: on_strategy_match(strategy_event)
         Journal->>DB: insert aureus_trade_journal TRIGGERED
         Dispatch->>Journal: on_order_opened(final + trace_id + snapshot/scoring)
-        Journal->>DB: update EXECUTED + insert evaluation/snapshot
+        Journal->>DB: update EXECUTED + insert snapshot
         MT5Evt-->>Notifier: ORDER_OPENED
         Notifier->>DB: lookup journal by trace_id/ticket
         Notifier->>Telegram: Order Opened notification
@@ -185,7 +184,6 @@ sequenceDiagram
 | NACK duplicate | `is_retryable` + `_handle_rejection` | `DUPLICATE` nằm trong `NON_RETRYABLE_NACK_REASONS`; không retry, publish `ORDER_REJECTED` với reason/event_type từ NACK. |
 | Retryable NACK/fail | `is_retryable` | `TRADE_DISABLED`, `MARKET_CLOSED`, hoặc message/reason chứa keyword transient như `server`, `busy` được retry. |
 | Thiếu journal context khi `ORDER_CLOSED` | `TradeJournalManager.on_order_closed`, `OrderStatusReporter._handle_order_closed` | Journal fallback lookup by ticket; nếu không thấy thì log warning và return `False`. Notifier skip close notification nếu không resolve journal hoặc thiếu `strategy_name`. |
-| Thiếu evaluation core fields khi order opened | `TradeJournalManager.on_order_opened` | Log `EVAL_PAYLOAD_MISSING_CORE_FIELDS`, skip evaluation insert nhưng vẫn tiếp tục persist snapshot nếu có journal id. |
 
 ## 7. Nguồn đối chiếu
 

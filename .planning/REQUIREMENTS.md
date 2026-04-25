@@ -30,15 +30,15 @@
 - **ADN-55-01 (Chosen):** Hybrid strategy: (1) migration compatibility theo runtime PG capability + (2) runtime schema gate + (3) migration tiếp theo để chuẩn hóa lineage field `timeframe` tại `aureus_trade_journal`.
 - **Rationale:** Giữ tính tương thích vận hành ngắn hạn nhưng vẫn tiến tới data model đúng về dài hạn, tránh false-positive "phase complete".
 - **Execution guardrails:**
-  - Không chốt phase nếu thiếu `aureus_trade_evaluations` hoặc `aureus_trade_signal_snapshots` trên runtime DB.
+  - Không chốt phase nếu thiếu `aureus_trade_signal_snapshots` trên runtime DB hoặc bảng evaluations đã xóa vẫn còn tồn tại.
   - Không chốt phase nếu recompute còn phụ thuộc fallback JSON mà chưa có kế hoạch migration lineage.
   - Mọi thay đổi migration phải pass cả test migration + query runtime kiểm chứng.
 
 ### Decision-linked Test Addendum
 
-- [ ] **TC-EVAL-RUNTIME-001:** Runtime DB có đủ bảng phase 55 (`aureus_trade_evaluations`, `aureus_trade_signal_snapshots`).
+- [ ] **TC-EVAL-RUNTIME-001:** Runtime DB có bảng signal snapshot hiện hành và không còn bảng evaluations đã xóa.
 - [ ] **TC-EVAL-RUNTIME-002:** Runtime DB có đủ index/unique chính cho hai bảng phase 55.
-- [ ] **TC-EVAL-RUNTIME-003:** Chạy recompute trên window thực, có row mới ở cả hai bảng (kiểm tra `MAX(evaluated_at)` và `MAX(created_at)`).
+- [ ] **TC-EVAL-RUNTIME-003:** Chạy recompute trên window thực, có row snapshot mới (kiểm tra `MAX(created_at)`).
 - [ ] **TC-EVAL-RUNTIME-004:** Không còn tình trạng pass test nhưng thiếu schema runtime.
 - [ ] **TC-EVAL-RUNTIME-005:** Có ticket follow-up migration để chuẩn hóa nguồn `timeframe` từ schema lineage, không phụ thuộc JSON fallback vĩnh viễn.
 
@@ -56,11 +56,10 @@
 
 ### Required Runtime Evidence (sign-off)
 
-- `SELECT tablename FROM pg_tables ... IN ('aureus_trade_evaluations','aureus_trade_signal_snapshots')`
+- `SELECT tablename FROM pg_tables ... IN ('aureus_trade_signal_snapshots') và xác nhận bảng evaluations đã xóa không tồn tại`
 - `SELECT indexname FROM pg_indexes ...`
-- `SELECT COUNT(*), MAX(evaluated_at) FROM aureus_trade_evaluations`
-- `SELECT COUNT(*), MAX(created_at) FROM aureus_trade_signal_snapshots`
-- Mẫu 5 rows mới nhất có `trace_id, symbol, timeframe, version` cho cả hai bảng.
+- - `SELECT COUNT(*), MAX(created_at) FROM aureus_trade_signal_snapshots`
+- Mẫu 5 rows mới nhất có `trace_id, symbol, timeframe, version` cho snapshot table.
 
 ### Follow-up Constraint
 

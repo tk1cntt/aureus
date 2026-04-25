@@ -155,17 +155,15 @@ wsl -d Aureus -e bash -lc "docker logs --since 5m aureus-signal-dev 2>&1 | tail 
 
 5. Với phase có DB migration (ví dụ Phase 55), bắt buộc verify runtime schema:
 ```powershell
-wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('aureus_trade_evaluations','aureus_trade_signal_snapshots');\""
+wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('aureus_trade_signal_snapshots');\""
 ```
 
 6. Verify runtime persistence (không chỉ test pass):
 ```powershell
 # Đếm tổng record để xác nhận pipeline có ghi dữ liệu
-wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT COUNT(*) AS eval_rows FROM aureus_trade_evaluations;\""
 wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT COUNT(*) AS snapshot_rows FROM aureus_trade_signal_snapshots;\""
 
 # Kiểm tra bản ghi mới nhất (trace_id/symbol/timeframe)
-wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, evaluated_at FROM aureus_trade_evaluations ORDER BY evaluated_at DESC LIMIT 5;\""
 wsl -d Aureus -e bash -lc "docker exec -i aureus_timescaledb_dev psql -U aureus -d aureus -c \"SELECT trace_id, symbol, timeframe, created_at FROM aureus_trade_signal_snapshots ORDER BY created_at DESC LIMIT 5;\""
 ```
 
@@ -181,7 +179,7 @@ wsl -d Aureus -e bash -lc "cd /mnt/d/Aureus && ./.venv/bin/python -c 'import jso
 
 Nếu thiếu table/index/data mới, script sẽ trả exit code khác 0 để fail gate.
 
-9. Gate sign-off phase 55: chỉ mark complete khi cả 2 bảng tồn tại và có record runtime mới.
+9. Gate sign-off phase 55: chỉ mark complete khi snapshot table tồn tại và có record runtime mới; bảng evaluations không tồn tại.
 
 ---
 

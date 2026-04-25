@@ -5,20 +5,31 @@ from datetime import datetime, timezone
 import asyncpg
 
 REQUIRED_TABLES = [
-    "aureus_trade_evaluations",
     "aureus_trade_signal_snapshots",
+]
+REMOVED_TABLES = [
+    "aureus_trade_evaluations",
 ]
 
 REQUIRED_INDEXES = [
-    "uq_trade_eval_trade_version",
-    "idx_trade_eval_symbol_timeframe_eval_at",
-    "idx_trade_eval_current",
     "uq_trade_snapshot_trade_schema",
     "idx_trade_snapshot_symbol_tf_created_at",
 ]
 
 
 async def fetch_runtime_evidence(conn):
+    removed_table_rows = await conn.fetch(
+        """
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])
+        ORDER BY tablename
+        """,
+        REMOVED_TABLES,
+    )
+    present_removed_tables = [row["tablename"] for row in removed_table_rows]
+
     table_rows = await conn.fetch(
         """
         SELECT tablename
@@ -36,7 +47,7 @@ async def fetch_runtime_evidence(conn):
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = 'public'
-          AND tablename IN ('aureus_trade_evaluations', 'aureus_trade_signal_snapshots')
+          AND tablename IN ('aureus_trade_signal_snapshots')
           AND indexname = ANY($1::text[])
         ORDER BY indexname
         """,
@@ -44,12 +55,6 @@ async def fetch_runtime_evidence(conn):
     )
     present_indexes = [row["indexname"] for row in index_rows]
 
-    eval_stats = await conn.fetchrow(
-        """
-        SELECT COUNT(*)::bigint AS row_count, MAX(evaluated_at) AS latest_at
-        FROM aureus_trade_evaluations
-        """
-    )
     snapshot_stats = await conn.fetchrow(
         """
         SELECT COUNT(*)::bigint AS row_count, MAX(created_at) AS latest_at
@@ -57,14 +62,6 @@ async def fetch_runtime_evidence(conn):
         """
     )
 
-    latest_eval_rows = await conn.fetch(
-        """
-        SELECT trace_id, symbol, timeframe, score_version, evaluated_at
-        FROM aureus_trade_evaluations
-        ORDER BY evaluated_at DESC NULLS LAST
-        LIMIT 5
-        """
-    )
     latest_snapshot_rows = await conn.fetch(
         """
         SELECT trace_id, symbol, timeframe, signal_schema_version, created_at
@@ -86,29 +83,17 @@ async def fetch_runtime_evidence(conn):
     evidence = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "required_tables": REQUIRED_TABLES,
+        "removed_tables": REMOVED_TABLES,
         "present_tables": present_tables,
+        "present_removed_tables": present_removed_tables,
         "missing_tables": [t for t in REQUIRED_TABLES if t not in present_tables],
         "required_indexes": REQUIRED_INDEXES,
         "present_indexes": present_indexes,
         "missing_indexes": [i for i in REQUIRED_INDEXES if i not in present_indexes],
-        "evaluation_stats": {
-            "row_count": int(eval_stats["row_count"] or 0),
-            "latest_at": _iso(eval_stats["latest_at"]),
-        },
         "snapshot_stats": {
             "row_count": int(snapshot_stats["row_count"] or 0),
             "latest_at": _iso(snapshot_stats["latest_at"]),
         },
-        "latest_evaluation_rows": [
-            {
-                "trace_id": row["trace_id"],
-                "symbol": row["symbol"],
-                "timeframe": row["timeframe"],
-                "score_version": row["score_version"],
-                "evaluated_at": _iso(row["evaluated_at"]),
-            }
-            for row in latest_eval_rows
-        ],
         "latest_snapshot_rows": [
             {
                 "trace_id": row["trace_id"],
@@ -121,12 +106,10 @@ async def fetch_runtime_evidence(conn):
         ],
     }
 
-    evidence["tables_ok"] = len(evidence["missing_tables"]) == 0
+    evidence["tables_ok"] = len(evidence["missing_tables"]) == 0 and len(evidence["present_removed_tables"]) == 0
     evidence["indexes_ok"] = len(evidence["missing_indexes"]) == 0
     evidence["latest_rows_ok"] = (
-        evidence["evaluation_stats"]["row_count"] > 0
-        and evidence["snapshot_stats"]["row_count"] > 0
-        and len(evidence["latest_evaluation_rows"]) > 0
+        evidence["snapshot_stats"]["row_count"] > 0
         and len(evidence["latest_snapshot_rows"]) > 0
     )
 
@@ -146,7 +129,7 @@ async def run(args):
     print(json.dumps(evidence, ensure_ascii=False))
 
     if not evidence["tables_ok"]:
-        raise SystemExit("Missing required runtime tables")
+        raise SystemExit("Runtime table state invalid: required snapshot table missing or removed evaluations table still present")
     if not evidence["indexes_ok"]:
         raise SystemExit("Missing required runtime indexes")
     if not evidence["latest_rows_ok"]:
