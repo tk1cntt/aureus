@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-ic5: Implement TPO strategy tag bridge and seed strategy templates
+Last activity: 2026-04-25 - Completed quick task 260425-il0: Add deterministic TPO replay/backtest harness
 
 ## Architecture Decision
 
@@ -65,6 +65,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-ic5: Implement TPO strat
 | 260425-gib | Implement first TPO detector VARejectionDetector | 2026-04-25 | 7f8aa85 | Verified | [260425-gib-implement-first-tpo-detector-varejection](./quick/260425-gib-implement-first-tpo-detector-varejection/) |
 | 260425-i1g | Implement remaining deterministic TPO detectors | 2026-04-25 | 77f25cd | Verified | [260425-i1g-implement-remaining-deterministic-tpo-de](./quick/260425-i1g-implement-remaining-deterministic-tpo-de/) |
 | 260425-ic5 | Implement TPO strategy tag bridge and seed strategy templates | 2026-04-25 | 40b4d09 | Verified | [260425-ic5-implement-tpo-strategy-tag-bridge-and-se](./quick/260425-ic5-implement-tpo-strategy-tag-bridge-and-se/) |
+| 260425-il0 | Add deterministic TPO replay/backtest harness | 2026-04-25 | 952b912 | Verified | [260425-il0-add-deterministic-replay-backtest-harnes](./quick/260425-il0-add-deterministic-replay-backtest-harnes/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
