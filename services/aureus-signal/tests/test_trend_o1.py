@@ -12,6 +12,8 @@ class MockState:
     def __init__(self):
         self.htf_trend = None
         self.obs = []
+        self.emas = {}
+        self.swing_points = []
 
 
 def _df(close_values: list[float]) -> pd.DataFrame:
@@ -23,9 +25,9 @@ def _df(close_values: list[float]) -> pd.DataFrame:
     )
 
 
-def test_trend_signal_not_enough_data():
+def test_trend_signal_not_enough_data_without_scoring_sources():
     signal = TrendSignal(ema_period=10)
-    df = _df([1, 2, 3])
+    df = _df([1])
     state = MockState()
 
     result = signal.calculate(df, state)
@@ -54,56 +56,85 @@ def test_trend_signal_sideways_both_colors():
     assert result["data"]["red_ob_count"] == 2
 
 
-def test_trend_signal_bullish_trend():
-    signal = TrendSignal(ema_period=5)
-    # Price ends at 100, since it's steadily increasing, EMA will be < 100
-    df = _df([80, 85, 90, 95, 100])
+def test_hybrid_bullish_turns_before_ema200_gate():
+    signal = TrendSignal(ema_period=200)
+    df = pd.DataFrame(
+        {
+            "t": [1, 2, 3, 4, 5, 6],
+            "c": [95, 96, 97, 98, 99, 100],
+            "ema_21": [94, 95, 96, 97, 98, 99],
+            "ema_55": [92, 93, 94, 95, 96, 97],
+            "ema_200": [110, 110, 110, 110, 110, 110],
+        }
+    )
     state = MockState()
+    state.swing_points = [{"label": "HH"}, {"label": "HL"}]
     state.obs = [
-        {"ob_type": "BULLISH", "mitigated": False},
-        {"ob_type": "BULLISH", "mitigated": False},
-        {"ob_type": "BULLISH", "mitigated": False},
-    ]  # 3 green, 0 red -> diff 3 >= 2
+        {"ob_type": "BULLISH", "mitigated": False, "quality": 0.9, "body_ratio": 0.8, "status": "CLEAN_BREAKOUT", "t_breakout": 6},
+    ]
 
-    result = signal.calculate(df, state)
+    result = signal.calculate(df, state, choch_up=True)
 
+    assert result["tag"] == "htf_trend"
     assert result["value"] == "BULLISH"
     assert result["data"]["regime"] == "TREND_UP"
+    assert result["data"]["ema200_penalty"] < 0
+    assert result["data"]["structure_score"] > 0
+    assert result["data"]["ema_score"] > 0
+    assert result["data"]["ob_score"] > 0
     assert state.htf_trend == "BULLISH"
 
 
-def test_trend_signal_bearish_trend():
-    signal = TrendSignal(ema_period=5)
-    # Price ends at 100, since it's steadily decreasing, EMA will be > 100
-    df = _df([120, 115, 110, 105, 100])
+def test_hybrid_bearish_turns_before_ema200_gate():
+    signal = TrendSignal(ema_period=200)
+    df = pd.DataFrame(
+        {
+            "t": [1, 2, 3, 4, 5, 6],
+            "c": [105, 104, 103, 102, 101, 100],
+            "ema_21": [106, 105, 104, 103, 102, 101],
+            "ema_55": [108, 107, 106, 105, 104, 103],
+            "ema_200": [90, 90, 90, 90, 90, 90],
+        }
+    )
     state = MockState()
+    state.swing_points = [{"label": "LH"}, {"label": "LL"}]
     state.obs = [
-        {"ob_type": "BEARISH", "mitigated": False},
-        {"ob_type": "BEARISH", "mitigated": False},
-    ]  # 0 green, 2 red -> diff 2 >= 2
+        {"ob_type": "BEARISH", "mitigated": False, "quality": 0.9, "body_ratio": 0.8, "status": "CLEAN_BREAKOUT", "t_breakout": 6},
+    ]
 
-    result = signal.calculate(df, state)
+    result = signal.calculate(df, state, choch_down=True)
 
     assert result["value"] == "BEARISH"
     assert result["data"]["regime"] == "TREND_DN"
+    assert result["data"]["ema200_penalty"] < 0
+    assert result["data"]["structure_score"] < 0
+    assert result["data"]["ema_score"] < 0
+    assert result["data"]["ob_score"] < 0
 
 
-def test_trend_signal_divergence_anti_fomo():
-    signal = TrendSignal(ema_period=5)
-    # Price < EMA
-    df = _df([120, 115, 110, 105, 100])
+def test_hybrid_opposing_stop_hunt_keeps_false_break_neutral():
+    signal = TrendSignal(ema_period=200)
+    df = pd.DataFrame(
+        {
+            "t": [1, 2, 3, 4, 5],
+            "c": [96, 97, 98, 99, 100],
+            "ema_21": [95, 96, 97, 98, 99],
+            "ema_55": [94, 95, 96, 97, 98],
+            "ema_200": [110, 110, 110, 110, 110],
+        }
+    )
     state = MockState()
-    # But OBs are strongly Bullish! News sweep!
+    state.swing_points = [{"label": "HH"}, {"label": "HL"}]
     state.obs = [
-        {"ob_type": "BULLISH", "mitigated": False},
-        {"ob_type": "BULLISH", "mitigated": False},
+        {"ob_type": "BULLISH", "mitigated": False, "quality": 0.5, "status": "TOUCHED", "t_breakout": 5},
+        {"ob_type": "BEARISH", "mitigated": False, "status": "STOP_HUNT", "t_breakout": 5},
     ]
 
-    result = signal.calculate(df, state)
+    result = signal.calculate(df, state, choch_up=True, stop_hunt_bear=True)
 
-    # Should fall back to Neutral because of divergence
     assert result["value"] == "NEUTRAL"
     assert result["data"]["regime"] == "SIDEWAYS"
+    assert result["data"]["sweep_score"] < 0
 
 
 def test_trend_signal_mitigated_ignored():
@@ -153,4 +184,7 @@ def test_trend_signal_with_precomputed_ema():
     ]
 
     result = signal.calculate(df, state)
+    assert result["value"] in {"BULLISH", "BEARISH", "NEUTRAL"}
+    assert result["data"]["regime"] in {"TREND_UP", "TREND_DN", "SIDEWAYS"}
+    assert result["tag"] == "htf_trend"
     assert result["value"] == "BULLISH"
