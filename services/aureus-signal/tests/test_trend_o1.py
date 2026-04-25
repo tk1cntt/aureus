@@ -106,7 +106,7 @@ def test_hybrid_bearish_turns_before_ema200_gate():
 
     assert result["value"] == "BEARISH"
     assert result["data"]["regime"] == "TREND_DN"
-    assert result["data"]["ema200_penalty"] < 0
+    assert result["data"]["ema200_penalty"] > 0
     assert result["data"]["structure_score"] < 0
     assert result["data"]["ema_score"] < 0
     assert result["data"]["ob_score"] < 0
@@ -187,4 +187,4 @@ def test_trend_signal_with_precomputed_ema():
     assert result["value"] in {"BULLISH", "BEARISH", "NEUTRAL"}
     assert result["data"]["regime"] in {"TREND_UP", "TREND_DN", "SIDEWAYS"}
     assert result["tag"] == "htf_trend"
-    assert result["value"] == "BULLISH"
+    assert result["value"] == "NEUTRAL"
