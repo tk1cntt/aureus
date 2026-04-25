@@ -51,7 +51,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-bnh: Phân tích thuật
 | 260425-055 | Tối ưu tính toán TPO (D1 today-only, H1/M30 sliding+cache) và đưa TPO vào Indicator Snapshot của SIGNAL ALERT Telegram | 2026-04-25 | fcfc187 | [260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv](./quick/260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv/) |
 | 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
 | 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
-| 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | (pending commit) | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
+| 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | 2e90c5e | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
