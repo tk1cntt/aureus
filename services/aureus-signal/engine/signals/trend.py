@@ -20,11 +20,18 @@ class TrendSignal(BaseSignal):
             state_obj.htf_trend = "NEUTRAL"
             return None
 
-        current_price = float(df["c"].iloc[-1])
+        current_price = pd.to_numeric(pd.Series([df["c"].iloc[-1]]), errors="coerce").iloc[0]
+        if pd.isna(current_price):
+            state_obj.htf_trend = "NEUTRAL"
+            return None
+        current_price = float(current_price)
         current_t = int(df.iloc[-1]["t"]) if "t" in df.columns else len(df)
         current_ema = self._ema_value(df, state_obj, self.ema_period)
         ema21 = self._ema_value(df, state_obj, 21)
         ema55 = self._ema_value(df, state_obj, 55)
+        if current_ema is None:
+            state_obj.htf_trend = "NEUTRAL"
+            return None
 
         obs = getattr(state_obj, "obs", [])
         recent_obs = obs[-20:] if isinstance(obs, list) else []
@@ -85,12 +92,16 @@ class TrendSignal(BaseSignal):
         if isinstance(emas, dict):
             ema_state = emas.get(period) or emas.get(str(period))
             if isinstance(ema_state, dict) and ema_state.get("current") is not None:
-                return float(ema_state["current"])
+                ema_value = pd.to_numeric(pd.Series([ema_state["current"]]), errors="coerce").iloc[0]
+                return None if pd.isna(ema_value) else float(ema_value)
         col_name = f"ema_{period}"
         if col_name in df.columns and pd.notna(df[col_name].iloc[-1]):
-            return float(df[col_name].iloc[-1])
+            ema_value = pd.to_numeric(pd.Series([df[col_name].iloc[-1]]), errors="coerce").iloc[0]
+            return None if pd.isna(ema_value) else float(ema_value)
         if len(df) >= min(period, 2):
-            return float(df["c"].ewm(span=period, adjust=False).mean().iloc[-1])
+            close_series = pd.to_numeric(df["c"], errors="coerce")
+            ema_value = close_series.ewm(span=period, adjust=False).mean().iloc[-1]
+            return None if pd.isna(ema_value) else float(ema_value)
         return None
 
     def _structure_score(self, state_obj: Any, kwargs: Dict[str, Any]) -> float:
@@ -112,8 +123,12 @@ class TrendSignal(BaseSignal):
     def _ema_score(self, df: pd.DataFrame, ema21: Optional[float], ema55: Optional[float]) -> float:
         if ema21 is None or ema55 is None:
             return 0.0
-        close = float(df["c"].iloc[-1])
-        prev_close = float(df["c"].iloc[-2]) if len(df) > 1 else close
+        close = pd.to_numeric(pd.Series([df["c"].iloc[-1]]), errors="coerce").iloc[0]
+        prev_close = pd.to_numeric(pd.Series([df["c"].iloc[-2]]), errors="coerce").iloc[0] if len(df) > 1 else close
+        if pd.isna(close) or pd.isna(prev_close):
+            return 0.0
+        close = float(close)
+        prev_close = float(prev_close)
         price_slope = close - prev_close
         score = 0.0
         if close > ema21 > ema55 and price_slope >= 0:
