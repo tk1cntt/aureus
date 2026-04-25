@@ -115,3 +115,114 @@ class VARejectionDetector:
             "invalidation": None,
             "reasons": reasons or ["VA rejection setup invalid"],
         }
+
+
+class VABreakoutAcceptanceDetector:
+    def detect(self, context: Dict[str, Any], current_close: float, acceptance_closes: list[float]) -> Dict[str, Any]:
+        timeframes = context.get("timeframes") or {}
+        invalid_reasons = self._validate_context(context, timeframes)
+        if invalid_reasons:
+            return self._invalid(invalid_reasons)
+        if not acceptance_closes or len(acceptance_closes) > 2:
+            return self._invalid(["missing required 1-2 acceptance closes"])
+
+        current = float(current_close)
+        acceptance = [float(close) for close in acceptance_closes]
+        bias = (context.get("bias") or {}).get("d1", "neutral")
+
+        long_tf = self._find_long_timeframe(timeframes, current, acceptance)
+        short_tf = self._find_short_timeframe(timeframes, current, acceptance)
+
+        if long_tf and bias == "bearish":
+            return self._invalid([f"long setup conflicts with D1 bearish bias on {long_tf}"])
+        if short_tf and bias == "bullish":
+            return self._invalid([f"short setup conflicts with D1 bullish bias on {short_tf}"])
+        if long_tf and timeframes[long_tf].get("poc_shift") == "down":
+            return self._invalid([f"{long_tf} POC shift down conflicts with long breakout acceptance"])
+        if short_tf and timeframes[short_tf].get("poc_shift") == "up":
+            return self._invalid([f"{short_tf} POC shift up conflicts with short breakout acceptance"])
+
+        if long_tf:
+            return self._valid("long", long_tf, timeframes[long_tf], current)
+        if short_tf:
+            return self._valid("short", short_tf, timeframes[short_tf], current)
+
+        return self._invalid([
+            "no H1/M30 VAH breakout or VAL breakdown with acceptance",
+            "shape is not sufficient without breakout and acceptance price relation",
+        ])
+
+    def _find_long_timeframe(self, timeframes: Dict[str, Dict[str, Any]], current: float, acceptance: list[float]) -> Optional[str]:
+        for tf in ("H1", "M30"):
+            vah = float(timeframes[tf]["vah"])
+            if current > vah and all(close >= vah for close in acceptance):
+                return tf
+        return None
+
+    def _find_short_timeframe(self, timeframes: Dict[str, Dict[str, Any]], current: float, acceptance: list[float]) -> Optional[str]:
+        for tf in ("H1", "M30"):
+            val = float(timeframes[tf]["val"])
+            if current < val and all(close <= val for close in acceptance):
+                return tf
+        return None
+
+    def _validate_context(self, context: Dict[str, Any], timeframes: Dict[str, Any]) -> list[str]:
+        missing = [tf for tf in ("D1", "H1", "M30") if not timeframes.get(tf)]
+        if missing:
+            return [f"missing required TPO context: {', '.join(missing)}"]
+        malformed = [tf for tf in ("D1", "H1", "M30") if not self._has_levels(timeframes.get(tf))]
+        if malformed:
+            return [f"malformed TPO levels: {', '.join(malformed)}"]
+        history_guard = context.get("history_guard")
+        if history_guard:
+            stale = history_guard.get("stale_timeframes") or []
+            missing_history = history_guard.get("missing_timeframes") or []
+            if history_guard.get("is_stale"):
+                return [f"history guard stale: {', '.join(stale) or 'unknown'}"]
+            if missing_history:
+                return [f"history guard missing: {', '.join(missing_history)}"]
+        return []
+
+    def _has_levels(self, value_area: Any) -> bool:
+        if not isinstance(value_area, dict):
+            return False
+        try:
+            float(value_area["poc"])
+            float(value_area["vah"])
+            float(value_area["val"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return True
+
+    def _valid(self, side: str, timeframe: str, value_area: Dict[str, Any], current: float) -> Dict[str, Any]:
+        level_key = "vah" if side == "long" else "val"
+        level_name = "VAH" if side == "long" else "VAL"
+        level = float(value_area[level_key])
+        shape = value_area.get("shape")
+        score = 0.78
+        reasons = [f"{timeframe} breakout accepted {'above VAH' if side == 'long' else 'below VAL'}"]
+        if shape in ({"b", "D"} if side == "long" else {"p", "D"}):
+            score += 0.07
+            reasons.append(f"{timeframe} shape {shape} supports {side} continuation")
+        else:
+            reasons.append(f"{timeframe} shape {shape} is metadata only; acceptance remains primary")
+        return {
+            "setup": "va_breakout_acceptance",
+            "side": side,
+            "valid": True,
+            "score": round(score, 2),
+            "entry_zone": [level, current] if side == "long" else [current, level],
+            "invalidation": level,
+            "reasons": reasons,
+        }
+
+    def _invalid(self, reasons: list[str]) -> Dict[str, Any]:
+        return {
+            "setup": "va_breakout_acceptance",
+            "side": None,
+            "valid": False,
+            "score": 0.0,
+            "entry_zone": None,
+            "invalidation": None,
+            "reasons": reasons or ["VA breakout acceptance setup invalid"],
+        }
