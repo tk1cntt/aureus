@@ -73,3 +73,37 @@ def test_tpo_context_keeps_tpo_indicator_invariant_and_emits_no_trade_tags():
     assert TPOSignal.signal_type == SignalType.INDICATOR
     assert context.get("tag") is None
     assert TRADE_TAGS.isdisjoint(str(context))
+
+
+def test_tpo_context_adds_optional_history_fields_and_freshness_guard():
+    from engine.signals.tpo_history import TPOHistoryStore
+
+    history = TPOHistoryStore(max_length=3, tick_size=0.1)
+    history.append("D1", {"t": 100, "POC": 99.0, "VAH": 104.0, "VAL": 96.0})
+    history.append("D1", {"t": 110, "POC": 100.0, "VAH": 105.0, "VAL": 95.0})
+    history.append("H1", {"t": 110, "POC": 200.0, "VAH": 210.0, "VAL": 190.0})
+    history.append("M30", {"t": 80, "POC": 300.0, "VAH": 315.0, "VAL": 285.0})
+
+    context = TPOContextBuilder().build(_value(), close=100.0, history=history, now=120, max_age=20)
+
+    assert context["timeframes"]["D1"]["poc_shift"] == "up"
+    assert context["timeframes"]["D1"]["va_width_change"] == 2.0
+    assert context["timeframes"]["H1"]["poc_shift"] == "unknown"
+    assert context["history_guard"] == {
+        "is_stale": True,
+        "stale_timeframes": ["M30"],
+        "missing_timeframes": [],
+    }
+    assert context.get("tag") is None
+    assert TRADE_TAGS.isdisjoint(str(context))
+
+
+def test_tpo_context_flags_missing_history_timeframes_without_crash():
+    from engine.signals.tpo_history import TPOHistoryStore
+
+    context = TPOContextBuilder().build(_value(tpo_d1=None), close=100.0, history=TPOHistoryStore(), now=10, max_age=5)
+
+    assert context["timeframes"]["D1"] is None
+    assert context["bias"] == {"d1": "neutral"}
+    assert context["history_guard"]["is_stale"] is True
+    assert context["history_guard"]["missing_timeframes"] == ["D1", "H1", "M30"]
