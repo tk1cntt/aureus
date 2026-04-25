@@ -965,16 +965,17 @@ void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
 //+------------------------------------------------------------------+
 //| Push ORDER_FAILED event                                            |
 //+------------------------------------------------------------------+
-void PushOrderFailed(string cmdId, string symbol, string reason, int retcode)
+void PushOrderFailed(string cmdId, string symbol, string reason, int retcode,
+                     double entryPrice = 0.0, double ask = 0.0, double bid = 0.0)
   {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_FAILED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\","
-                    "\"reason\":\"%s\",\"retcode\":%d,\"t\":%lld}",
-                    cmdId, symbol, reason, retcode, timeMs);
+                    "\"reason\":\"%s\",\"retcode\":%d,\"entry_price\":%.5f,\"ask\":%.5f,\"bid\":%.5f,\"t\":%lld}",
+                    cmdId, symbol, reason, retcode, entryPrice, ask, bid, timeMs);
    g_socket.SendJSON(json);
-   PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d",
-               cmdId, reason, retcode);
+   PrintFormat("[AureusProvider] ORDER_FAILED pushed: cmd_id=%s reason=%s retcode=%d entry_price=%.5f ask=%.5f bid=%.5f",
+               cmdId, reason, retcode, entryPrice, ask, bid);
   }
 
 //+------------------------------------------------------------------+
@@ -1344,7 +1345,7 @@ void ExecuteOpenOrder(const string &raw)
            }
          else
            {
-            PushOrderFailed(cmdId, symbol, "UNKNOWN_ORDER_TYPE", 0);
+            PushOrderFailed(cmdId, symbol, "UNKNOWN_ORDER_TYPE", 0, entry_price, ask, bid);
             g_ordersFailed++;
             return;
            }
@@ -1391,7 +1392,7 @@ void ExecuteOpenOrder(const string &raw)
    ZeroMemory(checkResult);
    if(!OrderCheck(request, checkResult))
      {
-      PushOrderFailed(cmdId, symbol, RetcodeToReason(checkResult.retcode), checkResult.retcode);
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(checkResult.retcode), checkResult.retcode, entry_price, ask, bid);
       g_ordersFailed++;
       return;
      }
@@ -1400,7 +1401,7 @@ void ExecuteOpenOrder(const string &raw)
    if(!OrderSend(request, result))
      {
       int err = GetLastError();
-      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode != 0 ? result.retcode : err), result.retcode);
+      PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode != 0 ? result.retcode : err), result.retcode, entry_price, ask, bid);
       g_ordersFailed++;
       return;
      }
@@ -1563,7 +1564,7 @@ void ExecuteOpenOrder(const string &raw)
      {
       if(!terminalEventSent)
         {
-         PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode);
+         PushOrderFailed(cmdId, symbol, RetcodeToReason(result.retcode), result.retcode, entry_price, ask, bid);
          terminalEventSent = true;
          g_ordersFailed++;
         }
@@ -1572,7 +1573,7 @@ void ExecuteOpenOrder(const string &raw)
 // Safety layer 3: hard terminal event gate (exactly one terminal event)
    if(!terminalEventSent)
      {
-      PushOrderFailed(cmdId, symbol, "TERMINAL_EVENT_NOT_EMITTED", (int)result.retcode);
+      PushOrderFailed(cmdId, symbol, "TERMINAL_EVENT_NOT_EMITTED", (int)result.retcode, entry_price, ask, bid);
       g_ordersFailed++;
      }
   }
