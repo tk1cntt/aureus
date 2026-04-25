@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
-last_updated: "2026-04-25T01:15:00.000Z"
+last_updated: "2026-04-25T01:45:00.000Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 4
@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-1a6: Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 khỏi aureus_trade_signal_snapshots và cập nhật source code liên quan
+Last activity: 2026-04-25 - Completed quick task 260425-aln: Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram
 
 ## Architecture Decision
 
@@ -50,6 +50,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-1a6: Xóa 4 cột sign
 | 260424-sbg | Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report | 2026-04-24 | (pending commit) | [260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n](./quick/260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n/) |
 | 260425-055 | Tối ưu tính toán TPO (D1 today-only, H1/M30 sliding+cache) và đưa TPO vào Indicator Snapshot của SIGNAL ALERT Telegram | 2026-04-25 | fcfc187 | [260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv](./quick/260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv/) |
 | 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
+| 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
