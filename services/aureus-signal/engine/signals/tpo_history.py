@@ -25,6 +25,10 @@ class TPOHistoryStore:
             return False
 
         history.append(snapshot)
+        try:
+            history.sort(key=lambda item: item["t"])
+        except TypeError:
+            history.sort(key=lambda item: str(item["t"]))
         if len(history) > self.max_length:
             del history[: len(history) - self.max_length]
         return True

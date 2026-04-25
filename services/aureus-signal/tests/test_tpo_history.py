@@ -31,14 +31,31 @@ def _block(t, poc=100.0, vah=105.0, val=95.0):
 def test_tpo_history_append_dedup_and_bounds_per_timeframe():
     history = TPOHistoryStore(max_length=2)
 
-    assert history.append("d1", _block(1, poc=100.0)) is True
-    assert history.append("D1", _block(1, poc=101.0)) is False
-    assert history.append("D1", _block(2, poc=102.0)) is True
+    assert history.append("d1", _block(2, poc=102.0)) is True
+    assert history.append("D1", _block(2, poc=101.0)) is False
+    assert history.append("D1", _block(1, poc=100.0)) is True
     assert history.append("D1", _block(3, poc=103.0)) is True
 
     snapshots = history.snapshots("D1")
     assert [item["t"] for item in snapshots] == [2, 3]
     assert snapshots[-1]["va_width"] == 10.0
+
+
+def test_tpo_history_out_of_order_append_uses_latest_chronological_snapshot():
+    history = TPOHistoryStore(max_length=3, tick_size=0.1)
+
+    assert history.append("D1", _block(100, poc=100.0, vah=105.0, val=95.0)) is True
+    assert history.append("D1", _block(300, poc=103.0, vah=110.0, val=95.0)) is True
+    assert history.append("D1", _block(200, poc=101.0, vah=107.0, val=95.0)) is True
+
+    assert [item["t"] for item in history.snapshots("D1")] == [100, 200, 300]
+    assert history.poc_shift("D1") == "up"
+    assert history.va_width_change("D1") == 3.0
+    assert history.freshness_status(now=310, max_age=20, required_timeframes=["D1"])["is_stale"] is False
+
+    assert history.append("D1", _block(400, poc=99.0, vah=102.0, val=95.0)) is True
+    assert [item["t"] for item in history.snapshots("D1")] == [200, 300, 400]
+    assert history.poc_shift("D1") == "down"
 
 
 def test_tpo_history_ignores_invalid_blocks_without_mutating():
