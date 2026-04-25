@@ -434,3 +434,17 @@ def test_tpo_distribution_regime_does_not_override_d1_bias_conflict():
     assert result["side"] is None
     assert result["score"] == 0.0
     assert result["reasons"] == ["long pullback conflicts with D1 bearish bias"]
+
+
+def test_tpo_distribution_regime_unknown_is_detector_noop_on_valid_setup():
+    trend_context = _detector_context(regime="TREND", bias="neutral")
+    unknown_context = _detector_context(regime="UNKNOWN", bias="neutral")
+
+    trend_result = VARejectionDetector().detect(trend_context, previous_close=94.0, current_close=96.0)
+    unknown_result = VARejectionDetector().detect(unknown_context, previous_close=94.0, current_close=96.0)
+
+    assert trend_result["valid"] is True
+    assert unknown_result["valid"] is True
+    assert trend_result["side"] == unknown_result["side"] == "long"
+    assert trend_result["score"] == unknown_result["score"]
+    assert trend_result["reasons"] == unknown_result["reasons"]
