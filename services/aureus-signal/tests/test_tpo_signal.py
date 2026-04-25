@@ -7,6 +7,8 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.signals.tpo import TPOSignal
+from engine.signals.tpo_context import TPOContextBuilder
+from engine.signals.tpo_detectors import TrendPullbackDetector, VARejectionDetector
 
 
 class MockState:
@@ -31,6 +33,25 @@ def _build_m1_df(minutes: int = 3000, start_ts: int = 1700000000) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
+def _assert_tpo_block_contract(block):
+    assert set(block.keys()) == {
+        "POC",
+        "VAH",
+        "VAL",
+        "shape",
+        "shape_confidence_pct",
+        "shape_scores_pct",
+        "distr",
+        "distribution_regime",
+    }
+    assert block["VAL"] <= block["POC"] <= block["VAH"]
+    assert block["shape"] in {"D", "B", "p", "b"}
+    assert 0.0 <= block["shape_confidence_pct"] <= 100.0
+    assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+    assert block["distr"] >= 0.0
+    assert block["distribution_regime"] in {"TREND", "NORMAL", "NEUTRAL", "UNKNOWN"}
+
+
 def test_tpo_signal_returns_required_blocks_and_fields():
     df = _build_m1_df(minutes=3500)
     sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
@@ -44,11 +65,7 @@ def test_tpo_signal_returns_required_blocks_and_fields():
         assert key in res["value"]
         block = res["value"][key]
         assert block is not None
-        assert set(block.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
-        assert block["VAL"] <= block["POC"] <= block["VAH"]
-        assert block["shape"] in {"D", "B", "p", "b"}
-        assert 0.0 <= block["shape_confidence_pct"] <= 100.0
-        assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+        _assert_tpo_block_contract(block)
 
 
 def test_tpo_signal_short_data_still_returns_realtime_blocks():
@@ -146,7 +163,7 @@ def test_tpo_block_build_uses_counts_once(monkeypatch):
 
     assert block is not None
     assert calls == 1
-    assert set(block.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
+    _assert_tpo_block_contract(block)
 
 
 def test_tpo_signal_uses_today_only_for_d1():
@@ -160,10 +177,7 @@ def test_tpo_signal_uses_today_only_for_d1():
     assert res is not None
     d1 = res["value"]["tpo_d1"]
     assert d1 is not None
-    assert set(d1.keys()) == {"POC", "VAH", "VAL", "shape", "shape_confidence_pct", "shape_scores_pct"}
-    assert d1["VAL"] <= d1["POC"] <= d1["VAH"]
-    assert d1["shape"] in {"D", "B", "p", "b"}
-    assert 0.0 <= d1["shape_confidence_pct"] <= 100.0
+    _assert_tpo_block_contract(d1)
 
 
 def test_tpo_poc_tiebreak_is_deterministic():
@@ -308,3 +322,115 @@ def test_tpo_classify_shape_uses_margin_to_cap_near_ties():
     assert clear_shape == "D"
     assert near_tie_confidence < clear_confidence
     assert near_tie_confidence <= 80.0
+
+
+def test_tpo_distribution_metrics_are_count_metadata():
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+
+    assert sig._calculate_distr([1, 3, 2]) == 2.0
+    assert sig._calculate_distr([5]) == 1.0
+    assert sig._calculate_distr([2, 4, 4, 2]) == 3.0
+    assert sig._calculate_distr([]) == 0.0
+    assert sig._calculate_distr([0, 0]) == 0.0
+    assert sig._classify_distribution_regime(2.0) == "UNKNOWN"
+    assert sig._classify_distribution_regime(0.0) == "UNKNOWN"
+
+
+def test_tpo_block_keeps_shape_separate_from_distribution_regime(monkeypatch):
+    df = _build_m1_df(minutes=20)
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+
+    monkeypatch.setattr(sig, "_build_levels_and_counts", lambda session_df, **kwargs: ([100.0, 100.1, 100.2], [1, 3, 2]))
+
+    block = sig._build_tpo_block(df)
+
+    assert block is not None
+    _assert_tpo_block_contract(block)
+    assert block["distr"] == 2.0
+    assert block["distribution_regime"] == "UNKNOWN"
+    assert block["shape"] in {"D", "B", "p", "b"}
+    assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+
+
+def _tpo_block(poc, vah, val, *, shape="D", regime="UNKNOWN", distr=1.0):
+    return {
+        "POC": poc,
+        "VAH": vah,
+        "VAL": val,
+        "shape": shape,
+        "shape_confidence_pct": 70.0,
+        "shape_scores_pct": {"D": 70.0, "B": 10.0, "p": 10.0, "b": 10.0},
+        "distr": distr,
+        "distribution_regime": regime,
+    }
+
+
+def test_tpo_context_propagates_regime_per_timeframe_without_d1_bias_change():
+    builder = TPOContextBuilder(tick_size=0.1)
+    context = builder.build(
+        {
+            "tpo_d1": _tpo_block(100.0, 110.0, 90.0, shape="D", regime="TREND", distr=2.0),
+            "tpo_h1": _tpo_block(101.0, 106.0, 96.0, shape="B", regime="NORMAL", distr=1.5),
+            "tpo_m30": _tpo_block(102.0, 104.0, 98.0, shape="p", regime="NEUTRAL", distr=1.2),
+        },
+        close=105.0,
+    )
+
+    assert context["bias"]["d1"] == "bullish"
+    assert context["timeframes"]["D1"]["shape"] == "D"
+    assert context["timeframes"]["D1"]["distribution_regime"] == "TREND"
+    assert context["timeframes"]["D1"]["distr"] == 2.0
+    assert context["timeframes"]["H1"]["shape"] == "B"
+    assert context["timeframes"]["H1"]["distribution_regime"] == "NORMAL"
+    assert context["timeframes"]["M30"]["shape"] == "p"
+    assert context["timeframes"]["M30"]["distribution_regime"] == "NEUTRAL"
+
+
+def _detector_context(*, regime="TREND", bias="neutral"):
+    return {
+        "bias": {"d1": bias},
+        "timeframes": {
+            "D1": {"poc": 100.0, "vah": 110.0, "val": 90.0, "shape": "D", "distribution_regime": regime},
+            "H1": {
+                "poc": 100.0,
+                "vah": 105.0,
+                "val": 95.0,
+                "shape": "D",
+                "distribution_regime": regime,
+                "price_location": "inside_value_area",
+                "distance_to_poc_ticks": 20.0,
+                "distance_to_val_ticks": 70.0,
+                "distance_to_vah_ticks": -30.0,
+            },
+            "M30": {
+                "poc": 100.0,
+                "vah": 104.0,
+                "val": 96.0,
+                "shape": "D",
+                "distribution_regime": regime,
+                "price_location": "inside_value_area",
+                "distance_to_poc_ticks": 20.0,
+                "distance_to_val_ticks": 60.0,
+                "distance_to_vah_ticks": -20.0,
+            },
+        },
+    }
+
+
+def test_tpo_distribution_regime_does_not_self_emit_va_rejection():
+    result = VARejectionDetector().detect(_detector_context(regime="TREND"), previous_close=99.0, current_close=102.0)
+
+    assert result["valid"] is False
+    assert result["side"] is None
+    assert result["score"] == 0.0
+    assert any("price relation" in reason for reason in result["reasons"])
+
+
+def test_tpo_distribution_regime_does_not_override_d1_bias_conflict():
+    context = _detector_context(regime="TREND", bias="bearish")
+    result = TrendPullbackDetector().detect(context, previous_close=94.0, current_close=100.0)
+
+    assert result["valid"] is False
+    assert result["side"] is None
+    assert result["score"] == 0.0
+    assert result["reasons"] == ["long pullback conflicts with D1 bearish bias"]
