@@ -425,6 +425,84 @@ async def seed_system_strategies(pool=None, conn=None):
                 }
             }
         },
+        {
+            "name": "TPO_VA_REJECTION_BULL",
+            "is_active": True,
+            "description": "BUY khi TPO VA rejection bullish reclaim VAL được xác nhận.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "va_rejection", "required_direction": "bullish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bullish", "neutral", "neutral-up"]}],
+                "sequence": [
+                    {"tag": "tpo_va_rejection_bull", "weight": 6.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_va_rejection_bear", "choch_down"]},
+                    {"tag": "choch_up", "weight": 2.0, "required": False, "max_wait": 10, "reset_signals": ["choch_down"]}
+                ],
+                "trade_execution": {"direction": "BUY", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_LOW", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_down"]}
+            }
+        },
+        {
+            "name": "TPO_VA_REJECTION_BEAR",
+            "is_active": True,
+            "description": "SELL khi TPO VA rejection bearish reject VAH được xác nhận.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "va_rejection", "required_direction": "bearish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bearish", "neutral", "neutral-down"]}],
+                "sequence": [
+                    {"tag": "tpo_va_rejection_bear", "weight": 6.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_va_rejection_bull", "choch_up"]},
+                    {"tag": "choch_down", "weight": 2.0, "required": False, "max_wait": 10, "reset_signals": ["choch_up"]}
+                ],
+                "trade_execution": {"direction": "SELL", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_HIGH", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_up"]}
+            }
+        },
+        {
+            "name": "TPO_VA_BREAKOUT_BULL",
+            "is_active": True,
+            "description": "BUY khi TPO VA breakout acceptance bullish giữ trên VAH.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "va_breakout_acceptance", "required_direction": "bullish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bullish", "neutral", "neutral-up"]}],
+                "sequence": [{"tag": "tpo_va_breakout_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_va_breakout_bear", "choch_down"]}],
+                "trade_execution": {"direction": "BUY", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_LOW", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_down"]}
+            }
+        },
+        {
+            "name": "TPO_VA_BREAKOUT_BEAR",
+            "is_active": True,
+            "description": "SELL khi TPO VA breakout acceptance bearish giữ dưới VAL.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "va_breakout_acceptance", "required_direction": "bearish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bearish", "neutral", "neutral-down"]}],
+                "sequence": [{"tag": "tpo_va_breakout_bear", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_va_breakout_bull", "choch_up"]}],
+                "trade_execution": {"direction": "SELL", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_HIGH", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_up"]}
+            }
+        },
+        {
+            "name": "TPO_TREND_PULLBACK_BULL",
+            "is_active": True,
+            "description": "BUY khi TPO trend pullback bullish về value area rồi reclaim.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "trend_pullback", "required_direction": "bullish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bullish", "neutral-up"]}],
+                "sequence": [{"tag": "tpo_trend_pullback_bull", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_trend_pullback_bear", "choch_down"]}],
+                "trade_execution": {"direction": "BUY", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_LOW", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_down"]}
+            }
+        },
+        {
+            "name": "TPO_TREND_PULLBACK_BEAR",
+            "is_active": True,
+            "description": "SELL khi TPO trend pullback bearish về value area rồi reject.",
+            "min_score": 0.75,
+            "config": {
+                "min_score_threshold": 0.75,
+                "context_filters": [{"type": "tpo_context", "setup": "trend_pullback", "required_direction": "bearish", "timeframes": ["D1", "H1", "M30"], "min_confidence_pct": 70, "bias": ["bearish", "neutral-down"]}],
+                "sequence": [{"tag": "tpo_trend_pullback_bear", "weight": 7.0, "required": True, "max_wait": 20, "reset_signals": ["tpo_trend_pullback_bull", "choch_up"]}],
+                "trade_execution": {"direction": "SELL", "entry_type": "MARKET", "entry_method": "CURRENT", "size_mode": "RISK_FIXED_AMOUNT", "size_value": 50.0, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}, "tp": {"type": "RR_RATIO", "value": 1.5}, "trailing": {"type": "SWING_HIGH", "activation_pips": 300}, "capital_risk_pct": 1.0, "early_exits": ["choch_up"]}
+            }
+        },
     ]
 
     for strat in strategies:
