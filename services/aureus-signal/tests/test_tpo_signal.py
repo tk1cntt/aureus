@@ -205,15 +205,106 @@ def test_tpo_block_includes_shape_confidence_and_scores():
     assert 99.0 <= total_scores <= 101.0
 
 
-def test_tpo_classify_shape_returns_valid_probability_distribution():
-    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
-    levels = [100.0, 100.1, 100.2, 100.3, 100.4]
-    counts = [2, 4, 8, 4, 2]
+def _classify_fixture(counts, tick_size=0.1):
+    sig = TPOSignal(value_area_pct=0.7, tick_size=tick_size)
+    levels = [100.0 + (i * tick_size) for i in range(len(counts))]
+    poc_idx = max(range(len(counts)), key=lambda i: (counts[i], -abs(i - (len(counts) // 2)))) if counts else 0
+    return sig._classify_shape(levels, counts, poc_idx=poc_idx)
 
-    shape, confidence, scores = sig._classify_shape(levels, counts, poc_idx=2)
 
+def _assert_scores_contract(shape, confidence, scores, *, non_empty=True):
     assert shape in {"D", "B", "p", "b"}
     assert 0.0 <= confidence <= 100.0
     assert set(scores.keys()) == {"D", "B", "p", "b"}
-    assert abs(sum(scores.values()) - 100.0) <= 0.1
+    if non_empty:
+        assert abs(sum(scores.values()) - 100.0) <= 0.1
     assert scores[shape] == confidence
+
+
+def test_tpo_classify_shape_returns_valid_probability_distribution():
+    shape, confidence, scores = _classify_fixture([2, 4, 8, 4, 2])
+
+    _assert_scores_contract(shape, confidence, scores)
+
+
+def test_tpo_classify_shape_calibrates_clear_d_profile():
+    d_shape, d_confidence, d_scores = _classify_fixture([1, 3, 6, 9, 12, 9, 6, 3, 1])
+    sparse_shape, sparse_confidence, sparse_scores = _classify_fixture([0, 1, 0, 1, 0])
+
+    _assert_scores_contract(d_shape, d_confidence, d_scores)
+    _assert_scores_contract(sparse_shape, sparse_confidence, sparse_scores)
+    assert d_shape == "D"
+    assert d_confidence >= 55.0
+    assert sparse_confidence <= 35.0
+    assert d_confidence > sparse_confidence
+
+
+def test_tpo_classify_shape_requires_separated_peaks_for_b_profile():
+    b_shape, b_confidence, b_scores = _classify_fixture([1, 3, 10, 3, 1, 3, 10, 3, 1])
+    lumpy_shape, lumpy_confidence, lumpy_scores = _classify_fixture([1, 4, 9, 8, 7, 8, 9, 4, 1])
+
+    _assert_scores_contract(b_shape, b_confidence, b_scores)
+    _assert_scores_contract(lumpy_shape, lumpy_confidence, lumpy_scores)
+    assert b_shape == "B"
+    assert b_confidence >= 55.0
+    assert not (lumpy_shape == "B" and lumpy_confidence >= 50.0)
+
+
+def test_tpo_classify_shape_identifies_p_and_b_profiles():
+    p_shape, p_confidence, p_scores = _classify_fixture([8, 7, 5, 3, 2, 1, 1])
+    b_shape, b_confidence, b_scores = _classify_fixture([1, 1, 2, 3, 5, 7, 8])
+
+    _assert_scores_contract(p_shape, p_confidence, p_scores)
+    _assert_scores_contract(b_shape, b_confidence, b_scores)
+    assert p_shape == "p"
+    assert b_shape == "b"
+    assert p_confidence >= 45.0
+    assert b_confidence >= 45.0
+
+
+def test_tpo_classify_shape_caps_empty_zero_and_sparse_profiles():
+    sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
+
+    empty_shape, empty_confidence, empty_scores = sig._classify_shape([], [], poc_idx=0)
+    zero_shape, zero_confidence, zero_scores = _classify_fixture([0, 0, 0, 0])
+    sparse_shape, sparse_confidence, sparse_scores = _classify_fixture([1, 0, 0, 1])
+
+    _assert_scores_contract(empty_shape, empty_confidence, empty_scores, non_empty=False)
+    _assert_scores_contract(zero_shape, zero_confidence, zero_scores, non_empty=False)
+    _assert_scores_contract(sparse_shape, sparse_confidence, sparse_scores)
+    assert empty_confidence == 0.0
+    assert zero_confidence == 0.0
+    assert sparse_confidence <= 35.0
+
+
+def test_tpo_classify_shape_bounds_distant_low_count_outlier():
+    baseline_shape, baseline_confidence, baseline_scores = _classify_fixture([1, 3, 6, 10, 6, 3, 1])
+    outlier_shape, outlier_confidence, outlier_scores = _classify_fixture([1, 3, 6, 10, 6, 3, 1, 0, 0, 0, 1])
+
+    _assert_scores_contract(baseline_shape, baseline_confidence, baseline_scores)
+    _assert_scores_contract(outlier_shape, outlier_confidence, outlier_scores)
+    assert baseline_shape == "D"
+    assert outlier_shape == "D"
+    assert outlier_confidence >= baseline_confidence - 20.0
+
+
+def test_tpo_classify_shape_is_stable_across_tick_size_spacing():
+    counts = [1, 3, 6, 10, 6, 3, 1]
+    small_shape, small_confidence, small_scores = _classify_fixture(counts, tick_size=0.01)
+    large_shape, large_confidence, large_scores = _classify_fixture(counts, tick_size=1.0)
+
+    _assert_scores_contract(small_shape, small_confidence, small_scores)
+    _assert_scores_contract(large_shape, large_confidence, large_scores)
+    assert small_shape == large_shape == "D"
+    assert abs(small_confidence - large_confidence) <= 1.0
+
+
+def test_tpo_classify_shape_uses_margin_to_cap_near_ties():
+    clear_shape, clear_confidence, clear_scores = _classify_fixture([1, 4, 9, 14, 9, 4, 1])
+    near_tie_shape, near_tie_confidence, near_tie_scores = _classify_fixture([1, 5, 10, 7, 9, 5, 1])
+
+    _assert_scores_contract(clear_shape, clear_confidence, clear_scores)
+    _assert_scores_contract(near_tie_shape, near_tie_confidence, near_tie_scores)
+    assert clear_shape == "D"
+    assert near_tie_confidence < clear_confidence
+    assert near_tie_confidence <= 50.0
