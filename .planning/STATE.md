@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-il0: Add deterministic TPO replay/backtest harness
+Last activity: 2026-04-25 - Completed quick task 260425-jre: Phân tích services\aureus-signal\engine\signals\trend.py để tìm cách tối ưu cách phát hiện trend tốt hơn. Với ema 200 thì bị delay quá châm. Đề xuất các phương án khả thi với các signal đang có. Có thể như POC Shift hợp lý hơn hoặc các phương phán khác. Chỉ đưa ra đề xuất và phân tích SWOT, K implement
 
 ## Architecture Decision
 
@@ -66,6 +66,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-il0: Add deterministic T
 | 260425-i1g | Implement remaining deterministic TPO detectors | 2026-04-25 | 77f25cd | Verified | [260425-i1g-implement-remaining-deterministic-tpo-de](./quick/260425-i1g-implement-remaining-deterministic-tpo-de/) |
 | 260425-ic5 | Implement TPO strategy tag bridge and seed strategy templates | 2026-04-25 | 40b4d09 | Verified | [260425-ic5-implement-tpo-strategy-tag-bridge-and-se](./quick/260425-ic5-implement-tpo-strategy-tag-bridge-and-se/) |
 | 260425-il0 | Add deterministic TPO replay/backtest harness | 2026-04-25 | 952b912 | Verified | [260425-il0-add-deterministic-replay-backtest-harnes](./quick/260425-il0-add-deterministic-replay-backtest-harnes/) |
+| 260425-jre | Phân tích services\aureus-signal\engine\signals\trend.py để tìm cách tối ưu cách phát hiện trend tốt hơn. Với ema 200 thì bị delay quá châm. Đề xuất các phương án khả thi với các signal đang có. Có thể như POC Shift hợp lý hơn hoặc các phương phán khác. Chỉ đưa ra đề xuất và phân tích SWOT, K implement | 2026-04-25 | (pending commit) |  | [260425-jre-ph-n-ti-ch-services-aureus-signal-engine](./quick/260425-jre-ph-n-ti-ch-services-aureus-signal-engine/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
