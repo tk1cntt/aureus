@@ -145,8 +145,10 @@ class TrendSignal(BaseSignal):
             direction = 1 if ob.get("ob_type") == "BULLISH" else -1 if ob.get("ob_type") == "BEARISH" else 0
             if direction == 0:
                 continue
-            quality = float(ob.get("quality") or 0.5)
-            body_ratio = float(ob.get("body_ratio") or 0.5)
+            quality = pd.to_numeric(pd.Series([ob.get("quality")]), errors="coerce").iloc[0]
+            body_ratio = pd.to_numeric(pd.Series([ob.get("body_ratio")]), errors="coerce").iloc[0]
+            quality = 0.5 if pd.isna(quality) else float(quality)
+            body_ratio = 0.5 if pd.isna(body_ratio) else float(body_ratio)
             t_ref = ob.get("t_breakout", ob.get("t_start", current_t))
             recent = 1.0 if not isinstance(t_ref, (int, float)) or current_t - t_ref <= 20 else 0.5
             status = ob.get("status")

@@ -10,7 +10,7 @@ from engine.signals.trend import TrendSignal
 
 
 def _state():
-    return SimpleNamespace(htf_trend="BULLISH", market_regime="TREND_UP", emas={})
+    return SimpleNamespace(htf_trend="BULLISH", market_regime="TREND_UP", emas={}, obs=[])
 
 
 def test_latest_categorical_ema_value_does_not_raise():
@@ -49,6 +49,35 @@ def test_categorical_ema_is_not_interpreted_as_numeric_trend_data():
 
     assert result is None
     assert state.htf_trend == "NEUTRAL"
+
+
+def test_order_block_categorical_quality_does_not_raise():
+    signal = TrendSignal(ema_period=3)
+    state = _state()
+    state.obs = [
+        {
+            "ob_type": "BULLISH",
+            "quality": "LOW",
+            "body_ratio": 0.7,
+            "t_breakout": 3,
+            "status": "CLEAN_BREAKOUT",
+        }
+    ]
+    df = pd.DataFrame(
+        {
+            "t": [1, 2, 3],
+            "c": [100.0, 101.0, 102.0],
+            "ema_3": [99.0, 100.0, 101.0],
+            "ema_21": [98.0, 99.0, 100.0],
+            "ema_55": [97.0, 98.0, 99.0],
+        }
+    )
+
+    result = signal.calculate(df, state)
+
+    assert result is not None
+    assert result["tag"] == "htf_trend"
+    assert result["data"]["ob_score"] > 0
 
 
 def test_numeric_trend_input_keeps_payload_shape():
