@@ -61,6 +61,8 @@ class TPOContextBuilder:
             "val": val,
             "shape": block.get("shape"),
             "shape_confidence_pct": block.get("shape_confidence_pct"),
+            "distr": block.get("distr"),
+            "distribution_regime": block.get("distribution_regime", "UNKNOWN"),
             "price_location": self._price_location(close, poc, vah, val),
             "distance_to_poc_ticks": (close - poc) / self.tick_size,
             "distance_to_vah_ticks": (close - vah) / self.tick_size,

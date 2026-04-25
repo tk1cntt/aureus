@@ -121,6 +121,7 @@ class TPOSignal(BaseSignal):
 
         poc, vah, val, poc_idx = profile
         shape, confidence_pct, scores = self._classify_shape(levels, counts, poc_idx)
+        distr = self._calculate_distr(counts)
 
         return {
             "POC": poc,
@@ -129,7 +130,21 @@ class TPOSignal(BaseSignal):
             "shape": shape,
             "shape_confidence_pct": confidence_pct,
             "shape_scores_pct": scores,
+            "distr": distr,
+            "distribution_regime": self._classify_distribution_regime(distr),
         }
+
+    def _calculate_distr(self, counts: List[int]) -> float:
+        if not counts:
+            return 0.0
+        safe_counts = [max(0, int(c)) for c in counts]
+        max_count = max(safe_counts) if safe_counts else 0
+        if max_count <= 0:
+            return 0.0
+        return round(float(sum(safe_counts)) / float(max_count), 8)
+
+    def _classify_distribution_regime(self, distr: float) -> str:
+        return "UNKNOWN"
 
     def _classify_shape(self, levels: List[float], counts: List[int], poc_idx: int) -> Tuple[str, float, Dict[str, float]]:
         n = len(counts)
