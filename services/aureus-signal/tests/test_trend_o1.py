@@ -56,7 +56,7 @@ def test_trend_signal_sideways_both_colors():
     assert result["data"]["red_ob_count"] == 2
 
 
-def test_hybrid_bullish_turns_before_ema200_gate():
+def test_hybrid_bullish_turns_without_ema200_fixture():
     signal = TrendSignal(ema_period=200)
     df = pd.DataFrame(
         {
@@ -64,13 +64,13 @@ def test_hybrid_bullish_turns_before_ema200_gate():
             "c": [95, 96, 97, 98, 99, 100],
             "ema_21": [94, 95, 96, 97, 98, 99],
             "ema_55": [92, 93, 94, 95, 96, 97],
-            "ema_200": [110, 110, 110, 110, 110, 110],
         }
     )
     state = MockState()
     state.swing_points = [{"label": "HH"}, {"label": "HL"}]
     state.obs = [
         {"ob_type": "BULLISH", "mitigated": False, "quality": 0.9, "body_ratio": 0.8, "status": "CLEAN_BREAKOUT", "t_breakout": 6},
+        {"ob_type": "BULLISH", "mitigated": False, "quality": 0.8, "body_ratio": 0.7, "status": "ACTIVE", "t_breakout": 6},
     ]
 
     result = signal.calculate(df, state, choch_up=True)
@@ -78,14 +78,15 @@ def test_hybrid_bullish_turns_before_ema200_gate():
     assert result["tag"] == "htf_trend"
     assert result["value"] == "BULLISH"
     assert result["data"]["regime"] == "TREND_UP"
-    assert result["data"]["ema200_penalty"] < 0
+    assert "ema_ref" not in result["data"]
+    assert "ema200_penalty" not in result["data"]
     assert result["data"]["structure_score"] > 0
     assert result["data"]["ema_score"] > 0
     assert result["data"]["ob_score"] > 0
     assert state.htf_trend == "BULLISH"
 
 
-def test_hybrid_bearish_turns_before_ema200_gate():
+def test_hybrid_bearish_turns_without_ema200_alignment():
     signal = TrendSignal(ema_period=200)
     df = pd.DataFrame(
         {
@@ -93,20 +94,21 @@ def test_hybrid_bearish_turns_before_ema200_gate():
             "c": [105, 104, 103, 102, 101, 100],
             "ema_21": [106, 105, 104, 103, 102, 101],
             "ema_55": [108, 107, 106, 105, 104, 103],
-            "ema_200": [90, 90, 90, 90, 90, 90],
         }
     )
     state = MockState()
     state.swing_points = [{"label": "LH"}, {"label": "LL"}]
     state.obs = [
         {"ob_type": "BEARISH", "mitigated": False, "quality": 0.9, "body_ratio": 0.8, "status": "CLEAN_BREAKOUT", "t_breakout": 6},
+        {"ob_type": "BEARISH", "mitigated": False, "quality": 0.7, "body_ratio": 0.7, "status": "ACTIVE", "t_breakout": 6},
     ]
 
-    result = signal.calculate(df, state, choch_down=True)
+    result = signal.calculate(df, state, choch_down=True, stop_hunt_bear=True)
 
     assert result["value"] == "BEARISH"
     assert result["data"]["regime"] == "TREND_DN"
-    assert result["data"]["ema200_penalty"] > 0
+    assert "ema_ref" not in result["data"]
+    assert "ema200_penalty" not in result["data"]
     assert result["data"]["structure_score"] < 0
     assert result["data"]["ema_score"] < 0
     assert result["data"]["ob_score"] < 0
@@ -120,7 +122,6 @@ def test_hybrid_opposing_stop_hunt_keeps_false_break_neutral():
             "c": [96, 97, 98, 99, 100],
             "ema_21": [95, 96, 97, 98, 99],
             "ema_55": [94, 95, 96, 97, 98],
-            "ema_200": [110, 110, 110, 110, 110],
         }
     )
     state = MockState()
