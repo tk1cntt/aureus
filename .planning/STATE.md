@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-25 - Completed quick task 260425-vqn: Update file mql5\AureusProvider.mq5, chỉ nhận order từ gateway gửi sang với các symbol được khai báo ở danh sách InpSymbols
+Last activity: 2026-04-26 - Completed quick task 260426-ayf: Update cách tính htf_trend trong services\aureus-signal\engine\signals\trend.py áp dụng các phương pháp score đang có trong services\aureus-signal\engine\signals\trend.py để nó nhạy hơn với thị trường. K dùng ema_200 nữa. Đưa ra phương án tốt nhất
 
 ## Architecture Decision
 
@@ -81,6 +81,7 @@ Last activity: 2026-04-25 - Completed quick task 260425-vqn: Update file mql5\Au
 | 260425-tpc | đánh giá độc lập report TPO shape distribution theo quy trình 4 bước | 2026-04-25 | (pending commit) | Completed | [260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio](./quick/260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio/) |
 | 260425-u4u | Thực hiện theo đề xuất .planning/quick/260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio/260425-tpc-ARCHITECTURE-ADVISORY.md | 2026-04-25 | a1235ed | Completed | [260425-u4u-th-c-hi-n-theo-xu-t-planning-quick-26042](./quick/260425-u4u-th-c-hi-n-theo-xu-t-planning-quick-26042/) |
 | 260425-vqn | Update file mql5\AureusProvider.mq5, chỉ nhận order từ gateway gửi sang với các symbol được khai báo ở danh sách InpSymbols | 2026-04-25 | 2fadb8e | Completed | [260425-vqn-update-file-mql5-aureusprovider-mq5-chi-](./quick/260425-vqn-update-file-mql5-aureusprovider-mq5-chi-/) |
+| 260426-ayf | Update cách tính htf_trend trong services\aureus-signal\engine\signals\trend.py áp dụng các phương pháp score đang có trong services\aureus-signal\engine\signals\trend.py để nó nhạy hơn với thị trường. K dùng ema_200 nữa. Đưa ra phương án tốt nhất | 2026-04-26 | 948c4d9 | Completed | [260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi](./quick/260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
