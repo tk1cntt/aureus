@@ -26,12 +26,8 @@ class TrendSignal(BaseSignal):
             return None
         current_price = float(current_price)
         current_t = int(df.iloc[-1]["t"]) if "t" in df.columns else len(df)
-        current_ema = self._ema_value(df, state_obj, self.ema_period)
         ema21 = self._ema_value(df, state_obj, 21)
         ema55 = self._ema_value(df, state_obj, 55)
-        if current_ema is None:
-            state_obj.htf_trend = "NEUTRAL"
-            return None
 
         obs = getattr(state_obj, "obs", [])
         recent_obs = obs[-20:] if isinstance(obs, list) else []
@@ -48,18 +44,23 @@ class TrendSignal(BaseSignal):
         ema_score = self._ema_score(df, ema21, ema55)
         ob_score = self._ob_score(recent_obs, current_t)
         sweep_score = self._sweep_score(recent_obs, kwargs)
-        raw_score = structure_score + ema_score + ob_score + sweep_score
-        ema200_penalty = self._ema200_penalty(current_price, current_ema, raw_score)
-        score = raw_score + ema200_penalty
+        score = structure_score + ema_score + ob_score + sweep_score
         has_directional_source = structure_score != 0 or ema_score != 0 or ob_score != 0 or sweep_score != 0
-        if not has_directional_source and len(df) < self.ema_period:
+        if not has_directional_source and len(df) < 2:
             state_obj.htf_trend = "NEUTRAL"
             return None
 
-        if score >= 3.0 and (structure_score > 0 or green_count >= 2) and (ema_score >= 0 or green_count >= 2):
+        bullish_anchor = structure_score > 0 or ema_score > 0
+        bearish_anchor = structure_score < 0 or ema_score < 0
+        bullish_mixed = structure_score > 0 and ema_score < 0
+        bearish_mixed = structure_score < 0 and ema_score > 0
+        bullish_confirmation = ob_score > 0 or sweep_score > 0 or green_count >= 2
+        bearish_confirmation = ob_score < 0 or sweep_score < 0 or red_count >= 2
+
+        if score >= 3.0 and bullish_anchor and bullish_confirmation and not bullish_mixed and ob_score >= 0 and sweep_score >= 0:
             regime = "TREND_UP"
             htf_trend = "BULLISH"
-        elif score <= -3.0 and (structure_score < 0 or red_count >= 2) and (ema_score <= 0 or red_count >= 2):
+        elif score <= -3.0 and bearish_anchor and bearish_confirmation and not bearish_mixed and ob_score <= 0 and sweep_score <= 0:
             regime = "TREND_DN"
             htf_trend = "BEARISH"
         else:
@@ -74,7 +75,6 @@ class TrendSignal(BaseSignal):
             "t": current_t,
             "data": {
                 "regime": regime,
-                "ema_ref": round(current_ema, 5) if current_ema is not None else None,
                 "green_ob_count": green_count,
                 "red_ob_count": red_count,
                 "delta": green_count - red_count,
@@ -83,7 +83,6 @@ class TrendSignal(BaseSignal):
                 "ema_score": round(ema_score, 4),
                 "ob_score": round(ob_score, 4),
                 "sweep_score": round(sweep_score, 4),
-                "ema200_penalty": round(ema200_penalty, 4),
             }
         }
 
@@ -181,11 +180,3 @@ class TrendSignal(BaseSignal):
                 score += direction * 0.5
         return max(min(score, 1.5), -1.5)
 
-    def _ema200_penalty(self, current_price: float, current_ema: Optional[float], raw_score: float) -> float:
-        if current_ema is None or raw_score == 0:
-            return 0.0
-        if raw_score > 0 and current_price < current_ema:
-            return -1.0
-        if raw_score < 0 and current_price > current_ema:
-            return 1.0
-        return 0.0
