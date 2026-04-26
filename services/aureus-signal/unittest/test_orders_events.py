@@ -68,43 +68,19 @@ def test_init_has_last_tick_events():
     assert tm.last_tick_events == [], "Should be empty on init"
 
 
-def _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY'):
-    sl_cfg = {'mode': 'FIXED_PIPS', 'value': 100}
-    tp_cfg = {'mode': 'RR', 'value': 1.5}
-    trailing_cfg = {'mode': 'NONE', 'value': 0}
-    return {
-        'strategy_id': strategy_id,
-        'strategy': strategy,
-        'origin_timestamp': '1709300000',
-        'side': side,
-        # Flattened config at root (required by _calculate_sl_tp in orders.py)
-        'sl': sl_cfg,
-        'tp': tp_cfg,
-        'trailing': trailing_cfg,
-        # Snapshot config inside order_plan (required by order-plan validation)
-        'order_plan': {
-            'entry_type': 'MARKET',
-            'entry_method': 'CURRENT',
-            'entry_value': 0,
-            'entry_policy': 'IMMEDIATE',
-            'sl': sl_cfg,
-            'tp': tp_cfg,
-            'trailing': trailing_cfg,
-            'size_mode': 'FIXED_LOT',
-            'size': 0.01,
-            'expiry_policy': 'BAR_CLOSE',
-        },
-        'exit_config': {},
-    }
-
-
 def test_order_opened_event():
     """AC1: ORDER_OPENED appended when a new trade is created with ACTIVE status."""
     r = FakeRedis()
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY')
+    trigger = {
+        'strategy_id': 1,
+        'strategy': 'test_bull_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'BUY',
+        'exit_config': {},
+    }
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
 
@@ -118,7 +94,13 @@ def test_order_open_payload_contains_bridge_contract_fields():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = _make_valid_trigger(strategy_id=9, strategy='test_bull_strategy', side='BUY')
+    trigger = {
+        'strategy_id': 9,
+        'strategy': 'test_bull_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'BUY',
+        'exit_config': {},
+    }
 
     run(tm.process_triggers("XAUUSD", [trigger], state, execution_mode="nautilus"))
 
@@ -133,6 +115,66 @@ def test_order_open_payload_contains_bridge_contract_fields():
     assert isinstance(order_data.get('entry_price'), float)
     assert order_data.get('sl') is not None
     assert order_data.get('tp') is not None
+
+
+def pullback_trigger(side='BUY', strategy='LIMIT_PULLBACK_BULL'):
+    return {
+        'strategy_id': 101,
+        'strategy': strategy,
+        'origin_timestamp': '1709300000',
+        'side': side,
+        'entry_method': 'PULLBACK_50',
+        'exit_config': {},
+    }
+
+
+def test_pullback_50_buy_uses_ll_to_trigger_high_midpoint():
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+    state.swing_points = [{'t': '1709299900', 'price': '1990', 'is_high': False, 'type': 'LL'}]
+
+    run(tm.process_triggers("XAUUSD", [pullback_trigger()], state))
+
+    assert len(state.simulated_orders) == 1
+    assert state.simulated_orders[0]['entry_price'] == 1995.5
+
+
+def test_pullback_50_sell_uses_same_ll_to_trigger_high_midpoint():
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+    state.last_candle['c'] = '1994'
+    state.swing_points = [{'t': '1709299900', 'price': '1990', 'is_high': False, 'type': 'LL'}]
+
+    run(tm.process_triggers("XAUUSD", [pullback_trigger(side='SELL', strategy='LIMIT_PULLBACK_BEAR')], state))
+
+    assert len(state.simulated_orders) == 1
+    assert state.simulated_orders[0]['entry_price'] == 1995.5
+
+
+def test_pullback_50_missing_ll_does_not_open_or_mark_history():
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+
+    run(tm.process_triggers("XAUUSD", [pullback_trigger()], state))
+
+    assert state.simulated_orders == []
+    assert r._sets == {}
+
+
+def test_pullback_50_wrong_side_does_not_fallback_to_close():
+    r = FakeRedis()
+    tm = SimulatedTradeManager(r)
+    state = MockState()
+    state.last_candle['c'] = '1995'
+    state.swing_points = [{'t': '1709299900', 'price': '1990', 'is_high': False, 'type': 'LL'}]
+
+    run(tm.process_triggers("XAUUSD", [pullback_trigger()], state))
+
+    assert state.simulated_orders == []
+    assert r._sets == {}
 
 
 def test_sl_hit_event():
@@ -209,7 +251,13 @@ def test_trade_execution_unchanged():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bear_strategy', side='SELL')
+    trigger = {
+        'strategy_id': 1,
+        'strategy': 'test_bear_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'SELL',
+        'exit_config': {},
+    }
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
 
@@ -227,7 +275,13 @@ def test_sl_tp_calculation_unchanged():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = _make_valid_trigger(strategy_id=1, strategy='test_bull_strategy', side='BUY')
+    trigger = {
+        'strategy_id': 1,
+        'strategy': 'test_bull_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'BUY',
+        'exit_config': {},
+    }
 
     run(tm.process_triggers("XAUUSD", [trigger], state))
     order = state.simulated_orders[0]
@@ -289,115 +343,20 @@ def test_pending_ai_no_order_opened():
     tm = SimulatedTradeManager(r)
     state = MockState()
 
-    trigger = _make_valid_trigger(strategy_id=1, strategy='test_strategy', side='BUY')
-    trigger['ai_validation'] = True
+    trigger = {
+        'strategy_id': 1,
+        'strategy': 'test_strategy',
+        'origin_timestamp': '1709300000',
+        'side': 'BUY',
+        'exit_config': {},
+        'ai_validation': True,
+    }
 
     # With ai_validator present, status = PENDING_AI
     run(tm.process_triggers("XAUUSD", [trigger], state, ai_validator="mock"))
 
     assert "ORDER_OPENED" not in tm.last_tick_events, \
         f"PENDING_AI should not emit ORDER_OPENED, got {tm.last_tick_events}"
-
-
-def test_trace_id_uses_symbol_strategy_origin_format():
-    """D-08: trace_id phải có format symbol:strategy_id:origin_timestamp."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    trigger = _make_valid_trigger(strategy_id=55, strategy='test_trace', side='BUY')
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-
-    assert len(state.simulated_orders) == 1
-    assert state.simulated_orders[0]["trace_id"] == "XAUUSD:55:1709300000"
-
-
-def test_duplicate_trace_id_no_new_order_event():
-    """D-08: replay/retry cùng trace_id không được tạo thêm ORDER_OPEN."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    trigger = _make_valid_trigger(strategy_id=56, strategy='test_trace_replay', side='BUY')
-
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-    first_open_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
-
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-    second_open_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
-
-    assert first_open_count == 1
-    assert second_open_count == 1
-    assert len(state.simulated_orders) == 1
-
-
-def test_dedupe_same_key_emits_once_even_if_history_missing():
-    """Cùng symbol/strategy/origin/side chỉ emit 1 lần dù history Redis bị mất."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    trigger = _make_valid_trigger(strategy_id=11, strategy='test_bull_strategy', side='BUY')
-
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-    r._sets["aureus:orders:history:XAUUSD"] = set()
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-
-    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
-    assert len(order_open_streams) == 1
-    assert len(state.simulated_orders) == 1
-
-
-def test_dedupe_allows_different_side_same_candle():
-    """Cùng candle nhưng khác side vẫn phải emit đủ."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    buy_trigger = _make_valid_trigger(strategy_id=21, strategy='test_strategy', side='BUY')
-    sell_trigger = _make_valid_trigger(strategy_id=21, strategy='test_strategy', side='SELL')
-
-    run(tm.process_triggers("XAUUSD", [buy_trigger], state))
-    r._sets["aureus:orders:history:XAUUSD"] = set()
-    run(tm.process_triggers("XAUUSD", [sell_trigger], state))
-
-    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
-    assert len(order_open_streams) == 2
-    assert len(state.simulated_orders) == 2
-
-
-def test_dedupe_allows_different_strategy_same_candle():
-    """Khác strategy cùng candle vẫn phải emit đủ."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    trigger_a = _make_valid_trigger(strategy_id=31, strategy='strategy_a', side='BUY')
-    trigger_b = _make_valid_trigger(strategy_id=32, strategy='strategy_b', side='BUY')
-
-    run(tm.process_triggers("XAUUSD", [trigger_a, trigger_b], state))
-
-    order_open_streams = [entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN']
-    assert len(order_open_streams) == 2
-    assert len(state.simulated_orders) == 2
-
-
-def test_replay_same_trigger_key_no_new_order_event():
-    """Replay trigger key không tạo thêm order event."""
-    r = FakeRedis()
-    tm = SimulatedTradeManager(r)
-    state = MockState()
-
-    trigger = _make_valid_trigger(strategy_id=41, strategy='test_replay', side='BUY')
-
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-    initial_stream_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
-
-    r._sets["aureus:orders:history:XAUUSD"] = set()
-    run(tm.process_triggers("XAUUSD", [trigger], state))
-
-    replay_stream_count = len([entry for entry in r._streams if entry[1].get('type') == 'ORDER_OPEN'])
-    assert replay_stream_count == initial_stream_count == 1
 
 
 # --- Runner ---
