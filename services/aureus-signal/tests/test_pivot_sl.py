@@ -110,12 +110,31 @@ class TestCalculateSlTpPivotPoint:
         assert sl is not None
         assert sl > 2020.0  # SL phải trên pivot
 
-    def test_pivot_point_no_pivot_fallbacks_to_fixed_pips(self):
-        """Không tìm thấy pivot → fallback FIXED_PIPS."""
+    def test_pivot_point_no_pivot_rejects_without_fixed_pips_fallback(self):
+        """Không tìm thấy pivot → không fallback FIXED_PIPS."""
         self.state.swing_points = []
         config = {"sl": {"type": "PIVOT_POINT"}, "tp": {"type": "RR", "value": 2.0}}
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
-        assert sl is not None
+        assert sl is None
+        assert tp is None
+
+    def test_pivot_point_pivot_index_applies_after_filter(self):
+        """pivot_index=2 chọn candidate hợp lệ thứ hai sau filter 5 nến."""
+        self.state.swing_points = [
+            {"t": 700, "price": 1980.0, "is_high": False, "type": "LL", "broken": False},
+            {"t": 800, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
+            {"t": 900, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0, "pivot_index": 2}, "tp": {"type": "RR", "value": 2.0}}
+        recent_candles = [
+            {"h": 2015, "l": 1998},
+            {"h": 2016, "l": 2001},
+            {"h": 2017, "l": 2002},
+            {"h": 2018, "l": 2003},
+            {"h": 2019, "l": 2004},
+        ]
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        assert sl == 1980.0
         assert tp is not None
 
     def test_pivot_point_zero_offset(self):

@@ -175,6 +175,10 @@ class TestPhase10OrderAndStatePersistence(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(state.order_rejections), 1)
         rejection = state.order_rejections[0]
         self.assertEqual(rejection["reason_code"], "ORDER_PLAN_INCOMPLETE")
+        self.assertEqual(rejection["trace_id"], "XAUUSD:S1:1710000058")
+        self.assertEqual(rejection["symbol"], "XAUUSD")
+        self.assertEqual(rejection["strategy_id"], "S1")
+        self.assertEqual(rejection["decision_phase"], "process_triggers")
         self.assertIn("size_value", rejection["missing_order_plan_keys"])
         # Trigger lacks sl/tp config → tp_value stays missing; sl_value gets enriched from default FIXED_PIPS
         self.assertNotIn("sl_value", rejection["missing_order_plan_keys"])
