@@ -6,11 +6,15 @@ import os
 import sys
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.live_engine import run_signal_engine
+from engine.state import SymbolState
+from engine.strategies.registry import StrategyRegistry
+from engine.strategies.template import TemplateStrategy
 from engine.strategy_executor import run_strategy_executor
 from engine.strategies.seed_strategies import seed_system_strategies
 from scripts.strategy_seed_sync_dryrun import _run
@@ -497,6 +501,50 @@ async def test_trend_cont_limit_seed_declarations_match_runtime_contract(monkeyp
         assert execution["trailing"]["type"] in {"SWING_LOW", "SWING_HIGH"}
         assert required_tag in sequence_tags
         assert exit_tag in execution["early_exits"]
+
+
+def test_trend_cont_bull_and_limit_bull_match_same_snapshot_before_executor(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    asyncio.run(seed_system_strategies(pool))
+
+    registry = StrategyRegistry()
+    for name in ("TREND_CONT_BULL", "TREND_CONT_LIMIT_BULL"):
+        config = dict(conn.templates[name]["config"])
+        config["id"] = conn.templates[name]["id"]
+        config["name"] = name
+        config["min_score_threshold"] = conn.templates[name]["min_score"]
+        assert registry.register(TemplateStrategy(config))
+
+    state = SymbolState("XAUUSD")
+    state.log_signal_normalize.append(
+        {
+            "t": 1000,
+            "signals": {
+                "events": [
+                    {"tag": "choch_up", "price": 2400.0},
+                ]
+            },
+        }
+    )
+    df = pd.DataFrame([{"t": 1000}])
+
+    accepted = registry.evaluate_all(df, {}, state)
+    accepted_by_name = {item["strategy"]: item for item in accepted}
+
+    assert set(accepted_by_name) == {"TREND_CONT_BULL", "TREND_CONT_LIMIT_BULL"}
+    assert accepted_by_name["TREND_CONT_BULL"]["side"] == "BUY"
+    assert accepted_by_name["TREND_CONT_BULL"]["entry_type"] == "MARKET"
+    assert accepted_by_name["TREND_CONT_BULL"]["order_plan"]["entry_method"] == "CURRENT"
+    assert accepted_by_name["TREND_CONT_LIMIT_BULL"]["side"] == "BUY"
+    assert accepted_by_name["TREND_CONT_LIMIT_BULL"]["entry_type"] == "LIMIT"
+    assert accepted_by_name["TREND_CONT_LIMIT_BULL"]["order_plan"]["entry_method"] == "ENTRY_PIVOT_LIMIT"
+    assert accepted_by_name["TREND_CONT_LIMIT_BULL"]["order_plan"]["entry_value"] == "PIVOT"
+    assert registry.get_rejections() == []
+    assert state.strategy_progress["TREND_CONT_BULL"]["triggered_t"] == 1000
+    assert state.strategy_progress["TREND_CONT_LIMIT_BULL"]["triggered_t"] == 1000
 
 
 def test_runbook_contract():
