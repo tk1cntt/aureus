@@ -58,6 +58,28 @@ class MockState:
         self.atr = 5.0
 
 
+def complete_order_plan(entry_method='CURRENT'):
+    return {
+        'entry_type': 'MARKET',
+        'entry_method': entry_method,
+        'entry_value': 0,
+        'entry_policy': 'IMMEDIATE',
+        'size_mode': 'FIXED_UNITS',
+        'size': 0.01,
+        'sl': {'mode': 'FIXED_PIPS', 'value': 500},
+        'tp': {'mode': 'RR', 'value': 2.0},
+    }
+
+
+def complete_trigger_fields(entry_method='CURRENT'):
+    plan = complete_order_plan(entry_method)
+    return {
+        'order_plan': plan,
+        'sl': plan['sl'],
+        'tp': plan['tp'],
+    }
+
+
 # --- AC1: Tracking ---
 
 def test_init_has_last_tick_events():
@@ -79,6 +101,7 @@ def test_order_opened_event():
         'strategy': 'test_bull_strategy',
         'origin_timestamp': '1709300000',
         'side': 'BUY',
+        **complete_trigger_fields(),
         'exit_config': {},
     }
 
@@ -99,6 +122,7 @@ def test_order_open_payload_contains_bridge_contract_fields():
         'strategy': 'test_bull_strategy',
         'origin_timestamp': '1709300000',
         'side': 'BUY',
+        **complete_trigger_fields(),
         'exit_config': {},
     }
 
@@ -124,6 +148,7 @@ def pullback_trigger(side='BUY', strategy='LIMIT_PULLBACK_BULL'):
         'origin_timestamp': '1709300000',
         'side': side,
         'entry_method': 'PULLBACK_50',
+        **complete_trigger_fields('PULLBACK_50'),
         'exit_config': {},
     }
 
@@ -140,17 +165,17 @@ def test_pullback_50_buy_uses_ll_to_trigger_high_midpoint():
     assert state.simulated_orders[0]['entry_price'] == 1995.5
 
 
-def test_pullback_50_sell_uses_same_ll_to_trigger_high_midpoint():
+def test_pullback_50_sell_uses_hh_to_trigger_low_midpoint():
     r = FakeRedis()
     tm = SimulatedTradeManager(r)
     state = MockState()
-    state.last_candle['c'] = '1994'
-    state.swing_points = [{'t': '1709299900', 'price': '1990', 'is_high': False, 'type': 'LL'}]
+    state.last_candle['c'] = '2003'
+    state.swing_points = [{'t': '1709299900', 'price': '2010', 'is_high': True, 'type': 'HH'}]
 
     run(tm.process_triggers("XAUUSD", [pullback_trigger(side='SELL', strategy='LIMIT_PULLBACK_BEAR')], state))
 
     assert len(state.simulated_orders) == 1
-    assert state.simulated_orders[0]['entry_price'] == 1995.5
+    assert state.simulated_orders[0]['entry_price'] == 2004.0
 
 
 def test_pullback_50_missing_ll_does_not_open_or_mark_history():
@@ -256,6 +281,7 @@ def test_trade_execution_unchanged():
         'strategy': 'test_bear_strategy',
         'origin_timestamp': '1709300000',
         'side': 'SELL',
+        **complete_trigger_fields(),
         'exit_config': {},
     }
 
@@ -280,6 +306,7 @@ def test_sl_tp_calculation_unchanged():
         'strategy': 'test_bull_strategy',
         'origin_timestamp': '1709300000',
         'side': 'BUY',
+        **complete_trigger_fields(),
         'exit_config': {},
     }
 
