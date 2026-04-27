@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-27 - Completed quick task 260427-wky: Fix strategy executor None entry_price crash after rejected order entry
+Last activity: 2026-04-27 - Completed quick task 260427-wwv: Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations
 
 ## Architecture Decision
 
@@ -84,6 +84,7 @@ Last activity: 2026-04-27 - Completed quick task 260427-wky: Fix strategy execut
 | 260426-ayf | Update cách tính htf_trend trong services\aureus-signal\engine\signals\trend.py áp dụng các phương pháp score đang có trong services\aureus-signal\engine\signals\trend.py để nó nhạy hơn với thị trường. K dùng ema_200 nữa. Đưa ra phương án tốt nhất | 2026-04-26 | 948c4d9 | Completed | [260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi](./quick/260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi/) |
 | 260427-v5g | Implement các phần TODO và các phần chưa hoàn thiện ở services\aureus-signal\engine\orders.py | 2026-04-27 | 87f546e | Needs Review | [260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-](./quick/260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-/) |
 | 260427-wky | Fix strategy executor None entry_price crash after rejected order entry | 2026-04-27 | 09f5cb4 | Completed | [260427-wky-fix-strategy-executor-none-entry-price-c](./quick/260427-wky-fix-strategy-executor-none-entry-price-c/) |
+| 260427-wwv | Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations | 2026-04-27 | f332187 | Verified | [260427-wwv-validate-and-fix-trend-cont-limit-bull-a](./quick/260427-wwv-validate-and-fix-trend-cont-limit-bull-a/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
