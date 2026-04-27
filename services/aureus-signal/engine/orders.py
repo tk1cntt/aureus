@@ -648,7 +648,7 @@ class SimulatedTradeManager:
         # 1. Stop Loss
         point_size = get_point_size(symbol)
         # Accept both 'type' and 'mode' keys for backward compatibility
-        sl_mode = sl_cfg.get('mode') or sl_cfg.get('type', 'FIXED_PIPS')
+        sl_mode = sl_cfg.get('type', 'FIXED_PIPS')
 
         if sl_mode == 'FIXED_PIPS':
             # Priority: strategy config value > symbols.json sl > default 100
@@ -860,9 +860,9 @@ class SimulatedTradeManager:
                 continue
             ob_type = str(ob.get('ob_type', '')).upper()
             if side == 'BUY' and ob_type == 'BULLISH':
-                return float(ob.get('bottom', fallback))
-            elif side == 'SELL' and ob_type == 'BEARISH':
                 return float(ob.get('top', fallback))
+            elif side == 'SELL' and ob_type == 'BEARISH':
+                return float(ob.get('bottom', fallback))
         logger.warning(f"[orders] OB_EDGE no valid order block for side={side} — order rejected")
         return None
 

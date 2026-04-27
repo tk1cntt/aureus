@@ -28,6 +28,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -50,9 +52,59 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
+                {
+            "name": "TREND_CONT_LIMIT_BULL",
+            "is_active": True,
+            "description": "Trend continuation BUY LIMIT at newest CHOCH LL pivot. Entry method ENTRY_PIVOT_LIMIT.",
+            "min_score": 3.0,
+            "config": {
+                "min_score_threshold": 0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30 }
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "entry_type": "LIMIT",
+                    "entry_method": "ENTRY_PIVOT_LIMIT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1, "pivot_index": 2},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "TREND_CONT_LIMIT_BEAR",
+            "is_active": True,
+            "description": "Trend continuation SELL LIMIT at newest CHOCH HH pivot. Entry method ENTRY_PIVOT_LIMIT.",
+            "min_score": 3.0,
+            "config": {
+                "min_score_threshold": 0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30 }
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "entry_type": "LIMIT",
+                    "entry_method": "ENTRY_PIVOT_LIMIT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1, "pivot_index": 2},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
                     "early_exits": ["choch_up"]
@@ -73,12 +125,12 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
-                    "entry_type": "MARKET",
-                    "entry_method": "CURRENT",
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_down"]
@@ -99,12 +151,12 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
-                    "entry_type": "MARKET",
-                    "entry_method": "CURRENT",
                     "trailing": {"type": "BREAKEVEN", "activation_pips": 300},
                     "capital_risk_pct": 0.5,
                     "early_exits": ["choch_up"]
@@ -124,6 +176,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -147,6 +201,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -171,6 +227,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -195,6 +253,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -224,6 +284,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "BUY",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -253,6 +315,8 @@ async def seed_system_strategies(pool=None, conn=None):
                 ],
                 "trade_execution": {
                     "direction": "SELL",
+                    "entry_type": "MARKET",
+                    "entry_method": "CURRENT",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
                     "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
@@ -327,9 +391,9 @@ async def seed_system_strategies(pool=None, conn=None):
                 "trade_execution": {
                     "direction": "BUY",
                     "entry_type": "LIMIT",
+                    "entry_method": "OB_EDGE",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
-                    "entry_method": "OB_EDGE",
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_LOW", "activation_pips": 300},
@@ -352,9 +416,9 @@ async def seed_system_strategies(pool=None, conn=None):
                 "trade_execution": {
                     "direction": "SELL",
                     "entry_type": "LIMIT",
+                    "entry_method": "OB_EDGE",
                     "size_mode": "RISK_FIXED_AMOUNT",
                     "size_value": 50.0,
-                    "entry_method": "OB_EDGE",
                     "sl": {"type": "FIXED_PIPS"},
                     "tp": {"type": "RR_RATIO", "value": 1.5},
                     "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
