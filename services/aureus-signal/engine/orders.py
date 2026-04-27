@@ -250,6 +250,34 @@ class SimulatedTradeManager:
             entry_value = order_plan_snapshot.get("entry_value")
             computed_entry = self._calculate_entry_price(side, state_obj, entry_method, entry_value)
 
+            if computed_entry is None:
+                reason_payload = {
+                    "trace_id": trace_id,
+                    "symbol": symbol,
+                    "strategy_id": strat_id,
+                    "strategy_name": strategy_name,
+                    "decision_phase": "process_triggers",
+                    "status": "REJECTED",
+                    "reason_code": "ORDER_PLAN_INCOMPLETE",
+                    "entry_method": entry_method,
+                    "entry_error": "ENTRY_PRICE_UNAVAILABLE",
+                    "origin_timestamp": int(origin_t),
+                    "t": int(state_obj.last_candle.get("t", origin_t)),
+                }
+                self._persist_rejection(state_obj, reason_payload)
+                await self.r.xadd(
+                    f"aureus:stream:{symbol}:orders",
+                    {
+                        "type": "ORDER_REJECTED",
+                        "data": json.dumps(reason_payload),
+                    },
+                )
+                logger.warning(
+                    f"[{symbol}] [process_triggers] Trigger {strategy_name}: entry_method={entry_method} "
+                    f"could not calculate entry price for {trace_id}; order rejected"
+                )
+                continue
+
             # 3. Calculate SL/TP using computed entry_price
             # config is pulled directly from t because registry.py flattens sl/tp configs onto the root of the map
             sl, tp = self._calculate_sl_tp(
@@ -653,6 +681,9 @@ class SimulatedTradeManager:
                     except (TypeError, ValueError):
                         continue
 
+            pivot_index = int(sl_cfg.get('pivot_index', 1) or 1)
+            pivot_index = max(1, pivot_index)
+            valid_pivots: List[float] = []
             for pivot_price in pivots:
                 if len(lows) >= 5 and len(highs) >= 5:
                     if 'BUY' in side:
@@ -669,17 +700,17 @@ class SimulatedTradeManager:
                                 f"because max(high_5)={max(highs)} >= pivot"
                             )
                             continue
-                selected_pivot = pivot_price
-                break
+                valid_pivots.append(pivot_price)
+
+            if len(valid_pivots) >= pivot_index:
+                selected_pivot = valid_pivots[pivot_index - 1]
 
             if selected_pivot is None:
-                fallback_pips = offset_pips if offset_pips > 0 else get_default_sl_pips(symbol)
-                fallback_dist = fallback_pips * point_size
-                sl = (entry - fallback_dist) if 'BUY' in side else (entry + fallback_dist)
                 logger.warning(
-                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid pivot after 5-candle filter, "
-                    f"fallback to FIXED_PIPS (distance={fallback_pips} pips, sl={sl})"
+                    f"[{strategy_name}] [{symbol}] PIVOT_POINT SL: no valid pivot after 5-candle filter "
+                    f"for pivot_index={pivot_index}; order rejected"
                 )
+                return None, None
             else:
                 if 'BUY' in side:
                     sl = selected_pivot - offset_distance
@@ -769,14 +800,13 @@ class SimulatedTradeManager:
         self, side: str, state_obj: Any,
         entry_method: str = "CURRENT",
         entry_value: Any = None,
-    ) -> float:
-        """Tính entry price theo phương án được config.
-
-        Fallback về current candle close nếu phương án không tính được.
-        """
+    ) -> Optional[float]:
+        """Tính entry price theo phương án được config."""
         current_price = float(state_obj.last_candle['c'])
         method = str(entry_method or "CURRENT").upper()
 
+        if method == "CURRENT":
+            return current_price
         if method == "PULLBACK_50":
             return self._entry_pullback_50(side, state_obj, current_price)
         elif method == "OB_EDGE":
@@ -785,20 +815,46 @@ class SimulatedTradeManager:
             return self._entry_ema_touch(side, state_obj, entry_value, current_price)
         elif method == "FIXED_OFFSET":
             return self._entry_fixed_offset(side, state_obj, entry_value, current_price)
+        elif method == "ENTRY_PIVOT_LIMIT":
+            return self._entry_pivot_limit(side, state_obj, current_price)
 
-        return current_price  # CURRENT hoặc unknown
+        logger.warning(f"[orders] Unknown entry_method '{entry_method}' — order rejected")
+        return None
 
-    def _entry_pullback_50(self, side: str, state_obj: Any, fallback: float) -> float:
-        """50% retracement của candle trigger (midpoint high-low)."""
+    def _entry_pullback_50(self, side: str, state_obj: Any, fallback: float) -> Optional[float]:
+        """50% retracement từ swing point hợp lệ tới trigger candle."""
         candle = state_obj.last_candle
-        h, l = float(candle['h']), float(candle['l'])
-        return l + (h - l) * 0.5
+        current = float(candle['c'])
+        is_buy = side == 'BUY'
+        pivot_type = 'LL' if is_buy else 'HH'
+        pivot_is_high = not is_buy
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            try:
+                pivot = float(sp['price'])
+                edge = float(candle['h']) if is_buy else float(candle['l'])
+            except (TypeError, ValueError, KeyError):
+                continue
+            entry = (pivot + edge) / 2
+            if is_buy and entry >= current:
+                logger.warning(f"[orders] PULLBACK_50 BUY entry={entry} is not below current={current} — order rejected")
+                return None
+            if not is_buy and entry <= current:
+                logger.warning(f"[orders] PULLBACK_50 SELL entry={entry} is not above current={current} — order rejected")
+                return None
+            return entry
+        logger.warning(f"[orders] PULLBACK_50 no valid {pivot_type} pivot — order rejected")
+        return None
 
     def _entry_ob_edge(self, side: str, state_obj: Any, fallback: float) -> float:
         """Cạnh của OB chưa mitigate gần nhất. BUY → bottom, SELL → top."""
         obs = getattr(state_obj, 'obs', [])
         if not obs:
-            return fallback
+            logger.warning(f"[orders] OB_EDGE has no order blocks — order rejected")
+            return None
         for ob in reversed(obs):
             if ob.get('mitigated') or ob.get('broken'):
                 continue
@@ -807,7 +863,8 @@ class SimulatedTradeManager:
                 return float(ob.get('bottom', fallback))
             elif side == 'SELL' and ob_type == 'BEARISH':
                 return float(ob.get('top', fallback))
-        return fallback
+        logger.warning(f"[orders] OB_EDGE no valid order block for side={side} — order rejected")
+        return None
 
     def _entry_ema_touch(self, side: str, state_obj: Any, period_value: Any, fallback: float) -> float:
         """Giá EMA tại period được chỉ định."""
@@ -822,10 +879,14 @@ class SimulatedTradeManager:
         emas = getattr(state_obj, 'emas', {})
         ema_data = emas.get(period)
         if ema_data is None:
-            return fallback
+            logger.warning(f"[orders] EMA_TOUCH missing EMA period={period} — order rejected")
+            return None
         # ema_data có thể là dict {'value': ..., 'slope': ...} hoặc direct float
         ema_val = ema_data.get('value') if isinstance(ema_data, dict) else ema_data
-        return float(ema_val) if ema_val is not None else fallback
+        if ema_val is None:
+            logger.warning(f"[orders] EMA_TOUCH EMA period={period} has no value — order rejected")
+            return None
+        return float(ema_val)
 
     def _entry_fixed_offset(self, side: str, state_obj: Any, pips_value: Any, fallback: float) -> float:
         """Current price +/- N pips. BUY trừ xuống, SELL cộng lên."""
@@ -838,7 +899,29 @@ class SimulatedTradeManager:
             except (ValueError, TypeError):
                 pass
         if pips is None or pips <= 0:
-            return fallback
+            logger.warning(f"[orders] FIXED_OFFSET invalid entry_value={pips_value} — order rejected")
+            return None
         point_size = get_point_size(state_obj.symbol)
         offset = pips * point_size
         return fallback - offset if side == 'BUY' else fallback + offset
+
+    def _entry_pivot_limit(self, side: str, state_obj: Any, fallback: float) -> Optional[float]:
+        """BUY dùng LL chưa broken dưới current; SELL dùng HH chưa broken trên current."""
+        is_buy = side == 'BUY'
+        pivot_type = 'LL' if is_buy else 'HH'
+        pivot_is_high = not is_buy
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            try:
+                price = float(sp['price'])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if is_buy and price < fallback:
+                return price
+            if not is_buy and price > fallback:
+                return price
+        logger.warning(f"[orders] ENTRY_PIVOT_LIMIT no valid {pivot_type} pivot for side={side} — order rejected")
+        return None
