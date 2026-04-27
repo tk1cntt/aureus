@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-27 - Completed quick task 260427-v5g: Implement các phần TODO và các phần chưa hoàn thiện ở services\aureus-signal\engine\orders.py
+Last activity: 2026-04-27 - Completed quick task 260427-wky: Fix strategy executor None entry_price crash after rejected order entry
 
 ## Architecture Decision
 
@@ -83,6 +83,7 @@ Last activity: 2026-04-27 - Completed quick task 260427-v5g: Implement các ph�
 | 260425-vqn | Update file mql5\AureusProvider.mq5, chỉ nhận order từ gateway gửi sang với các symbol được khai báo ở danh sách InpSymbols | 2026-04-25 | 2fadb8e | Completed | [260425-vqn-update-file-mql5-aureusprovider-mq5-chi-](./quick/260425-vqn-update-file-mql5-aureusprovider-mq5-chi-/) |
 | 260426-ayf | Update cách tính htf_trend trong services\aureus-signal\engine\signals\trend.py áp dụng các phương pháp score đang có trong services\aureus-signal\engine\signals\trend.py để nó nhạy hơn với thị trường. K dùng ema_200 nữa. Đưa ra phương án tốt nhất | 2026-04-26 | 948c4d9 | Completed | [260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi](./quick/260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi/) |
 | 260427-v5g | Implement các phần TODO và các phần chưa hoàn thiện ở services\aureus-signal\engine\orders.py | 2026-04-27 | 87f546e | Needs Review | [260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-](./quick/260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-/) |
+| 260427-wky | Fix strategy executor None entry_price crash after rejected order entry | 2026-04-27 | 09f5cb4 | Completed | [260427-wky-fix-strategy-executor-none-entry-price-c](./quick/260427-wky-fix-strategy-executor-none-entry-price-c/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
