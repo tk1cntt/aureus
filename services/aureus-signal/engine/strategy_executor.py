@@ -238,6 +238,48 @@ async def queue_ai_audit_task(ai_queue, validator, symbol, df, state, order):
         logger.error(f"[{symbol}] [queue_ai_audit_task] Error: {e}")
 
 
+async def prepare_and_publish_strategy_match(
+    redis_client,
+    symbol: str,
+    res: dict,
+    payload: dict,
+    signals_snapshot: dict,
+    executor_state,
+    trade_manager,
+    recent_candles,
+    publish_strategy_match,
+) -> bool:
+    order_plan = res.get('order_plan', {})
+    entry_method = order_plan.get('entry_method', 'CURRENT')
+    entry_value = order_plan.get('entry_value')
+    _side = res.get('side', 'BUY')
+    computed_ep = trade_manager._calculate_entry_price(_side, executor_state, entry_method, entry_value)
+    if computed_ep is None:
+        strategy_name = res.get('strategy') or res.get('strategy_id') or 'UNKNOWN_STRATEGY'
+        logger.warning(
+            f"[EXECUTOR][{symbol}] ENTRY_PRICE_UNAVAILABLE: skipping strategy match "
+            f"strategy={strategy_name} entry_method={entry_method}"
+        )
+        return False
+    abs_sl, abs_tp = trade_manager._calculate_sl_tp(
+        res,
+        executor_state,
+        res,
+        entry_price_override=computed_ep,
+        recent_candles=recent_candles,
+    )
+    res['sl_absolute'] = abs_sl
+    res['tp_absolute'] = abs_tp
+    # MT5 will recalculate TP from real entry using this ratio
+    tp_ratio = order_plan.get('tp_rr_ratio') or trade_manager._get_tp_rr_ratio(res)
+    if tp_ratio is not None:
+        res['tp_rr_ratio'] = tp_ratio
+    res['entry_price'] = float(computed_ep)
+    res['indicator_snapshot'] = payload.get("indicator_snapshot") if isinstance(payload.get("indicator_snapshot"), dict) else {}
+    await publish_strategy_match(redis_client, symbol, res, active_signals=signals_snapshot)
+    return True
+
+
 # --- Main Executor Loop ---
 
 async def run_strategy_executor(db_pool=None, redis_client=None):
@@ -626,28 +668,17 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         if strategy_results:
                             from engine.signal_event_publisher import publish_strategy_match
                             for res in strategy_results:
-                                # SL/TP configs are propagated to the root of res by registry.py
-                                order_plan = res.get('order_plan', {})
-                                entry_method = order_plan.get('entry_method', 'CURRENT')
-                                entry_value = order_plan.get('entry_value')
-                                _side = res.get('side', 'BUY')
-                                computed_ep = trade_manager._calculate_entry_price(_side, executor_state, entry_method, entry_value)
-                                abs_sl, abs_tp = trade_manager._calculate_sl_tp(
+                                await prepare_and_publish_strategy_match(
+                                    r,
+                                    symbol,
                                     res,
+                                    payload,
+                                    signals_snapshot,
                                     executor_state,
-                                    res,
-                                    entry_price_override=computed_ep,
-                                    recent_candles=recent_candles,
+                                    trade_manager,
+                                    recent_candles,
+                                    publish_strategy_match,
                                 )
-                                res['sl_absolute'] = abs_sl
-                                res['tp_absolute'] = abs_tp
-                                # MT5 will recalculate TP from real entry using this ratio
-                                tp_ratio = order_plan.get('tp_rr_ratio') or trade_manager._get_tp_rr_ratio(res)
-                                if tp_ratio is not None:
-                                    res['tp_rr_ratio'] = tp_ratio
-                                res['entry_price'] = float(computed_ep)
-                                res['indicator_snapshot'] = payload.get("indicator_snapshot") if isinstance(payload.get("indicator_snapshot"), dict) else {}
-                                await publish_strategy_match(r, symbol, res, active_signals=signals_snapshot)
 
                         if execution_mode == "simulated":
                             candle_data = {
