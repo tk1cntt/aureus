@@ -20,8 +20,12 @@ CREATE TABLE IF NOT EXISTS aureus_trade_journal (
     context_filters JSONB,
     origin_timestamp TIMESTAMP WITH TIME ZONE,
     
-    -- Order details (filled at MT5 execution)
+    -- Order details (pending placement and filled MT5 execution)
     ticket          BIGINT,
+    pending_order_id BIGINT,
+    entry_deal_ticket BIGINT,
+    cmd_id          TEXT,
+    mt5_comment     TEXT,
     entry_price     DOUBLE PRECISION,
     entry_time      TIMESTAMP WITH TIME ZONE,
     position_id     BIGINT,
@@ -53,6 +57,9 @@ CREATE INDEX idx_journal_symbol ON aureus_trade_journal(symbol);
 CREATE INDEX idx_journal_status ON aureus_trade_journal(status);
 CREATE INDEX idx_journal_created_at ON aureus_trade_journal(created_at DESC);
 CREATE INDEX idx_journal_result ON aureus_trade_journal(result);
+CREATE INDEX idx_journal_pending_order_id ON aureus_trade_journal(pending_order_id);
+CREATE INDEX idx_journal_entry_deal_ticket ON aureus_trade_journal(entry_deal_ticket);
+CREATE INDEX idx_journal_cmd_id ON aureus_trade_journal(cmd_id);
 
 -- GIN indexes for JSONB containment queries
 CREATE INDEX idx_journal_active_signals ON aureus_trade_journal USING GIN(active_signals);

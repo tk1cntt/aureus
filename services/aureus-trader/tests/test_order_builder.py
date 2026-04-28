@@ -90,7 +90,14 @@ class TestBuildOrderCommand:
         assert "missing_data_policy" not in cmd
         assert "score_version" not in cmd
         assert "signal_schema_version" not in cmd
-        assert "trace_id" not in cmd
+        assert cmd["trace_id"] == "trace-123"
+
+    def test_forward_top_level_trace_id(self):
+        event = _make_match_event({"trace_id": "trace-top-level"})
+
+        cmd = build_order_command(event)
+
+        assert cmd["trace_id"] == "trace-top-level"
 
     def test_forward_conditional_execution_fields_when_present(self):
         event = _make_match_event(

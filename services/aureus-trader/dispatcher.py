@@ -155,69 +155,18 @@ class OrderDispatcher:
                     await self._handle_max_retries(order)
                     return
 
-                if final.get("type") == "ORDER_OPENED":
+                if final.get("type") in ("ORDER_OPENED", "ORDER_PENDING_PLACED", "ORDER_FILLED"):
                     logger.info(
-                        f"Order executed: {cmd_id} ticket={final.get('ticket')}"
+                        f"Order result: {cmd_id} type={final.get('type')} ticket={final.get('ticket')}"
                     )
-                    # Journal: record execution — inject trace_id from order
                     if self.journal:
-                        trace_id = order.get("trace_id")
-                        strategy_event = order.get("strategy_event")
-                        strategy_data = {}
-                        if isinstance(strategy_event, dict):
-                            strategy_payload = dict(strategy_event)
-                            strategy_data = strategy_payload.get("data") if isinstance(strategy_payload.get("data"), dict) else {}
-                            if trace_id and not strategy_payload.get("trace_id"):
-                                strategy_payload["trace_id"] = trace_id
-                            if trace_id and not strategy_data.get("trace_id"):
-                                strategy_data["trace_id"] = trace_id
-                            if strategy_data and strategy_payload.get("data") is not strategy_data:
-                                strategy_payload["data"] = strategy_data
-                            await self.journal.on_strategy_match(strategy_payload)
-                            if not trace_id:
-                                trace_id = (
-                                    strategy_payload.get("trace_id")
-                                    or strategy_data.get("trace_id")
-                                )
-                        if not trace_id:
-                            trace_id = final.get("trace_id")
-                        if trace_id:
-                            final["trace_id"] = trace_id
-
-                        fallback_signal_snapshot = order.get("signal_snapshot") if isinstance(order.get("signal_snapshot"), dict) else None
-                        if fallback_signal_snapshot is None and isinstance(strategy_data, dict):
-                            strategy_snapshot = strategy_data.get("signal_snapshot")
-                            if isinstance(strategy_snapshot, dict):
-                                fallback_signal_snapshot = strategy_snapshot
-                            else:
-                                strategy_active_signals = strategy_data.get("active_signals")
-                                strategy_context_filters = strategy_data.get("context_filters")
-                                if strategy_active_signals is not None or strategy_context_filters is not None:
-                                    fallback_signal_snapshot = {}
-                                    if strategy_active_signals is not None:
-                                        fallback_signal_snapshot["active_signals"] = strategy_active_signals
-                                    if strategy_context_filters is not None:
-                                        fallback_signal_snapshot["context_filters"] = strategy_context_filters
-
-                        if isinstance(fallback_signal_snapshot, dict) and not isinstance(final.get("signal_snapshot"), dict):
-                            final["signal_snapshot"] = fallback_signal_snapshot
-                        for key in (
-                            "score_total",
-                            "score_breakdown",
-                            "weights_snapshot",
-                            "missing_data_policy",
-                            "score_version",
-                            "signal_schema_version",
-                        ):
-                            if final.get(key) is None and order.get(key) is not None:
-                                final[key] = order.get(key)
-                        if final.get("time") is None and final.get("open_time") is None:
-                            final["open_time"] = _normalize_mt5_unix_time(final.get("t"))
-                        if final.get("time") is not None:
-                            final["time"] = _normalize_mt5_unix_time(final.get("time"))
-                        if final.get("open_time") is not None:
-                            final["open_time"] = _normalize_mt5_unix_time(final.get("open_time"))
-                        await self.journal.on_order_opened(final)
+                        final = await self._prepare_journal_event(order, final)
+                        if final.get("type") == "ORDER_PENDING_PLACED":
+                            await self.journal.on_order_pending_placed(final)
+                        elif final.get("type") == "ORDER_FILLED":
+                            await self.journal.on_order_filled(final)
+                        else:
+                            await self.journal.on_order_opened(final)
                     return
 
                 if is_retryable(final):
@@ -249,7 +198,7 @@ class OrderDispatcher:
                 try:
                     event = json.loads(message["data"])
 
-                    # Journal: record trade closure (ORDER_CLOSED events don't have cmd_id)
+                    # Journal: record trade lifecycle events without blocking event resolution.
                     if event.get("type") in ("ORDER_CLOSED", "ORDER_CLOSED_PARTIAL"):
                         if self.journal:
                             if event.get("close_time") is None and event.get("time") is None:
@@ -260,8 +209,13 @@ class OrderDispatcher:
                                 event["time"] = _normalize_mt5_unix_time(event.get("time"))
                             if event.get("close_time") is not None:
                                 event["close_time"] = _normalize_mt5_unix_time(event.get("close_time"))
-                            # Fire-and-forget: don't block event resolution
                             task = asyncio.create_task(self.journal.on_order_closed(event))
+                            task.add_done_callback(self._log_journal_task_result)
+                    elif event.get("type") == "ORDER_FILLED":
+                        if self.journal:
+                            if event.get("time") is not None:
+                                event["time"] = _normalize_mt5_unix_time(event.get("time"))
+                            task = asyncio.create_task(self.journal.on_order_filled(event))
                             task.add_done_callback(self._log_journal_task_result)
 
                     cmd_id = event.get("cmd_id")
@@ -277,6 +231,64 @@ class OrderDispatcher:
             logger.info("Event listener cancelled")
         finally:
             await pubsub.unsubscribe(EVENTS_CHANNEL)
+
+    async def _prepare_journal_event(self, order: dict, final: dict) -> dict:
+        trace_id = order.get("trace_id")
+        strategy_event = order.get("strategy_event")
+        strategy_data = {}
+        if isinstance(strategy_event, dict):
+            strategy_payload = dict(strategy_event)
+            strategy_data = strategy_payload.get("data") if isinstance(strategy_payload.get("data"), dict) else {}
+            if trace_id and not strategy_payload.get("trace_id"):
+                strategy_payload["trace_id"] = trace_id
+            if trace_id and not strategy_data.get("trace_id"):
+                strategy_data["trace_id"] = trace_id
+            if strategy_data and strategy_payload.get("data") is not strategy_data:
+                strategy_payload["data"] = strategy_data
+            await self.journal.on_strategy_match(strategy_payload)
+            if not trace_id:
+                trace_id = strategy_payload.get("trace_id") or strategy_data.get("trace_id")
+        if not trace_id:
+            trace_id = final.get("trace_id")
+        if trace_id:
+            final["trace_id"] = trace_id
+        if order.get("cmd_id") and not final.get("cmd_id"):
+            final["cmd_id"] = order.get("cmd_id")
+
+        fallback_signal_snapshot = order.get("signal_snapshot") if isinstance(order.get("signal_snapshot"), dict) else None
+        if fallback_signal_snapshot is None and isinstance(strategy_data, dict):
+            strategy_snapshot = strategy_data.get("signal_snapshot")
+            if isinstance(strategy_snapshot, dict):
+                fallback_signal_snapshot = strategy_snapshot
+            else:
+                strategy_active_signals = strategy_data.get("active_signals")
+                strategy_context_filters = strategy_data.get("context_filters")
+                if strategy_active_signals is not None or strategy_context_filters is not None:
+                    fallback_signal_snapshot = {}
+                    if strategy_active_signals is not None:
+                        fallback_signal_snapshot["active_signals"] = strategy_active_signals
+                    if strategy_context_filters is not None:
+                        fallback_signal_snapshot["context_filters"] = strategy_context_filters
+
+        if isinstance(fallback_signal_snapshot, dict) and not isinstance(final.get("signal_snapshot"), dict):
+            final["signal_snapshot"] = fallback_signal_snapshot
+        for key in (
+            "score_total",
+            "score_breakdown",
+            "weights_snapshot",
+            "missing_data_policy",
+            "score_version",
+            "signal_schema_version",
+        ):
+            if final.get(key) is None and order.get(key) is not None:
+                final[key] = order.get(key)
+        if final.get("time") is None and final.get("open_time") is None:
+            final["open_time"] = _normalize_mt5_unix_time(final.get("t"))
+        if final.get("time") is not None:
+            final["time"] = _normalize_mt5_unix_time(final.get("time"))
+        if final.get("open_time") is not None:
+            final["open_time"] = _normalize_mt5_unix_time(final.get("open_time"))
+        return final
 
     @staticmethod
     def _log_journal_task_result(task: asyncio.Task):
@@ -304,6 +316,7 @@ class OrderDispatcher:
             "tp_rr_ratio",
             "size_mode",
             "risk_amount",
+            "trace_id",
         }
         return {
             key: order[key]

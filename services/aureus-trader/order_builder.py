@@ -70,6 +70,10 @@ def build_order_command(match_event: dict) -> dict:
         "comment": _build_comment(match_event, data),
     }
 
+    trace_id = match_event.get("trace_id") or data.get("trace_id")
+    if trace_id:
+        command["trace_id"] = trace_id
+
     # Forward tp_rr_ratio so MT5 can recalculate TP from actual entry price
     if tp_rr_ratio is not None:
         try:

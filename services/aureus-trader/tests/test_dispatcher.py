@@ -167,6 +167,8 @@ class DummyJournal:
         self.strategy_events = []
         self.opened_events = []
         self.closed_events = []
+        self.pending_events = []
+        self.filled_events = []
 
     async def on_strategy_match(self, event):
         self.strategy_events.append(event)
@@ -178,6 +180,14 @@ class DummyJournal:
 
     async def on_order_closed(self, event):
         self.closed_events.append(event)
+        return True
+
+    async def on_order_pending_placed(self, event):
+        self.pending_events.append(event)
+        return True
+
+    async def on_order_filled(self, event):
+        self.filled_events.append(event)
         return True
 
 
@@ -252,7 +262,84 @@ class TestOrderDispatcherPayloadContract:
             "tp": 2350.0,
             "magic": 10001,
             "comment": "CHOCH_UP",
+            "trace_id": "trace-abc",
         }
+
+
+class TestOrderDispatcherPendingLifecycle:
+    @pytest.mark.asyncio
+    async def test_dispatch_order_records_pending_placed_without_opened(self):
+        from config import TraderConfig
+
+        redis_mock = EventRedisMock()
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        responses = [
+            {"type": "ACK", "cmd_id": "ord-pending-1"},
+            {
+                "type": "ORDER_PENDING_PLACED",
+                "cmd_id": "ord-pending-1",
+                "pending_order_id": 9001,
+                "price": 2320.5,
+                "sl": 2310.0,
+                "tp": 2340.0,
+                "comment": "LIMIT|trace-pen",
+            },
+        ]
+
+        async def fake_wait_for_response(cmd_id, timeout):
+            return responses.pop(0)
+
+        dispatcher._wait_for_response = fake_wait_for_response
+
+        await dispatcher.dispatch_order({
+            "cmd_id": "ord-pending-1",
+            "symbol": "XAUUSD",
+            "trace_id": "trace-pending-1",
+            "order_type": "LIMIT",
+            "strategy_event": {"type": "STRATEGY_MATCH", "trace_id": "trace-pending-1", "symbol": "XAUUSD", "direction": "BUY"},
+        })
+
+        assert len(journal.strategy_events) == 1
+        assert len(journal.pending_events) == 1
+        assert len(journal.opened_events) == 0
+        assert journal.pending_events[0]["trace_id"] == "trace-pending-1"
+        assert journal.pending_events[0]["cmd_id"] == "ord-pending-1"
+
+    @pytest.mark.asyncio
+    async def test_event_listener_routes_order_filled_without_pending_future(self):
+        from config import TraderConfig
+
+        message = {
+            "type": "message",
+            "data": json.dumps({
+                "type": "ORDER_FILLED",
+                "cmd_id": "ord-fill-1",
+                "trace_id": "trace-fill-1",
+                "pending_order_id": 9001,
+                "deal_ticket": 7001,
+                "position_ticket": 8001,
+                "open_price": 2322.0,
+                "time": 1744095600,
+            }),
+        }
+        redis_mock = EventRedisMock(messages=[message])
+        journal = DummyJournal()
+        dispatcher = OrderDispatcher(redis_mock, TraderConfig(), journal_manager=journal)
+
+        task = asyncio.create_task(dispatcher.event_listener())
+        await asyncio.sleep(0.05)
+        if not task.done():
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            await task
+
+        await asyncio.sleep(0.05)
+        assert len(journal.filled_events) == 1
+        assert journal.filled_events[0]["position_ticket"] == 8001
 
 
 class TestOrderDispatcherJournalStrategyMatch:

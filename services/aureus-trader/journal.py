@@ -291,10 +291,62 @@ class TradeJournalManager:
             logger.exception(f"Error creating journal entry: {e}")
             return False
 
-    async def on_order_opened(self, event: dict) -> bool:
-        """Update journal entry when ORDER_OPENED event is received.
+    async def on_order_pending_placed(self, event: dict) -> bool:
+        """Persist accepted MT5 pending order without marking journal executed."""
+        try:
+            trace_id = event.get("trace_id")
+            pending_order_id = event.get("pending_order_id") or event.get("order")
+            cmd_id = event.get("cmd_id")
+            if not trace_id and not cmd_id:
+                logger.warning("on_order_pending_placed: missing trace_id/cmd_id")
+                return False
+            if not pending_order_id:
+                logger.warning("on_order_pending_placed: missing pending_order_id")
+                return False
 
-        :param event: ORDER_OPENED event dict from Redis
+            query = """
+                UPDATE aureus_trade_journal
+                SET pending_order_id = $1,
+                    cmd_id = COALESCE($2, cmd_id),
+                    mt5_comment = COALESCE($3, mt5_comment),
+                    entry_price = COALESCE($4, entry_price),
+                    sl_initial = COALESCE($5, sl_initial),
+                    tp_initial = COALESCE($6, tp_initial),
+                    updated_at = now()
+                WHERE status = 'TRIGGERED'
+                  AND (($7::text IS NOT NULL AND trace_id = $7) OR ($7::text IS NULL AND cmd_id = $2))
+                RETURNING id
+            """
+            async with self.db.acquire() as conn:
+                result_id = await conn.fetchval(
+                    query,
+                    pending_order_id,
+                    cmd_id,
+                    event.get("mt5_comment", event.get("comment")),
+                    event.get("price"),
+                    event.get("sl"),
+                    event.get("tp"),
+                    trace_id,
+                )
+            return result_id is not None
+        except Exception as e:
+            logger.exception(f"Error updating journal on pending placed: {e}")
+            return False
+
+    async def on_order_filled(self, event: dict) -> bool:
+        """Update journal entry when a real MT5 DEAL_ENTRY_IN fill is received."""
+        if event.get("ticket") is None and event.get("position_ticket") is not None:
+            event = dict(event)
+            event["ticket"] = event.get("position_ticket")
+        if event.get("position_id") is None and event.get("position_ticket") is not None:
+            event = dict(event)
+            event["position_id"] = event.get("position_ticket")
+        return await self.on_order_opened(event)
+
+    async def on_order_opened(self, event: dict) -> bool:
+        """Update journal entry when ORDER_OPENED/ORDER_FILLED event is received.
+
+        :param event: ORDER_OPENED or ORDER_FILLED event dict from Redis
         :return: True if updated, False on error
         """
         try:
@@ -356,8 +408,17 @@ class TradeJournalManager:
                     lot_size = $5,
                     sl_initial = $6,
                     tp_initial = $7,
+                    pending_order_id = COALESCE($9, pending_order_id),
+                    entry_deal_ticket = COALESCE($10, entry_deal_ticket),
+                    cmd_id = COALESCE($11, cmd_id),
+                    mt5_comment = COALESCE($12, mt5_comment),
                     updated_at = now()
-                WHERE trace_id = $8 AND status = 'TRIGGERED'
+                WHERE status = 'TRIGGERED'
+                  AND (
+                    ($8::text IS NOT NULL AND trace_id = $8)
+                    OR ($8::text IS NULL AND $9::bigint IS NOT NULL AND pending_order_id = $9)
+                    OR ($8::text IS NULL AND $11::text IS NOT NULL AND cmd_id = $11)
+                  )
                 RETURNING id, strategy_name, symbol, active_signals, context_filters
             """
 
@@ -367,7 +428,9 @@ class TradeJournalManager:
                     journal_row = await conn.fetchrow(
                         query,
                         ticket, entry_price, entry_time, position_id,
-                        volume, sl, tp, trace_id
+                        volume, sl, tp, trace_id,
+                        event.get("pending_order_id"), event.get("deal_ticket"),
+                        event.get("cmd_id"), event.get("mt5_comment", event.get("comment"))
                     )
 
                     if journal_row:
@@ -528,7 +591,7 @@ class TradeJournalManager:
                 async with self.db.acquire() as conn:
                     row = await conn.fetchrow(
                         "SELECT id, trace_id, entry_time, direction, symbol "
-                        "FROM aureus_trade_journal WHERE ticket = $1 AND status = 'EXECUTED'",
+                        "FROM aureus_trade_journal WHERE (ticket = $1 OR position_id = $1) AND status = 'EXECUTED'",
                         ticket
                     )
                 if row:

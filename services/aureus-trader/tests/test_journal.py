@@ -150,6 +150,50 @@ class TestOnOrderOpenedInputValidation:
         assert result is False
 
 
+class TestPendingOrderLifecycle:
+    @pytest.mark.asyncio
+    async def test_pending_placed_persists_pending_order_without_executed(self, journal_manager, mock_db_pool):
+        result = await journal_manager.on_order_pending_placed({
+            "type": "ORDER_PENDING_PLACED",
+            "trace_id": "trace-test-journal-001",
+            "cmd_id": "ord-pending-1",
+            "pending_order_id": 9001,
+            "price": 3250.5,
+            "sl": 3247.5,
+            "tp": 3256.5,
+            "comment": "LIMIT|trace-test",
+        })
+
+        assert result is True
+        query = mock_db_pool._conn.queries[0][1]
+        args = mock_db_pool._conn.queries[0][2]
+        assert "status = 'TRIGGERED'" in query
+        assert "status = 'EXECUTED'" not in query.split("WHERE", 1)[0]
+        assert args[0] == 9001
+        assert args[1] == "ord-pending-1"
+
+    @pytest.mark.asyncio
+    async def test_order_filled_executes_with_position_and_deal_ticket(self, journal_manager, mock_db_pool):
+        result = await journal_manager.on_order_filled({
+            "type": "ORDER_FILLED",
+            "trace_id": "trace-test-journal-001",
+            "cmd_id": "ord-fill-1",
+            "pending_order_id": 9001,
+            "deal_ticket": 7001,
+            "position_ticket": 8001,
+            "open_price": 3251.0,
+            "volume": 0.1,
+            "time": 1775642400,
+        })
+
+        assert result is True
+        args = mock_db_pool._conn.queries[0][2]
+        assert args[0] == 8001
+        assert args[3] == 8001
+        assert args[8] == 9001
+        assert args[9] == 7001
+
+
 class TestOnOrderClosedInputValidation:
     """TJ-IN-11 through TJ-IN-13: Input validation for on_order_closed."""
 
