@@ -963,6 +963,46 @@ void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
   }
 
 //+------------------------------------------------------------------+
+//| Push ORDER_PENDING_PLACED event                                    |
+//+------------------------------------------------------------------+
+void PushOrderPendingPlaced(string cmdId, string symbol, long pendingOrderId, string direction,
+                            string orderType, double volume, double price,
+                            double sl, double tp, long magic, string strategyName = "",
+                            string traceId = "", string comment = "")
+  {
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+                    "{\"type\":\"ORDER_PENDING_PLACED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"pending_order_id\":%lld,"
+                    "\"direction\":\"%s\",\"order_type\":\"%s\",\"volume\":%.2f,\"price\":%.5f,"
+                    "\"sl\":%.5f,\"tp\":%.5f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"comment\":\"%s\",\"t\":%lld}",
+                    cmdId, symbol, pendingOrderId, direction, orderType, volume, price, sl, tp,
+                    magic, strategyName, traceId, comment, timeMs);
+   g_socket.SendJSON(json);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ORDER_PENDING_PLACED pushed: pending_order_id=%lld symbol=%s strategy=%s", pendingOrderId, symbol, strategyName);
+  }
+
+//+------------------------------------------------------------------+
+//| Push ORDER_FILLED event                                            |
+//+------------------------------------------------------------------+
+void PushOrderFilled(string cmdId, string symbol, long dealTicket, long positionTicket,
+                     long pendingOrderId, string direction, double volume, double openPrice,
+                     double sl, double tp, long magic, string strategyName = "",
+                     string traceId = "", string comment = "")
+  {
+   long timeMs = (long)TimeCurrent() * 1000;
+   string json = StringFormat(
+                    "{\"type\":\"ORDER_FILLED\",\"cmd_id\":\"%s\",\"symbol\":\"%s\",\"deal_ticket\":%lld,\"position_ticket\":%lld,\"pending_order_id\":%lld,"
+                    "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,"
+                    "\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"comment\":\"%s\",\"t\":%lld}",
+                    cmdId, symbol, dealTicket, positionTicket, pendingOrderId, direction, volume,
+                    openPrice, sl, tp, magic, strategyName, traceId, comment, timeMs);
+   g_socket.SendJSON(json);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ORDER_FILLED pushed: position_ticket=%lld deal=%lld symbol=%s", positionTicket, dealTicket, symbol);
+  }
+
+//+------------------------------------------------------------------+
 //| Push ORDER_FAILED event                                            |
 //+------------------------------------------------------------------+
 void PushOrderFailed(string cmdId, string symbol, string reason, int retcode,
@@ -1554,8 +1594,9 @@ void ExecuteOpenOrder(const string &raw)
         {
          if(!terminalEventSent)
            {
-            PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
-                            volume, result.price, sl, tp, magic, strategyName, traceId);
+            PushOrderPendingPlaced(cmdId, symbol, result.order, direction, orderType,
+                                   volume, request.price, request.sl, request.tp,
+                                   magic, strategyName, traceId, comment);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -1943,9 +1984,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(!HistoryDealSelect(trans.deal))
       return;
 
-// Only process position close/reduce deals
+// Only process position open/fill or close/reduce deals
    long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
-   if(entry != DEAL_ENTRY_OUT)
+   if(entry != DEAL_ENTRY_IN && entry != DEAL_ENTRY_OUT)
       return;
 
 // Filter by magic number — only report bot-managed positions
@@ -1957,11 +1998,39 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    string symbol      = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
    long   ticket      = HistoryDealGetInteger(trans.deal, DEAL_POSITION_ID);
    double volume      = HistoryDealGetDouble(trans.deal, DEAL_VOLUME);
-   double closePrice  = HistoryDealGetDouble(trans.deal, DEAL_PRICE);
+   double dealPrice   = HistoryDealGetDouble(trans.deal, DEAL_PRICE);
    double profit      = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
    double commission  = HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
    double swap        = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
    long   dealType    = HistoryDealGetInteger(trans.deal, DEAL_TYPE);
+   long   pendingOrderId = HistoryDealGetInteger(trans.deal, DEAL_ORDER);
+   string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
+   string strategyName = dealComment;
+   string traceId = "";
+   int commentSep = StringFind(dealComment, "|");
+   if(commentSep > 0)
+     {
+      strategyName = StringSubstr(dealComment, 0, commentSep);
+      traceId = StringSubstr(dealComment, commentSep + 1);
+     }
+
+   if(entry == DEAL_ENTRY_IN)
+     {
+      string directionIn = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
+      double sl = 0.0;
+      double tp = 0.0;
+      if(PositionSelectByTicket(ticket))
+        {
+         sl = PositionGetDouble(POSITION_SL);
+         tp = PositionGetDouble(POSITION_TP);
+        }
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_IN detected — symbol=%s position=%lld deal=%lld magic=%lld",
+                     symbol, ticket, trans.deal, magic);
+      PushOrderFilled("", symbol, trans.deal, ticket, pendingOrderId, directionIn,
+                      volume, dealPrice, sl, tp, magic, strategyName, traceId, dealComment);
+      return;
+     }
 
 // Determine original direction (close deal is opposite direction)
    string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
@@ -1976,18 +2045,8 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
                   "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
                   symbol, ticket, direction, profit, magic);
 
-   string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
-   string strategyName = dealComment;
-   string traceId = "";
-   int commentSep = StringFind(dealComment, "|");
-   if(commentSep > 0)
-     {
-      strategyName = StringSubstr(dealComment, 0, commentSep);
-      traceId = StringSubstr(dealComment, commentSep + 1);
-     }
-
    PushOrderClosed(symbol, ticket, direction, volume,
-                   openPrice, closePrice, profit, commission, swap, magic,
+                   openPrice, dealPrice, profit, commission, swap, magic,
                    strategyName, traceId);
   }
 
