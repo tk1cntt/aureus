@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-27 - Completed quick task 260428-9kd: TREND_CONT_BULL và TREND_CONT_LIMIT_BULL cùng đk vào lệnh hỉ khác điểm vào nhưng mà chỉ thấy TREND_CONT_BULL có trigger. Hãy kiểm tra lại giúp /tôi xem có vấn đề gì ở đây
+Last activity: 2026-04-28 - Completed quick task 260429-897: Các lệnh limit khi vào lệnh k có ticket number. Khi nó khớp lệnh nó mới tạo ticket number. Nhưng k update lại đc vào db nên k có tham chiếu tới nó. Chứ k phải là chưa có kết quả. Hãy nghiên cứu giải pháp xử lý vấn đề này
 
 ## Architecture Decision
 
@@ -86,6 +86,7 @@ Last activity: 2026-04-27 - Completed quick task 260428-9kd: TREND_CONT_BULL va�
 | 260427-wky | Fix strategy executor None entry_price crash after rejected order entry | 2026-04-27 | 09f5cb4 | Completed | [260427-wky-fix-strategy-executor-none-entry-price-c](./quick/260427-wky-fix-strategy-executor-none-entry-price-c/) |
 | 260427-wwv | Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations | 2026-04-27 | f332187 | Verified | [260427-wwv-validate-and-fix-trend-cont-limit-bull-a](./quick/260427-wwv-validate-and-fix-trend-cont-limit-bull-a/) |
 | 260428-9kd | TREND_CONT_BULL và TREND_CONT_LIMIT_BULL cùng đk vào lệnh hỉ khác điểm vào nhưng mà chỉ thấy TREND_CONT_BULL có trigger. Hãy kiểm tra lại giúp /tôi xem có vấn đề gì ở đây | 2026-04-27 | 9698f14 | Completed | [260428-9kd-trend-cont-bull-va-trend-cont-limit-bull](./quick/260428-9kd-trend-cont-bull-va-trend-cont-limit-bull/) |
+| 260429-897 | Các lệnh limit khi vào lệnh k có ticket number. Khi nó khớp lệnh nó mới tạo ticket number. Nhưng k update lại đc vào db nên k có tham chiếu tới nó. Chứ k phải là chưa có kết quả. Hãy nghiên cứu giải pháp xử lý vấn đề này | 2026-04-28 | fd5d43f | Completed | [260429-897-ca-c-l-nh-limit-khi-va-o-l-nh-k-co-ticke](./quick/260429-897-ca-c-l-nh-limit-khi-va-o-l-nh-k-co-ticke/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
