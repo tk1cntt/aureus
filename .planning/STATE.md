@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-27 - Completed quick task 260427-wwv: Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations
+Last activity: 2026-04-27 - Completed quick task 260428-9kd: TREND_CONT_BULL và TREND_CONT_LIMIT_BULL cùng đk vào lệnh hỉ khác điểm vào nhưng mà chỉ thấy TREND_CONT_BULL có trigger. Hãy kiểm tra lại giúp /tôi xem có vấn đề gì ở đây
 
 ## Architecture Decision
 
@@ -85,6 +85,7 @@ Last activity: 2026-04-27 - Completed quick task 260427-wwv: Validate and fix TR
 | 260427-v5g | Implement các phần TODO và các phần chưa hoàn thiện ở services\aureus-signal\engine\orders.py | 2026-04-27 | 87f546e | Needs Review | [260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-](./quick/260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-/) |
 | 260427-wky | Fix strategy executor None entry_price crash after rejected order entry | 2026-04-27 | 09f5cb4 | Completed | [260427-wky-fix-strategy-executor-none-entry-price-c](./quick/260427-wky-fix-strategy-executor-none-entry-price-c/) |
 | 260427-wwv | Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations | 2026-04-27 | f332187 | Verified | [260427-wwv-validate-and-fix-trend-cont-limit-bull-a](./quick/260427-wwv-validate-and-fix-trend-cont-limit-bull-a/) |
+| 260428-9kd | TREND_CONT_BULL và TREND_CONT_LIMIT_BULL cùng đk vào lệnh hỉ khác điểm vào nhưng mà chỉ thấy TREND_CONT_BULL có trigger. Hãy kiểm tra lại giúp /tôi xem có vấn đề gì ở đây | 2026-04-27 | 9698f14 | Completed | [260428-9kd-trend-cont-bull-va-trend-cont-limit-bull](./quick/260428-9kd-trend-cont-bull-va-trend-cont-limit-bull/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
