@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-30 - Completed quick task 260430-u7c: Analyze and propose optimized MT5 order dispatch architecture for 1-2s latency and non-blocking per-order handling
+Last activity: 2026-04-30 - Completed quick task 260430-uij: Implement optimized MT5 order dispatch roadmap: observability, provider-local unsupported-symbol ignore for broadcast multi-MT5, bounded lane scheduler, ACK/result state machine, reconcile timeout, gateway/MT5 optimization if metrics show bottleneck
 
 ## Architecture Decision
 
@@ -99,6 +99,7 @@ Last activity: 2026-04-30 - Completed quick task 260430-u7c: Analyze and propose
 | 260430-tb3 | Update phần xử lý ManagePositionProfitBreakEvent() ở mql5\AureusProvider_v2.mq5: group theo symbol + magic + direction; earliest open time, total profit, weighted price tính riêng từng group | 2026-04-30 | 4c4e646 |  | [260430-tb3-update-ph-n-x-l-managepositionprofitbrea](./quick/260430-tb3-update-ph-n-x-l-managepositionprofitbrea/) |
 | 260430-tqm | Analyze order dispatch flow after build_order_command and dispatcher.enqueue_order to MT5, concurrency, retry blocking risk | 2026-04-30 | (report-only) |  | [260430-tqm-analyze-order-dispatch-flow-after-build-](./quick/260430-tqm-analyze-order-dispatch-flow-after-build-/) |
 | 260430-u7c | Analyze and propose optimized MT5 order dispatch architecture for 1-2s latency and non-blocking per-order handling | 2026-04-30 | (report-only) |  | [260430-u7c-analyze-and-propose-optimized-mt5-order-](./quick/260430-u7c-analyze-and-propose-optimized-mt5-order-/) |
+| 260430-uij | Implement optimized MT5 order dispatch roadmap: observability, provider-local unsupported-symbol ignore for broadcast multi-MT5, bounded lane scheduler, ACK/result state machine, reconcile timeout, gateway/MT5 optimization if metrics show bottleneck | 2026-04-30 | 8acd1c1 | Verified | [260430-uij-implement-optimized-mt5-order-dispatch-r](./quick/260430-uij-implement-optimized-mt5-order-dispatch-r/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
