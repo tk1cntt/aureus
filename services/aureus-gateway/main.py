@@ -124,6 +124,25 @@ class NackEvent(BaseModel):
     reason: str
     t: int
 
+class OrderFilledEvent(BaseModel):
+    type: Literal['ORDER_FILLED']
+    cmd_id: Optional[str] = None
+    symbol: str
+    deal_ticket: int
+    position_ticket: int
+    pending_order_id: int
+    direction: str
+    volume: float
+    open_price: float
+    sl: float
+    tp: float
+    magic: int
+    strategy_name: Optional[str] = None
+    trace_id: Optional[str] = None
+    comment: Optional[str] = None
+    time: Optional[int] = None
+    t: int
+
 # ── Position Report Models ────────────────────────────────────────────
 class PositionInfo(BaseModel):
     ticket: int
@@ -231,6 +250,7 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
         'ORDER_OPENED': OrderOpenedEvent,
         'ORDER_CLOSED': OrderClosedEvent,
         'ORDER_FAILED': OrderFailedEvent,
+        'ORDER_FILLED': OrderFilledEvent,
         'ACK': AckEvent,
         'NACK': NackEvent,
         'POSITION_REPORT': PositionReportEvent,
@@ -246,13 +266,21 @@ async def process_message(r: redis.Redis, data: dict, source: str = "ZMQ") -> bo
             if msg_type == 'ORDER_CLOSED' and data.get('exit_time') is None and data.get('t') is not None:
                 data = dict(data)
                 data['exit_time'] = data.get('t')
+            if msg_type == 'ORDER_FILLED' and data.get('time') is None and data.get('t') is not None:
+                data = dict(data)
+                data['time'] = data.get('t')
 
             model_class = ORDER_EVENT_TYPES[msg_type]
             valid_event = model_class(**data)
             event_json = valid_event.model_dump_json()
             await r.publish("aureus:mt5:events", event_json)
             symbol = data.get('symbol', 'GLOBAL')
-            logger.info(f"[{symbol}] [process_message] Order event {msg_type} published to aureus:mt5:events")
+            cmd_id = data.get('cmd_id', '')
+            logger.info(
+                f"[{symbol}] [process_message] Order event {msg_type} cmd_id={cmd_id} "
+                f"ticket={data.get('ticket') or data.get('position_ticket') or data.get('pending_order_id') or ''} "
+                "published to aureus:mt5:events"
+            )
             return True
         except ValidationError as e:
             logger.warning(f"[{source}] Order event validation error: {e}")
@@ -507,18 +535,21 @@ async def run_command_subscriber(r: redis.Redis):
                 cmd_type = cmd_data.get("type", "unknown")
                 loop = asyncio.get_running_loop()
                 dead_writers = []
-                for writer in active_connections[symbol]:
+                writer_count = len(active_connections[symbol])
+                for writer_index, writer in enumerate(active_connections[symbol], start=1):
                     try:
                         start = loop.time()
                         writer.write(payload.encode('utf-8'))
                         await writer.drain()
                         drain_ms = (loop.time() - start) * 1000
+                        peer = writer.get_extra_info('peername')
                         logger.info(
                             f"[{symbol}] [run_command_subscriber] 2... Forwarded command to EA "
-                            f"cmd_id={cmd_id} type={cmd_type} drain_ms={drain_ms:.2f}"
+                            f"cmd_id={cmd_id} type={cmd_type} writer={writer_index}/{writer_count} "
+                            f"peer={peer} drain_ms={drain_ms:.2f}"
                         )
                     except Exception as e:
-                        logger.error(f"Failed to send command to EA for {symbol}: {e}")
+                        logger.error(f"Failed to send command to EA for {symbol}: cmd_id={cmd_id} type={cmd_type} error={e}")
                         dead_writers.append(writer)
 
                 for dw in dead_writers:

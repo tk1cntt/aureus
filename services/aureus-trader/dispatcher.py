@@ -71,6 +71,7 @@ class OrderDispatcher:
         self._active_lanes: set[str] = set()
         self._in_flight_tasks: set[asyncio.Task] = set()
         self._scheduler_event = asyncio.Event()
+        self._event_stats = {"matched": 0, "unmatched": 0}
         self.journal = journal_manager
 
     async def enqueue_order(self, order_cmd: dict) -> bool:
@@ -184,7 +185,8 @@ class OrderDispatcher:
             # PUBLISH to aureus:mt5:commands
             state = self._cmd_states.setdefault(cmd_id, {"order": order})
             previous_state = state.get("state")
-            state.update({"state": "PUBLISHED", "attempt": attempt + 1, "published_at": asyncio.get_event_loop().time()})
+            published_at = asyncio.get_event_loop().time()
+            state.update({"state": "PUBLISHED", "attempt": attempt + 1, "published_at": published_at})
             if previous_state == "ACK_TIMEOUT_NO_PROVIDER_RESPONSE":
                 state["retry_after_ack_timeout"] = True
             await self.redis.publish(COMMANDS_CHANNEL, json.dumps(mt5_order))
@@ -203,8 +205,11 @@ class OrderDispatcher:
             )
             if ack_result is None:
                 # Timeout — no ACK received
+                pending_keys = list(self._pending_responses.keys())
                 logger.warning(
-                    f"ACK timeout for {cmd_id}, attempt {attempt + 1}"
+                    f"ACK timeout for {cmd_id}, attempt {attempt + 1} "
+                    f"lane={self._lane_key(order)} pending={pending_keys} "
+                    f"published_age_ms={(asyncio.get_event_loop().time() - published_at) * 1000:.2f}"
                 )
                 state["state"] = "ACK_TIMEOUT_NO_PROVIDER_RESPONSE"
                 if attempt < max_retries:
@@ -239,7 +244,10 @@ class OrderDispatcher:
                     cmd_id, self.config.result_timeout
                 )
                 if final is None:
-                    logger.warning(f"Result timeout for {cmd_id}")
+                    logger.warning(
+                        f"Result timeout for {cmd_id} lane={self._lane_key(order)} "
+                        f"acked_age_ms={(asyncio.get_event_loop().time() - state.get('acked_at', published_at)) * 1000:.2f}"
+                    )
                     state["state"] = "RESULT_TIMEOUT_AFTER_ACK"
                     await self._handle_reconcile_needed(order, "RESULT_TIMEOUT_AFTER_ACK")
                     return
@@ -303,10 +311,32 @@ class OrderDispatcher:
                             task = asyncio.create_task(self.journal.on_order_filled(event))
                             task.add_done_callback(self._log_journal_task_result)
                     cmd_id = event.get("cmd_id")
-                    if cmd_id and cmd_id in self._pending_responses:
+                    event_type = event.get("type")
+                    symbol = event.get("symbol", "GLOBAL")
+                    pending_count = len(self._pending_responses)
+                    if not cmd_id:
+                        logger.info(
+                            f"Event without cmd_id type={event_type} symbol={symbol} "
+                            f"ticket={event.get('ticket') or event.get('position_ticket') or event.get('pending_order_id') or ''} "
+                            f"trace_id={event.get('trace_id') or ''} pending_count={pending_count}"
+                        )
+                    elif cmd_id in self._pending_responses:
+                        self._event_stats["matched"] += 1
+                        logger.info(
+                            f"Matched event type={event_type} cmd_id={cmd_id} symbol={symbol} "
+                            f"pending_before={pending_count} matched={self._event_stats['matched']} "
+                            f"unmatched={self._event_stats['unmatched']}"
+                        )
                         future = self._pending_responses.pop(cmd_id)
                         if not future.done():
                             future.set_result(event)
+                    else:
+                        self._event_stats["unmatched"] += 1
+                        logger.warning(
+                            f"Unmatched event type={event_type} cmd_id={cmd_id} symbol={symbol} "
+                            f"pending_keys={list(self._pending_responses.keys())} "
+                            f"matched={self._event_stats['matched']} unmatched={self._event_stats['unmatched']}"
+                        )
                 except json.JSONDecodeError as e:
                     logger.warning(f"Invalid event JSON: {e}")
                 except Exception as e:
