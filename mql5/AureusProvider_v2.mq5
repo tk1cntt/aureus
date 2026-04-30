@@ -1643,6 +1643,43 @@ void ExecuteOpenOrder(const string &raw)
       return;
      }
 
+// Reject duplicate active strategy order on the same symbol before ACK/order side effects
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+
+      if(PositionGetString(POSITION_SYMBOL) == symbol && PositionGetInteger(POSITION_MAGIC) == magic)
+        {
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld existing_position=%llu reason=STRATEGY_ORDER_EXISTS",
+                        cmdId, symbol, magic, ticket);
+         SendNACK(cmdId, "STRATEGY_ORDER_EXISTS");
+         return;
+        }
+     }
+
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!OrderSelect(ticket))
+         continue;
+
+      if(OrderGetString(ORDER_SYMBOL) == symbol && OrderGetInteger(ORDER_MAGIC) == magic)
+        {
+         if(InpDebugMode)
+            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld existing_order=%llu type=%lld reason=STRATEGY_ORDER_EXISTS",
+                        cmdId, symbol, magic, ticket, OrderGetInteger(ORDER_TYPE));
+         SendNACK(cmdId, "STRATEGY_ORDER_EXISTS");
+         return;
+        }
+     }
+
 // Check AutoTrading enabled
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
      {
