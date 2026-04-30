@@ -72,6 +72,10 @@ async def run_trader():
     except Exception as e:
         logger.warning(f"Trade journal initialization failed: {e}")
 
+    logger.info(
+        f"Dispatcher config: max_in_flight_orders={config.max_in_flight_orders} "
+        f"scheduler_poll_interval={config.scheduler_poll_interval}"
+    )
     dispatcher = OrderDispatcher(r, config, journal_manager=journal)
 
     # 4. Start dispatcher loop
@@ -122,7 +126,8 @@ async def run_trader():
                 if enqueued:
                     logger.info(
                         f"Order queued: {order_cmd['cmd_id']} "
-                        f"{order_cmd['symbol']} {order_cmd['direction']}"
+                        f"{order_cmd['symbol']} {order_cmd['direction']} "
+                        f"{order_cmd['comment']}"
                     )
                 else:
                     logger.error(

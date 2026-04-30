@@ -1877,7 +1877,8 @@ void ExecuteOpenOrder(const string &raw)
 // Check symbol is declared in InpSymbols before ACK/order side effects
    if(FindContextIndex(symbol) < 0)
      {
-      // PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s reason=SYMBOL_NOT_ALLOWED", cmdId, symbol);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s reason=SYMBOL_NOT_ALLOWED", cmdId, symbol);
       // SendNACK(cmdId, "SYMBOL_NOT_ALLOWED");
       return;
      }
@@ -2327,7 +2328,8 @@ void ExecuteCloseOrder(const string &raw)
 
    if(FindContextIndex(symbol) < 0)
      {
-      // PrintFormat("[AureusProvider] Reject CLOSE_ORDER: cmd_id=%s symbol=%s reason=SYMBOL_NOT_ALLOWED", cmdId, symbol);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Reject CLOSE_ORDER: cmd_id=%s symbol=%s reason=SYMBOL_NOT_ALLOWED", cmdId, symbol);
       // SendNACK(cmdId, "SYMBOL_NOT_ALLOWED");
       return;
      }

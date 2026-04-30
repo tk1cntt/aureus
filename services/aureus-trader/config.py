@@ -19,6 +19,8 @@ class TraderConfig:
     ack_timeout: float = 5.0
     result_timeout: float = 30.0
     max_retries: int = 3
+    max_in_flight_orders: int = 3
+    scheduler_poll_interval: float = 0.1
     dedup_ttl: int = 86400
     # Database config for trade journal
     db_host: str = "aureus-db"
@@ -49,6 +51,8 @@ def load_config() -> TraderConfig:
         ack_timeout=float(os.environ.get("ACK_TIMEOUT", "5.0")),
         result_timeout=float(os.environ.get("RESULT_TIMEOUT", "30.0")),
         max_retries=int(os.environ.get("MAX_RETRIES", "3")),
+        max_in_flight_orders=int(os.environ.get("MAX_IN_FLIGHT_ORDERS", "3")),
+        scheduler_poll_interval=float(os.environ.get("SCHEDULER_POLL_INTERVAL", "0.1")),
         dedup_ttl=int(os.environ.get("DEDUP_TTL", "86400")),
         db_host=os.environ.get("DB_HOST", "aureus-db"),
         db_port=int(os.environ.get("DB_PORT", "5432")),

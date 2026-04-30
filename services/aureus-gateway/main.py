@@ -503,12 +503,20 @@ async def run_command_subscriber(r: redis.Redis):
 
             if symbol in active_connections:
                 payload = message['data'] + "\n"
+                cmd_id = cmd_data.get("cmd_id", "unknown")
+                cmd_type = cmd_data.get("type", "unknown")
+                loop = asyncio.get_running_loop()
                 dead_writers = []
                 for writer in active_connections[symbol]:
                     try:
+                        start = loop.time()
                         writer.write(payload.encode('utf-8'))
                         await writer.drain()
-                        logger.info(f"[{symbol}] [run_command_subscriber] 2... Forwarded command to EA for {symbol}: {cmd_data}")
+                        drain_ms = (loop.time() - start) * 1000
+                        logger.info(
+                            f"[{symbol}] [run_command_subscriber] 2... Forwarded command to EA "
+                            f"cmd_id={cmd_id} type={cmd_type} drain_ms={drain_ms:.2f}"
+                        )
                     except Exception as e:
                         logger.error(f"Failed to send command to EA for {symbol}: {e}")
                         dead_writers.append(writer)
