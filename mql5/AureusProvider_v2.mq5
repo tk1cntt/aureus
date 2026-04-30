@@ -27,6 +27,7 @@ input int      InpTimerMs            = 100;                      // Timer interv
 input int      InpMaxSlippage        = 20;                       // Max slippage for market orders (points)
 input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
+input double   InpProfitTarget       = 8.0;                       // Profit target ($) to activate breakeven management
 input bool     InpDebugMode          = false;
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
@@ -1197,6 +1198,207 @@ struct PositionInfo
 double commission_per_lot = 8.0;
 int max_loss_amount = 100;
 int buffer_profit = 5;
+
+//+------------------------------------------------------------------+
+//| Check bullish imbalance for a specific symbol/timeframe          |
+//+------------------------------------------------------------------+
+bool IsImbalanceUp(string symbol, ENUM_TIMEFRAMES timeframe, int index)
+  {
+   if(index < 2 || Bars(symbol, timeframe) <= index)
+      return false;
+   return iLow(symbol, timeframe, index - 2) > iHigh(symbol, timeframe, index);
+  }
+
+//+------------------------------------------------------------------+
+//| Check bearish imbalance for a specific symbol/timeframe          |
+//+------------------------------------------------------------------+
+bool IsImbalanceDown(string symbol, ENUM_TIMEFRAMES timeframe, int index)
+  {
+   if(index < 2 || Bars(symbol, timeframe) <= index)
+      return false;
+   return iHigh(symbol, timeframe, index - 2) < iLow(symbol, timeframe, index);
+  }
+
+//+------------------------------------------------------------------+
+//| Manage one provider-scoped symbol + magic + direction group      |
+//+------------------------------------------------------------------+
+void ProcessPositionsByType(string symbol,
+                            long magic,
+                            ENUM_POSITION_TYPE target_type,
+                            const ulong &tickets[],
+                            double total_profit,
+                            double total_volume,
+                            double weighted_price_sum,
+                            datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   string log_prefix = StringFormat("[ManagePositionProfitBreakEvent] [%s:%lld:%s] ", symbol, magic, pos_type_str);
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
+      return;
+
+   double commission_cost_per_lot = commission_per_lot;
+   if(!IsForexPair(symbol) && !(StringFind(symbol, "XAU") >= 0))
+      commission_cost_per_lot = 0;
+   double total_commission = total_volume * commission_cost_per_lot;
+   double net_profit = total_profit - total_commission;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1) || (positions_count == 4 && net_profit > 0))
+     {
+      Print(log_prefix, StringFormat("Closing %d positions. profit=%.2f commission=%.2f net=%.2f", positions_count, total_profit, total_commission, net_profit));
+      for(int i = 0; i < positions_count; i++)
+         trade.PositionClose(tickets[i]);
+      return;
+     }
+
+   if(net_profit > 0 && positions_count == 1 && TimeCurrent() - earliest_open_time > 1800)
+     {
+      Print(log_prefix, "Closing stale profitable single position.");
+      for(int i = 0; i < positions_count; i++)
+         trade.PositionClose(tickets[i]);
+      return;
+     }
+
+   double weighted_avg_open_price = weighted_price_sum / total_volume;
+   if(net_profit <= positions_count * InpProfitTarget / 2)
+      return;
+
+   double current_sl = 0;
+   if(PositionSelectByTicket(tickets[0]))
+      current_sl = PositionGetDouble(POSITION_SL);
+
+   double proposed_sl_price = current_sl;
+   bool is_new_sl_found = false;
+   int symbol_digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+   if(target_type == POSITION_TYPE_BUY && IsImbalanceUp(symbol, PERIOD_CURRENT, 2))
+     {
+      double imbalance_sl_candidate = iLow(symbol, PERIOD_CURRENT, 2);
+      if(imbalance_sl_candidate > current_sl)
+        {
+         proposed_sl_price = imbalance_sl_candidate;
+         is_new_sl_found = true;
+        }
+     }
+   else
+      if(target_type == POSITION_TYPE_SELL && IsImbalanceDown(symbol, PERIOD_CURRENT, 2))
+        {
+         double imbalance_sl_candidate = iHigh(symbol, PERIOD_CURRENT, 2);
+         if(imbalance_sl_candidate < current_sl || current_sl == 0)
+           {
+            proposed_sl_price = imbalance_sl_candidate;
+            is_new_sl_found = true;
+           }
+        }
+
+   if(!is_new_sl_found)
+      return;
+
+   double total_swap = 0;
+   for(int i = 0; i < positions_count; i++)
+     {
+      if(PositionSelectByTicket(tickets[i]))
+         total_swap += PositionGetDouble(POSITION_SWAP);
+     }
+
+   double cost_offset_in_price = 0;
+   double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double point_size = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tick_value_for_total_volume = total_volume * tick_value;
+   if(tick_value_for_total_volume > 0)
+      cost_offset_in_price = ((total_commission + total_swap) / tick_value_for_total_volume) * point_size;
+
+   double breakeven_price_with_costs = (target_type == POSITION_TYPE_BUY)
+                                      ? weighted_avg_open_price + cost_offset_in_price
+                                      : weighted_avg_open_price - cost_offset_in_price;
+   bool is_sl_profitable = (target_type == POSITION_TYPE_BUY && proposed_sl_price > breakeven_price_with_costs) ||
+                           (target_type == POSITION_TYPE_SELL && proposed_sl_price < breakeven_price_with_costs);
+   if(!is_sl_profitable)
+      return;
+
+   proposed_sl_price = NormalizeDouble(proposed_sl_price, symbol_digits);
+   int success_count = 0;
+   for(int i = 0; i < positions_count; i++)
+     {
+      double tp_for_this_pos = 0;
+      if(PositionSelectByTicket(tickets[i]))
+         tp_for_this_pos = PositionGetDouble(POSITION_TP);
+      if(trade.PositionModify(tickets[i], proposed_sl_price, tp_for_this_pos))
+         success_count++;
+      else
+         Print(log_prefix, "SL modify failed for ticket ", tickets[i], ": ", trade.ResultComment());
+     }
+   Print(log_prefix, StringFormat("Moved SL to %.*f for %d/%d positions.", symbol_digits, proposed_sl_price, success_count, positions_count));
+  }
+
+//+------------------------------------------------------------------+
+//| Manage profit/breakeven for configured provider positions        |
+//+------------------------------------------------------------------+
+void ManagePositionProfitBreakEvent()
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      if(magic == 0 || FindContextIndex(symbol) < 0)
+         continue;
+
+      bool already_processed = false;
+      for(int j = PositionsTotal() - 1; j > i; j--)
+        {
+         ulong previous_ticket = PositionGetTicket(j);
+         if(previous_ticket == 0 || !PositionSelectByTicket(previous_ticket))
+            continue;
+         if(PositionGetString(POSITION_SYMBOL) == symbol &&
+            PositionGetInteger(POSITION_MAGIC) == magic &&
+            (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == type)
+           {
+            already_processed = true;
+            break;
+           }
+        }
+      if(already_processed)
+         continue;
+
+      ulong tickets[];
+      double total_profit = 0;
+      double total_volume = 0;
+      double weighted_price_sum = 0;
+      datetime earliest_open_time = 0;
+
+      for(int j = PositionsTotal() - 1; j >= 0; j--)
+        {
+         ulong group_ticket = PositionGetTicket(j);
+         if(group_ticket == 0 || !PositionSelectByTicket(group_ticket))
+            continue;
+         if(PositionGetString(POSITION_SYMBOL) != symbol ||
+            PositionGetInteger(POSITION_MAGIC) != magic ||
+            (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) != type)
+            continue;
+
+         double volume = PositionGetDouble(POSITION_VOLUME);
+         double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+         datetime open_time = (datetime)PositionGetInteger(POSITION_TIME);
+         int current_size = ArraySize(tickets);
+         ArrayResize(tickets, current_size + 1);
+         tickets[current_size] = group_ticket;
+         total_profit += PositionGetDouble(POSITION_PROFIT);
+         total_volume += volume;
+         weighted_price_sum += open_price * volume;
+         if(earliest_open_time == 0 || open_time < earliest_open_time)
+            earliest_open_time = open_time;
+        }
+
+      ProcessPositionsByType(symbol, magic, type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+     }
+  }
 
 //+------------------------------------------------------------------+
 //| Hàm xử lý logic cho một nhóm lệnh đã được phân loại              |
@@ -2550,6 +2752,9 @@ void OnTimer()
      {
       CheckAndSendCandleForSymbol(i);
      }
+
+//--- Provider-safe profit/breakeven management for ALL configured symbols
+   ManagePositionProfitBreakEvent();
 
 //--- Provider-local CISD DCA gate for ALL configured symbols
    for(int i = 0; i < g_symbolCount; i++)
