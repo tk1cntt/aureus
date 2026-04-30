@@ -39,6 +39,13 @@ struct SymbolContext
    bool              initialBackfillDone;
   };
 
+struct SetupInfo
+  {
+   bool              active;
+   double            priceLevel;
+   datetime          setupTime;
+  };
+
 //+------------------------------------------------------------------+
 //| Global Variables                                                   |
 //+------------------------------------------------------------------+
@@ -58,6 +65,12 @@ int           g_cmdIdCount;            // Count of stored cmd IDs
 int           g_ordersExecuted;        // Successful order count
 int           g_ordersFailed;          // Failed order count
 CTrade        trade;
+
+int           g_h1_signalType = 0;
+int           g_previous_h1_signalType = 0;
+datetime      g_h1_signalTime = 0;
+datetime      g_ltf_scan_start_time = 0;
+datetime      g_last_trade_signal_time = 0;
 //+------------------------------------------------------------------+
 //| Initialization                                                     |
 //+------------------------------------------------------------------+
@@ -1431,6 +1444,156 @@ void DoDCA(int order_type_signal)
   }
 
 //+------------------------------------------------------------------+
+//| Scan H1 CISD state needed by provider-local DCA gate               |
+//+------------------------------------------------------------------+
+void UpdateCISDDCAH1State()
+  {
+   int h1_bars = Bars(_Symbol, PERIOD_H1);
+   if(h1_bars < 3)
+      return;
+
+   int signalType = 0;
+   datetime signalTime = 0;
+   for(int i = 1; i < MathMin(h1_bars - 1, 24); i++)
+     {
+      bool isBearish = iClose(_Symbol, PERIOD_H1, i) < iOpen(_Symbol, PERIOD_H1, i);
+      bool wasBullish = iClose(_Symbol, PERIOD_H1, i + 1) > iOpen(_Symbol, PERIOD_H1, i + 1);
+      if(isBearish && wasBullish)
+        {
+         double level = iOpen(_Symbol, PERIOD_H1, i);
+         for(int k = i - 1; k >= 1; k--)
+           {
+            if(iClose(_Symbol, PERIOD_H1, k) > level)
+              {
+               signalType = 1;
+               signalTime = iTime(_Symbol, PERIOD_H1, k);
+               break;
+              }
+           }
+        }
+      if(signalType != 0)
+         break;
+
+      bool isBullish = iClose(_Symbol, PERIOD_H1, i) > iOpen(_Symbol, PERIOD_H1, i);
+      bool wasBearish = iClose(_Symbol, PERIOD_H1, i + 1) < iOpen(_Symbol, PERIOD_H1, i + 1);
+      if(isBullish && wasBearish)
+        {
+         double level = iOpen(_Symbol, PERIOD_H1, i);
+         for(int k = i - 1; k >= 1; k--)
+           {
+            if(iClose(_Symbol, PERIOD_H1, k) < level)
+              {
+               signalType = -1;
+               signalTime = iTime(_Symbol, PERIOD_H1, k);
+               break;
+              }
+           }
+        }
+      if(signalType != 0)
+         break;
+     }
+
+   if(signalType != g_previous_h1_signalType || signalTime != g_h1_signalTime)
+     {
+      g_last_trade_signal_time = 0;
+      g_previous_h1_signalType = signalType;
+     }
+
+   g_h1_signalType = signalType;
+   g_h1_signalTime = signalTime;
+   g_ltf_scan_start_time = (signalTime > 0) ? signalTime + PeriodSeconds(PERIOD_H1) : 0;
+  }
+
+//+------------------------------------------------------------------+
+//| Provider-local CISD confirmation gate for DoDCA                   |
+//+------------------------------------------------------------------+
+void CheckDCAEntryConditionFromCISD()
+  {
+   static datetime s_current_h1_signal_time = 0;
+   static SetupInfo s_bull_setup = {false};
+   static SetupInfo s_bear_setup = {false};
+
+   UpdateCISDDCAH1State();
+   if(g_h1_signalType == 0 || g_ltf_scan_start_time == 0 || TimeCurrent() < g_ltf_scan_start_time)
+      return;
+
+   int start_bar = 12;
+   if(g_h1_signalTime != s_current_h1_signal_time)
+     {
+      start_bar = iBarShift(_Symbol, _Period, g_h1_signalTime);
+      if(start_bar < 0)
+         start_bar = Bars(_Symbol, _Period) - 1;
+      s_bull_setup.active = false;
+      s_bear_setup.active = false;
+      s_current_h1_signal_time = g_h1_signalTime;
+     }
+   else
+     {
+      datetime scan_start_time = 0;
+      if(g_h1_signalType == 1 && s_bear_setup.active)
+         scan_start_time = s_bear_setup.setupTime;
+      else
+         if(g_h1_signalType == -1 && s_bull_setup.active)
+            scan_start_time = s_bull_setup.setupTime;
+      if(scan_start_time > 0)
+        {
+         start_bar = iBarShift(_Symbol, _Period, scan_start_time);
+         if(start_bar < 0)
+            start_bar = 12;
+        }
+     }
+
+   int sub_bars = Bars(_Symbol, _Period);
+   if(sub_bars < start_bar + 2)
+      return;
+
+   for(int i = start_bar; i >= 1; i--)
+     {
+      double close_i = iClose(_Symbol, _Period, i);
+      datetime time_i = iTime(_Symbol, _Period, i);
+
+      if(s_bear_setup.active && close_i > s_bear_setup.priceLevel)
+        {
+         if(i == 1 && time_i > g_last_trade_signal_time)
+           {
+            g_last_trade_signal_time = time_i;
+            DoDCA(1);
+           }
+         s_bear_setup.active = false;
+        }
+
+      if(s_bull_setup.active && close_i < s_bull_setup.priceLevel)
+        {
+         if(i == 1 && time_i > g_last_trade_signal_time)
+           {
+            g_last_trade_signal_time = time_i;
+            DoDCA(-1);
+           }
+         s_bull_setup.active = false;
+        }
+
+      double open_i = iOpen(_Symbol, _Period, i);
+      bool isBullish_i = close_i > open_i;
+      bool isBearish_i = close_i < open_i;
+      bool wasBearish_ip1 = (i + 1 < sub_bars) ? (iClose(_Symbol, _Period, i + 1) < iOpen(_Symbol, _Period, i + 1)) : false;
+      bool wasBullish_ip1 = (i + 1 < sub_bars) ? (iClose(_Symbol, _Period, i + 1) > iOpen(_Symbol, _Period, i + 1)) : false;
+
+      if(g_h1_signalType == -1 && isBullish_i && wasBearish_ip1)
+        {
+         s_bull_setup.active = true;
+         s_bull_setup.priceLevel = open_i;
+         s_bull_setup.setupTime = time_i;
+        }
+      if(g_h1_signalType == 1 && isBearish_i && wasBullish_ip1)
+        {
+         s_bear_setup.active = true;
+         s_bear_setup.priceLevel = open_i;
+         s_bear_setup.setupTime = time_i;
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Execute OPEN_ORDER command                                         |
 //+------------------------------------------------------------------+
 void ExecuteOpenOrder(const string &raw)
@@ -2298,6 +2461,9 @@ void OnTimer()
      {
       CheckAndSendCandleForSymbol(i);
      }
+
+//--- Provider-local CISD DCA gate for current chart symbol
+   CheckDCAEntryConditionFromCISD();
 
 //--- Status comment on chart
    string statusLines = "Aureus Provider v3.0\n";
