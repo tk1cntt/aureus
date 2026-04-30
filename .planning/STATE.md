@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-30 - Completed quick task 260430-s08: Delete pending orders in CloseAllPositions script
+Last activity: 2026-04-30 - Completed quick task 260430-sm5: Base trên ManagePositionProfitBreakEvent() của mql5\CISD_Slope_EA_v6.39_Final.mq5, Bổ sung hàm quản lý tương tự vào mql5\AureusProvider_v2.mq5 để quản lý lệnh theo danh sách InpSymbols
 
 ## Architecture Decision
 
@@ -95,6 +95,7 @@ Last activity: 2026-04-30 - Completed quick task 260430-s08: Delete pending orde
 | 260430-rak | Support managing and DCA for all InpSymbols in AureusProvider_v2 | 2026-04-30 | 328891d | Verified | [260430-rak-support-managing-and-dca-for-all-symbols](./quick/260430-rak-support-managing-and-dca-for-all-symbols/) |
 | 260430-roa | Separate BUY and SELL entry/DCA management in AureusProvider_v2 | 2026-04-30 | 48811f3 | Verified | [260430-roa-update-executeopenorder-entry-and-dodca-](./quick/260430-roa-update-executeopenorder-entry-and-dodca-/) |
 | 260430-s08 | Delete pending orders in CloseAllPositions script | 2026-04-30 | 882668e |  | [260430-s08-update-mql5-closeallpositions-mq5-to-als](./quick/260430-s08-update-mql5-closeallpositions-mq5-to-als/) |
+| 260430-sm5 | Base trên ManagePositionProfitBreakEvent() của mql5\CISD_Slope_EA_v6.39_Final.mq5, Bổ sung hàm quản lý tương tự vào mql5\AureusProvider_v2.mq5 để quản lý lệnh theo danh sách InpSymbols | 2026-04-30 | 9020d00 |  | [260430-sm5-base-tr-n-managepositionprofitbreakevent](./quick/260430-sm5-base-tr-n-managepositionprofitbreakevent/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
