@@ -27,7 +27,7 @@ input int      InpTimerMs            = 100;                      // Timer interv
 input int      InpMaxSlippage        = 20;                       // Max slippage for market orders (points)
 input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
-input double   InpProfitTarget       = 8.0;                       // Profit target ($) to activate breakeven management
+input double   InpBEProfitTarget     = 20.0;                     // Profit target ($) to activate breakeven management
 input bool     InpDebugMode          = false;
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
@@ -1195,7 +1195,7 @@ struct PositionInfo
    double            open_price;
   };
 
-double commission_per_lot = 8.0;
+double commission_per_lot = 12.0;
 int max_loss_amount = 100;
 int buffer_profit = 5;
 
@@ -1260,7 +1260,7 @@ void ProcessPositionsByType(string symbol,
      }
 
    double weighted_avg_open_price = weighted_price_sum / total_volume;
-   if(net_profit <= positions_count * InpProfitTarget / 2)
+   if(net_profit <= positions_count * InpBEProfitTarget / 2)
       return;
 
    double current_sl = 0;
@@ -1350,6 +1350,7 @@ void ManagePositionProfitBreakEvent()
       if(magic == 0 || FindContextIndex(symbol) < 0)
          continue;
 
+      // Group identity must include symbol, magic, and direction so strategies stay isolated.
       bool already_processed = false;
       for(int j = PositionsTotal() - 1; j > i; j--)
         {
