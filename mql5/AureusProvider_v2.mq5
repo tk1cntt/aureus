@@ -1192,9 +1192,9 @@ int buffer_profit = 5;
 //+------------------------------------------------------------------+
 //| Hàm xử lý logic cho một nhóm lệnh đã được phân loại              |
 //+------------------------------------------------------------------+
-void DoDCA(int order_type_signal)
+void DoDCA(int order_type_signal, string symbol, long magic)
   {
-   string log_prefix = "[DoDCA] ";
+   string log_prefix = StringFormat("[DoDCA] [%s:%lld] ", symbol, magic);
 
    if(order_type_signal != 1 && order_type_signal != -1)
      {
@@ -1220,7 +1220,8 @@ void DoDCA(int order_type_signal)
       ulong ticket = PositionGetTicket(i);
       if(PositionSelectByTicket(ticket))
         {
-         if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+         if(PositionGetString(POSITION_SYMBOL) == symbol &&
+            PositionGetInteger(POSITION_MAGIC) == magic &&
             (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == target_position_type)
            {
             datetime open_time = (datetime)PositionGetInteger(POSITION_TIME);
@@ -1295,21 +1296,21 @@ void DoDCA(int order_type_signal)
       double entry_price_3 = target_positions[2].open_price;
       if(target_position_type == POSITION_TYPE_BUY)
         {
-         double current_ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+         double current_ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
          bool condition1_met = (current_ask > entry_price_3);
          datetime time_order_1 = (datetime)target_positions[0].open_time;
          datetime time_order_3 = (datetime)target_positions[2].open_time;
-         int bar_index_1 = iBarShift(_Symbol, _Period, time_order_1);
-         int bar_index_3 = iBarShift(_Symbol, _Period, time_order_3);
+         int bar_index_1 = iBarShift(symbol, _Period, time_order_1);
+         int bar_index_3 = iBarShift(symbol, _Period, time_order_3);
          bool condition2_met = false;
          if(bar_index_1 >= 0 && bar_index_3 >= 0)
            {
             int count1 = bar_index_1 - bar_index_3 + 1;
-            int lowest_bar_index_1 = iLowest(_Symbol, _Period, MODE_LOW, count1, bar_index_3);
-            double lowest_low_1 = iLow(_Symbol, _Period, lowest_bar_index_1);
+            int lowest_bar_index_1 = iLowest(symbol, _Period, MODE_LOW, count1, bar_index_3);
+            double lowest_low_1 = iLow(symbol, _Period, lowest_bar_index_1);
             int count2 = bar_index_3 + 1;
-            int lowest_bar_index_2 = iLowest(_Symbol, _Period, MODE_LOW, count2, 0);
-            double lowest_low_2 = iLow(_Symbol, _Period, lowest_bar_index_2);
+            int lowest_bar_index_2 = iLowest(symbol, _Period, MODE_LOW, count2, 0);
+            double lowest_low_2 = iLow(symbol, _Period, lowest_bar_index_2);
             condition2_met = (lowest_low_2 > lowest_low_1);
            }
          if(!condition1_met && !condition2_met)
@@ -1320,21 +1321,21 @@ void DoDCA(int order_type_signal)
         }
       else
         {
-         double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+         double current_bid = SymbolInfoDouble(symbol, SYMBOL_BID);
          bool condition1_met = (current_bid < entry_price_3);
          datetime time_order_1 = (datetime)target_positions[0].open_time;
          datetime time_order_3 = (datetime)target_positions[2].open_time;
-         int bar_index_1 = iBarShift(_Symbol, _Period, time_order_1);
-         int bar_index_3 = iBarShift(_Symbol, _Period, time_order_3);
+         int bar_index_1 = iBarShift(symbol, _Period, time_order_1);
+         int bar_index_3 = iBarShift(symbol, _Period, time_order_3);
          bool condition2_met = false;
          if(bar_index_1 >= 0 && bar_index_3 >= 0)
            {
             int count1 = bar_index_1 - bar_index_3 + 1;
-            int highest_bar_index_1 = iHighest(_Symbol, _Period, MODE_HIGH, count1, bar_index_3);
-            double highest_high_1 = iHigh(_Symbol, _Period, highest_bar_index_1);
+            int highest_bar_index_1 = iHighest(symbol, _Period, MODE_HIGH, count1, bar_index_3);
+            double highest_high_1 = iHigh(symbol, _Period, highest_bar_index_1);
             int count2 = bar_index_3 + 1;
-            int highest_bar_index_2 = iHighest(_Symbol, _Period, MODE_HIGH, count2, 0);
-            double highest_high_2 = iHigh(_Symbol, _Period, highest_bar_index_2);
+            int highest_bar_index_2 = iHighest(symbol, _Period, MODE_HIGH, count2, 0);
+            double highest_high_2 = iHigh(symbol, _Period, highest_bar_index_2);
             condition2_met = (highest_high_2 < highest_high_1);
            }
          if(!condition1_met && !condition2_met)
@@ -1358,14 +1359,14 @@ void DoDCA(int order_type_signal)
    double new_tp_price = 0;
    if(positions_of_type == 1)
      {
-      double market_price = (target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_BID) : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double market_price = (target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(symbol, SYMBOL_BID) : SymbolInfoDouble(symbol, SYMBOL_ASK);
       double tp_base_price = (first_position_entry_price + market_price) / 2.0;
       double future_total_volume = total_volume + volume_to_open;
-      double point_size = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      double current_spread_in_points = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / point_size;
+      double point_size = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+      double current_spread_in_points = (SymbolInfoDouble(symbol, SYMBOL_ASK) - SymbolInfoDouble(symbol, SYMBOL_BID)) / point_size;
       double commission_cost_per_lot = commission_per_lot;
-      if(!IsForexPair(_Symbol) && !(StringFind(_Symbol, "XAU") >= 0))
+      if(!IsForexPair(symbol) && !(StringFind(symbol, "XAU") >= 0))
          commission_cost_per_lot = 0;
       double total_commission_cost = future_total_volume * commission_cost_per_lot;
       double total_spread_cost_in_money = total_commission_cost + current_spread_in_points * tick_value * future_total_volume;
@@ -1379,16 +1380,16 @@ void DoDCA(int order_type_signal)
      {
       double future_total_volume = total_volume + volume_to_open;
       double future_weighted_price_sum = weighted_price_sum;
-      double current_price_for_new_order = (target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double current_price_for_new_order = (target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(symbol, SYMBOL_ASK) : SymbolInfoDouble(symbol, SYMBOL_BID);
       future_weighted_price_sum += current_price_for_new_order * volume_to_open;
       double breakeven_price = future_weighted_price_sum / future_total_volume;
       double commission_cost_per_lot = commission_per_lot;
-      if(!IsForexPair(_Symbol) && !(StringFind(_Symbol, "XAU") >= 0))
+      if(!IsForexPair(symbol) && !(StringFind(symbol, "XAU") >= 0))
          commission_cost_per_lot = 0;
       double total_commission_cost = future_total_volume * commission_cost_per_lot;
-      double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      double point_size = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      double current_spread_in_points = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID)) / point_size;
+      double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+      double point_size = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      double current_spread_in_points = (SymbolInfoDouble(symbol, SYMBOL_ASK) - SymbolInfoDouble(symbol, SYMBOL_BID)) / point_size;
       double total_spread_cost = current_spread_in_points * tick_value * future_total_volume;
       double total_cost = buffer_profit + total_commission_cost + total_spread_cost;
       double tick_value_for_total_volume = future_total_volume * tick_value;
@@ -1398,11 +1399,12 @@ void DoDCA(int order_type_signal)
       new_tp_price = (target_position_type == POSITION_TYPE_BUY) ? breakeven_price + total_cost_offset_in_price : breakeven_price - total_cost_offset_in_price;
      }
 
-   new_tp_price = NormalizeDouble(new_tp_price, _Digits);
+   int symbol_digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   new_tp_price = NormalizeDouble(new_tp_price, symbol_digits);
 
-   double min_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double max_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double step_vol = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   double min_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double step_vol = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
    volume_to_open = MathMax(min_vol, MathMin(max_vol, volume_to_open));
    volume_to_open = MathFloor(volume_to_open / step_vol) * step_vol;
    volume_to_open = NormalizeDouble(volume_to_open, 2);
@@ -1414,21 +1416,23 @@ void DoDCA(int order_type_signal)
      }
 
    Print(log_prefix, "Opening ", pos_type_str, " DCA volume: ", DoubleToString(volume_to_open, 2));
+   trade.SetExpertMagicNumber(magic);
    bool result = false;
    if(order_type_signal == 1)
-      result = trade.Buy(volume_to_open, _Symbol, 0, 0, 0, "DCA Buy");
+      result = trade.Buy(volume_to_open, symbol, 0, 0, 0, "DCA Buy");
    else
-      result = trade.Sell(volume_to_open, _Symbol, 0, 0, 0, "DCA Sell");
+      result = trade.Sell(volume_to_open, symbol, 0, 0, 0, "DCA Sell");
 
    if(result)
      {
-      Print(log_prefix, "DCA order opened. Updating TP to ", DoubleToString(new_tp_price, _Digits));
+      Print(log_prefix, "DCA order opened. Updating TP to ", DoubleToString(new_tp_price, symbol_digits));
       for(int i = PositionsTotal() - 1; i >= 0; i--)
         {
          ulong ticket = PositionGetTicket(i);
          if(PositionSelectByTicket(ticket))
            {
-            if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
+            if(PositionGetString(POSITION_SYMBOL) == symbol &&
+               PositionGetInteger(POSITION_MAGIC) == magic &&
                (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == target_position_type)
               {
                double current_sl = PositionGetDouble(POSITION_SL);
@@ -1437,7 +1441,7 @@ void DoDCA(int order_type_signal)
               }
            }
         }
-      Print(log_prefix, "DCA completed for ", pos_type_str, " at price ", DoubleToString((target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID), _Digits), ", TP=", DoubleToString(new_tp_price, _Digits));
+      Print(log_prefix, "DCA completed for ", pos_type_str, " at price ", DoubleToString((target_position_type == POSITION_TYPE_BUY) ? SymbolInfoDouble(symbol, SYMBOL_ASK) : SymbolInfoDouble(symbol, SYMBOL_BID), symbol_digits), ", TP=", DoubleToString(new_tp_price, symbol_digits));
      }
    else
       Print(log_prefix, "DCA order failed. Error: ", (string)GetLastError(), " - ", trade.ResultComment());
@@ -1505,6 +1509,25 @@ void UpdateCISDDCAH1State()
   }
 
 //+------------------------------------------------------------------+
+//| Find active strategy magic for a scoped DCA group                 |
+//+------------------------------------------------------------------+
+long FindDCAMagicForSymbolDirection(string symbol, ENUM_POSITION_TYPE position_type)
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) == symbol &&
+         (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == position_type)
+         return PositionGetInteger(POSITION_MAGIC);
+     }
+   return 0;
+  }
+
+//+------------------------------------------------------------------+
 //| Provider-local CISD confirmation gate for DoDCA                   |
 //+------------------------------------------------------------------+
 void CheckDCAEntryConditionFromCISD()
@@ -1556,8 +1579,12 @@ void CheckDCAEntryConditionFromCISD()
         {
          if(i == 1 && time_i > g_last_trade_signal_time)
            {
-            g_last_trade_signal_time = time_i;
-            DoDCA(1);
+            long magic = FindDCAMagicForSymbolDirection(_Symbol, POSITION_TYPE_BUY);
+            if(magic != 0)
+              {
+               g_last_trade_signal_time = time_i;
+               DoDCA(1, _Symbol, magic);
+              }
            }
          s_bear_setup.active = false;
         }
@@ -1566,8 +1593,12 @@ void CheckDCAEntryConditionFromCISD()
         {
          if(i == 1 && time_i > g_last_trade_signal_time)
            {
-            g_last_trade_signal_time = time_i;
-            DoDCA(-1);
+            long magic = FindDCAMagicForSymbolDirection(_Symbol, POSITION_TYPE_SELL);
+            if(magic != 0)
+              {
+               g_last_trade_signal_time = time_i;
+               DoDCA(-1, _Symbol, magic);
+              }
            }
          s_bull_setup.active = false;
         }
@@ -2016,8 +2047,7 @@ void ExecuteOpenOrder(const string &raw)
             g_ordersExecuted++;
            }
 
-         if(symbol == _Symbol)
-            DoDCA(direction == "BUY" ? 1 : -1);
+         DoDCA(direction == "BUY" ? 1 : -1, symbol, magic);
         }
       else
         {
