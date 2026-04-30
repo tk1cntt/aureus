@@ -1679,7 +1679,9 @@ void ExecuteOpenOrder(const string &raw)
       return;
      }
 
-// Reject duplicate active strategy order on the same symbol before ACK/order side effects
+// Reject duplicate active strategy order on the same symbol and side before ACK/order side effects
+   ENUM_POSITION_TYPE requested_position_type = (direction == "BUY") ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
+
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
@@ -1688,11 +1690,13 @@ void ExecuteOpenOrder(const string &raw)
       if(!PositionSelectByTicket(ticket))
          continue;
 
-      if(PositionGetString(POSITION_SYMBOL) == symbol && PositionGetInteger(POSITION_MAGIC) == magic)
+      if(PositionGetString(POSITION_SYMBOL) == symbol &&
+         PositionGetInteger(POSITION_MAGIC) == magic &&
+         (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == requested_position_type)
         {
          if(InpDebugMode)
-            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld existing_position=%llu reason=STRATEGY_ORDER_EXISTS",
-                        cmdId, symbol, magic, ticket);
+            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld side=%s existing_position=%llu reason=STRATEGY_ORDER_EXISTS",
+                        cmdId, symbol, magic, direction, ticket);
          SendNACK(cmdId, "STRATEGY_ORDER_EXISTS");
          return;
         }
@@ -1706,11 +1710,24 @@ void ExecuteOpenOrder(const string &raw)
       if(!OrderSelect(ticket))
          continue;
 
-      if(OrderGetString(ORDER_SYMBOL) == symbol && OrderGetInteger(ORDER_MAGIC) == magic)
+      ENUM_ORDER_TYPE existing_order_type = (ENUM_ORDER_TYPE)OrderGetInteger(ORDER_TYPE);
+      bool existing_order_same_side = false;
+      if(direction == "BUY")
+         existing_order_same_side = (existing_order_type == ORDER_TYPE_BUY_LIMIT ||
+                                     existing_order_type == ORDER_TYPE_BUY_STOP ||
+                                     existing_order_type == ORDER_TYPE_BUY_STOP_LIMIT);
+      else
+         existing_order_same_side = (existing_order_type == ORDER_TYPE_SELL_LIMIT ||
+                                     existing_order_type == ORDER_TYPE_SELL_STOP ||
+                                     existing_order_type == ORDER_TYPE_SELL_STOP_LIMIT);
+
+      if(OrderGetString(ORDER_SYMBOL) == symbol &&
+         OrderGetInteger(ORDER_MAGIC) == magic &&
+         existing_order_same_side)
         {
          if(InpDebugMode)
-            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld existing_order=%llu type=%lld reason=STRATEGY_ORDER_EXISTS",
-                        cmdId, symbol, magic, ticket, OrderGetInteger(ORDER_TYPE));
+            PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s magic=%lld side=%s existing_order=%llu type=%lld reason=STRATEGY_ORDER_EXISTS",
+                        cmdId, symbol, magic, direction, ticket, OrderGetInteger(ORDER_TYPE));
          SendNACK(cmdId, "STRATEGY_ORDER_EXISTS");
          return;
         }
