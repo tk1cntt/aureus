@@ -2517,17 +2517,10 @@ void ExecuteTradeHistoryRequest(const string &raw)
   }
 
 //+------------------------------------------------------------------+
-//| Listen and process commands from Gateway                           |
+//| Process one complete command from Gateway                         |
 //+------------------------------------------------------------------+
-void ProcessIncomingCommands()
+void ProcessSingleCommand(const string &raw)
   {
-   if(!g_socket.IsConnected())
-      return;
-
-   string raw = g_socket.Receive();
-   if(raw == "")
-      return;
-
 //--- Extract symbol from command
    string cmdSymbol = ParseJSONString(raw, "symbol");
 
@@ -2557,16 +2550,14 @@ void ProcessIncomingCommands()
       return;
      }
 
-   if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
-
-      // â"€â"€ Open Orders Request â"€â"€
-      if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
-        {
-         if(InpDebugMode)
-            PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
-         ExecuteRequestOrders(raw);
-         return;
-        }
+// â"€â"€ Open Orders Request â"€â"€
+   if(StringFind(raw, "\"REQUEST_ORDERS\"") >= 0)
+     {
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] Received REQUEST_ORDERS command");
+      ExecuteRequestOrders(raw);
+      return;
+     }
 
 // â"€â"€ Trade History Request â"€â"€
    if(StringFind(raw, "\"REQUEST_TRADE_HISTORY\"") >= 0)
@@ -2577,6 +2568,7 @@ void ProcessIncomingCommands()
       return;
      }
 
+   if(StringFind(raw, "REQUEST_BACKFILL_COUNT") >= 0)
      {
       int countPos = StringFind(raw, "\"count\":");
       if(countPos > 0)
@@ -2648,6 +2640,77 @@ void ProcessIncomingCommands()
            }
         }
      }
+  }
+
+//+------------------------------------------------------------------+
+//| Listen and process commands from Gateway                           |
+//+------------------------------------------------------------------+
+void ProcessIncomingCommands()
+  {
+   if(!g_socket.IsConnected())
+      return;
+
+   string raw = g_socket.Receive();
+   if(raw == "")
+      return;
+
+   int depth = 0;
+   int startPos = -1;
+   int processed = 0;
+   bool inString = false;
+   bool escaped = false;
+   int rawLen = StringLen(raw);
+
+   for(int i = 0; i < rawLen; i++)
+     {
+      ushort ch = StringGetCharacter(raw, i);
+
+      if(inString)
+        {
+         if(escaped)
+           {
+            escaped = false;
+            continue;
+           }
+         if(ch == '\\')
+           {
+            escaped = true;
+            continue;
+           }
+         if(ch == '"')
+            inString = false;
+         continue;
+        }
+
+      if(ch == '"')
+        {
+         inString = true;
+         continue;
+        }
+
+      if(ch == '{')
+        {
+         if(depth == 0)
+            startPos = i;
+         depth++;
+         continue;
+        }
+
+      if(ch == '}' && depth > 0)
+        {
+         depth--;
+         if(depth == 0 && startPos >= 0)
+           {
+            string command = StringSubstr(raw, startPos, i - startPos + 1);
+            ProcessSingleCommand(command);
+            processed++;
+            startPos = -1;
+           }
+        }
+     }
+
+   if(InpDebugMode && processed > 1)
+      PrintFormat("[AureusProvider] Processed %d commands from one socket read", processed);
   }
 
 //+------------------------------------------------------------------+
