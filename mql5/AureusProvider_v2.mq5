@@ -59,6 +59,17 @@ struct CISDDCAState
    SetupInfo         bear_setup;
   };
 
+struct HistoryCooldownState
+  {
+   string            symbol;
+   long              magic;
+   string            direction;
+   datetime          cooldown_until;
+   datetime          last_close_time;
+   ulong             last_close_deal;
+   ulong             processed_deals[];
+  };
+
 //+------------------------------------------------------------------+
 //| Global Variables                                                   |
 //+------------------------------------------------------------------+
@@ -80,6 +91,148 @@ int           g_ordersFailed;          // Failed order count
 CTrade        trade;
 
 CISDDCAState g_cisdDCAStates[];         // Per-symbol provider-local DCA gate state
+HistoryCooldownState g_historyCooldowns[]; // Provider-local history cooldown by symbol + magic + direction
+//+------------------------------------------------------------------+
+//| History cooldown helpers                                           |
+//+------------------------------------------------------------------+
+int FindHistoryCooldownIndex(string symbol, long magic, string direction)
+  {
+   for(int i = 0; i < ArraySize(g_historyCooldowns); i++)
+     {
+      if(g_historyCooldowns[i].symbol == symbol &&
+         g_historyCooldowns[i].magic == magic &&
+         g_historyCooldowns[i].direction == direction)
+         return i;
+     }
+   return -1;
+  }
+
+int EnsureHistoryCooldownState(string symbol, long magic, string direction)
+  {
+   int idx = FindHistoryCooldownIndex(symbol, magic, direction);
+   if(idx >= 0)
+      return idx;
+
+   idx = ArraySize(g_historyCooldowns);
+   ArrayResize(g_historyCooldowns, idx + 1);
+   g_historyCooldowns[idx].symbol = symbol;
+   g_historyCooldowns[idx].magic = magic;
+   g_historyCooldowns[idx].direction = direction;
+   g_historyCooldowns[idx].cooldown_until = 0;
+   g_historyCooldowns[idx].last_close_time = 0;
+   g_historyCooldowns[idx].last_close_deal = 0;
+   ArrayResize(g_historyCooldowns[idx].processed_deals, 0);
+   return idx;
+  }
+
+string DirectionFromCloseDealType(long dealType)
+  {
+   if(dealType == DEAL_TYPE_BUY)
+      return "SELL";
+   if(dealType == DEAL_TYPE_SELL)
+      return "BUY";
+   return "";
+  }
+
+bool IsHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTicket)
+  {
+   for(int i = 0; i < ArraySize(state.processed_deals); i++)
+     {
+      if(state.processed_deals[i] == dealTicket)
+         return true;
+     }
+   return false;
+  }
+
+void MarkHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTicket)
+  {
+   int size = ArraySize(state.processed_deals);
+   ArrayResize(state.processed_deals, size + 1);
+   state.processed_deals[size] = dealTicket;
+  }
+
+void SetHistoryCooldown(int idx, datetime cooldownUntil, string reason, string source)
+  {
+   if(cooldownUntil <= TimeCurrent())
+      return;
+   if(cooldownUntil <= g_historyCooldowns[idx].cooldown_until)
+      return;
+
+   g_historyCooldowns[idx].cooldown_until = cooldownUntil;
+   PrintFormat("[HistoryCooldown] Set cooldown symbol=%s magic=%lld direction=%s until=%s reason=%s source=%s",
+               g_historyCooldowns[idx].symbol,
+               g_historyCooldowns[idx].magic,
+               g_historyCooldowns[idx].direction,
+               TimeToString(cooldownUntil, TIME_DATE | TIME_SECONDS),
+               reason,
+               source);
+  }
+
+void ApplyCloseDealToHistoryCooldown(ulong dealTicket, string source)
+  {
+   if(dealTicket == 0 || !HistoryDealSelect(dealTicket))
+      return;
+   if(HistoryDealGetInteger(dealTicket, DEAL_ENTRY) != DEAL_ENTRY_OUT)
+      return;
+
+   long magic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
+   if(magic == 0)
+      return;
+
+   string symbol = HistoryDealGetString(dealTicket, DEAL_SYMBOL);
+   if(FindContextIndex(symbol) < 0)
+      return;
+
+   string direction = DirectionFromCloseDealType(HistoryDealGetInteger(dealTicket, DEAL_TYPE));
+   if(direction == "")
+      return;
+
+   int idx = EnsureHistoryCooldownState(symbol, magic, direction);
+   if(IsHistoryCooldownDealProcessed(g_historyCooldowns[idx], dealTicket))
+      return;
+
+   datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+   long reason = HistoryDealGetInteger(dealTicket, DEAL_REASON);
+   if(g_historyCooldowns[idx].last_close_time > 0 && MathAbs((int)(closeTime - g_historyCooldowns[idx].last_close_time)) <= 2)
+      SetHistoryCooldown(idx, closeTime + 60 * 60, "multi_close_2s", source);
+   else
+      if(reason == DEAL_REASON_SL)
+         SetHistoryCooldown(idx, closeTime + 30 * 60, "single_sl", source);
+
+   g_historyCooldowns[idx].last_close_time = closeTime;
+   g_historyCooldowns[idx].last_close_deal = dealTicket;
+   MarkHistoryCooldownDealProcessed(g_historyCooldowns[idx], dealTicket);
+  }
+
+bool IsHistoryCooldownActive(string symbol, long magic, string direction, datetime &cooldownUntil)
+  {
+   int idx = FindHistoryCooldownIndex(symbol, magic, direction);
+   if(idx < 0)
+      return false;
+   cooldownUntil = g_historyCooldowns[idx].cooldown_until;
+   return cooldownUntil > TimeCurrent();
+  }
+
+void BootstrapHistoryCooldowns()
+  {
+   datetime toTime = TimeCurrent();
+   datetime fromTime = toTime - 24 * 60 * 60;
+   PrintFormat("[HistoryCooldown] Bootstrap start from=%s to=%s", TimeToString(fromTime, TIME_DATE | TIME_SECONDS), TimeToString(toTime, TIME_DATE | TIME_SECONDS));
+   if(!HistorySelect(fromTime, toTime))
+     {
+      PrintFormat("[HistoryCooldown] Bootstrap HistorySelect failed: %d", GetLastError());
+      return;
+     }
+
+   int totalDeals = HistoryDealsTotal();
+   for(int i = 0; i < totalDeals; i++)
+     {
+      ulong dealTicket = HistoryDealGetTicket(i);
+      ApplyCloseDealToHistoryCooldown(dealTicket, "bootstrap");
+     }
+   PrintFormat("[HistoryCooldown] Bootstrap complete states=%d deals=%d", ArraySize(g_historyCooldowns), totalDeals);
+  }
+
 //+------------------------------------------------------------------+
 //| Initialization                                                     |
 //+------------------------------------------------------------------+
@@ -98,6 +251,7 @@ int OnInit()
 
    ArrayResize(g_contexts, g_symbolCount);
    ArrayResize(g_cisdDCAStates, g_symbolCount);
+   ArrayResize(g_historyCooldowns, 0);
 
    for(int i = 0; i < g_symbolCount; i++)
      {
@@ -123,6 +277,8 @@ int OnInit()
    if(InpDebugMode)
       PrintFormat("[AureusProvider] Tick streaming: %s (chart symbol: %s)",
                   InpSendTicks ? "ON" : "OFF", _Symbol);
+
+   BootstrapHistoryCooldowns();
 
 //--- Configure socket
    g_socket.SetHost(InpGatewayHost);
@@ -1196,7 +1352,7 @@ struct PositionInfo
   };
 
 double commission_per_lot = 12.0;
-int max_loss_amount = 100;
+double max_loss_amount = InpRiskFixedAmountBudget * 2;
 int buffer_profit = 5;
 
 //+------------------------------------------------------------------+
@@ -1477,7 +1633,7 @@ void DoDCA(int order_type_signal, string symbol, long magic)
      }
    first_position_entry_price = target_positions[0].open_price;
 
-   if(net_profit >= -(positions_of_type * max_loss_amount))
+   if(net_profit >= -(positions_of_type * InpBEProfitTarget))
      {
       Print(log_prefix, "Net profit ", DoubleToString(net_profit, 2), " has not exceeded DCA loss threshold. Skip.");
       return;
@@ -1880,6 +2036,16 @@ void ExecuteOpenOrder(const string &raw)
       if(InpDebugMode)
          PrintFormat("[AureusProvider] Reject OPEN_ORDER: cmd_id=%s symbol=%s reason=SYMBOL_NOT_ALLOWED", cmdId, symbol);
       // SendNACK(cmdId, "SYMBOL_NOT_ALLOWED");
+      return;
+     }
+
+// Reject history cooldown before ACK/order side effects
+   datetime cooldownUntil = 0;
+   if(IsHistoryCooldownActive(symbol, magic, direction, cooldownUntil))
+     {
+      PrintFormat("[HistoryCooldown] Reject OPEN_ORDER cmd_id=%s symbol=%s magic=%lld direction=%s until=%s reason=HISTORY_COOLDOWN_ACTIVE",
+                  cmdId, symbol, magic, direction, TimeToString(cooldownUntil, TIME_DATE | TIME_SECONDS));
+      SendNACK(cmdId, "HISTORY_COOLDOWN_ACTIVE");
       return;
      }
 
@@ -2709,7 +2875,7 @@ void ProcessIncomingCommands()
         }
      }
 
-   if(InpDebugMode && processed > 1)
+   if(processed > 1)
       PrintFormat("[AureusProvider] Processed %d commands from one socket read", processed);
   }
 
@@ -2722,10 +2888,6 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
   {
 // Only process deal additions
    if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
-      return;
-
-// Must be connected to push events
-   if(!g_socket.IsConnected())
       return;
 
 // Select the deal from history
@@ -2754,6 +2916,12 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
 
 // Determine original direction (close deal is opposite direction)
    string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
+
+   ApplyCloseDealToHistoryCooldown(trans.deal, "realtime");
+
+// Must be connected to push events
+   if(!g_socket.IsConnected())
+      return;
 
 // Get open price from position info (if still available)
    double openPrice = 0.0;
