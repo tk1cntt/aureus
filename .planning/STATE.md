@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-04-30 - Completed quick task 260501-720: Fix MT5 ProcessIncomingCommands to handle multiple concatenated order JSON messages per socket read
+Last activity: 2026-05-01 - Completed quick task 260501-eka: Implement history-based cooldown in AureusProvider_v2 scoped by symbol magic direction
 
 ## Architecture Decision
 
@@ -101,6 +101,7 @@ Last activity: 2026-04-30 - Completed quick task 260501-720: Fix MT5 ProcessInco
 | 260430-u7c | Analyze and propose optimized MT5 order dispatch architecture for 1-2s latency and non-blocking per-order handling | 2026-04-30 | (report-only) |  | [260430-u7c-analyze-and-propose-optimized-mt5-order-](./quick/260430-u7c-analyze-and-propose-optimized-mt5-order-/) |
 | 260430-uij | Implement optimized MT5 order dispatch roadmap: observability, provider-local unsupported-symbol ignore for broadcast multi-MT5, bounded lane scheduler, ACK/result state machine, reconcile timeout, gateway/MT5 optimization if metrics show bottleneck | 2026-04-30 | 8acd1c1 | Verified | [260430-uij-implement-optimized-mt5-order-dispatch-r](./quick/260430-uij-implement-optimized-mt5-order-dispatch-r/) |
 | 260501-720 | Fix MT5 ProcessIncomingCommands to handle multiple concatenated order JSON messages per socket read | 2026-04-30 | 66824ef | Completed | [260501-720-fix-mt5-processincomingcommands-to-handl](./quick/260501-720-fix-mt5-processincomingcommands-to-handl/) |
+| 260501-eka | Implement history-based cooldown in AureusProvider_v2 scoped by symbol magic direction | 2026-05-01 | e2c49ee | Verified | [260501-eka-implement-history-based-cooldown-in-aure](./quick/260501-eka-implement-history-based-cooldown-in-aure/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
