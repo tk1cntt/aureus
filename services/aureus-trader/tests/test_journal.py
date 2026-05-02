@@ -27,9 +27,10 @@ class TestOnStrategyMatchInputValidation:
         assert len(mock_db_pool.acquired) == 1
         # Verify INSERT query called
         queries = mock_db_pool._conn.queries
-        assert len(queries) == 1
+        assert len(queries) == 2
         assert queries[0][0] == "fetchval"
         assert "INSERT INTO aureus_trade_journal" in queries[0][1]
+        assert "INSERT INTO aureus_reasoning_entries" in queries[1][1]
 
     @pytest.mark.asyncio
     async def test_TJ_IN_02_missing_trace_id(self, journal_manager, valid_strategy_match_event):

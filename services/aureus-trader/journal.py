@@ -276,6 +276,32 @@ class TradeJournalManager:
                     json.dumps(context_filters),
                     origin_timestamp
                 )
+                if result:
+                    try:
+                        reasoning_text = data.get("reasoning", data.get("rationale", match_data.get("reasoning", match_data.get("rationale"))))
+                        await conn.fetchval(
+                            """
+                            INSERT INTO aureus_reasoning_entries (
+                                trace_id, trade_journal_id, strategy_id, strategy_name, symbol,
+                                direction, confidence, active_signals, context_filters,
+                                reasoning_text, decision_action
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                            RETURNING id
+                            """,
+                            trace_id,
+                            result,
+                            strategy_id,
+                            strategy_name,
+                            symbol,
+                            direction,
+                            score,
+                            json.dumps(active_signals),
+                            json.dumps(context_filters),
+                            reasoning_text,
+                            direction,
+                        )
+                    except Exception as exc:
+                        logger.warning("Reasoning entry insert failed for trace_id=%s: %s", trace_id, exc)
 
             if result:
                 logger.info(
@@ -483,7 +509,7 @@ class TradeJournalManager:
                     snapshot_columns = _build_signal_snapshot_columns(signal_snapshot, event)
 
                     if trade_journal_id is not None:
-                        snapshot_insert_result = await conn.execute(
+                        snapshot_id = await conn.fetchval(
                             """
                             INSERT INTO aureus_trade_signal_snapshots (
                                 trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
@@ -507,6 +533,7 @@ class TradeJournalManager:
                                 $36
                             )
                             ON CONFLICT (trade_journal_id) DO NOTHING
+                            RETURNING id
                             """,
                             trade_journal_id,
                             trace_id,
@@ -545,11 +572,29 @@ class TradeJournalManager:
                             snapshot_columns["cisd_h1"],
                             entry_time,
                         )
+                        await conn.execute(
+                            """
+                            UPDATE aureus_reasoning_entries
+                            SET trade_journal_id = $1,
+                                signal_snapshot_id = COALESCE($2, signal_snapshot_id),
+                                ticket = $3,
+                                pending_order_id = COALESCE($4, pending_order_id),
+                                entry_time = $5,
+                                updated_at = now()
+                            WHERE trace_id = $6
+                            """,
+                            trade_journal_id,
+                            snapshot_id,
+                            ticket,
+                            event.get("pending_order_id"),
+                            entry_time,
+                            trace_id,
+                        )
                         logger.info(
-                            "on_order_opened: snapshot_insert trace_id=%s ticket=%s result=%s",
+                            "on_order_opened: snapshot_insert trace_id=%s ticket=%s snapshot_id=%s",
                             trace_id,
                             ticket,
-                            snapshot_insert_result,
+                            snapshot_id,
                         )
                     else:
                         logger.warning(
@@ -714,6 +759,30 @@ class TradeJournalManager:
                     close_price, exit_time, exit_reason, duration_seconds,
                     pnl, pnl_pips, commission, swap, result, trace_id
                 )
+                if result_id:
+                    success = True if result == "WIN" else False if result == "LOSS" else None
+                    reward = pnl_pips if pnl_pips is not None else pnl
+                    await conn.execute(
+                        """
+                        UPDATE aureus_reasoning_entries
+                        SET success = $1,
+                            reward = $2,
+                            pnl = $3,
+                            pnl_pips = $4,
+                            result = $5,
+                            exit_time = $6,
+                            evaluated_at = now(),
+                            updated_at = now()
+                        WHERE trace_id = $7
+                        """,
+                        success,
+                        reward,
+                        pnl,
+                        pnl_pips,
+                        result,
+                        exit_time,
+                        trace_id,
+                    )
 
             if result_id:
                 logger.info(
