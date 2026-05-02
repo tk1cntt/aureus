@@ -194,6 +194,94 @@ class TestPendingOrderLifecycle:
         assert args[9] == 7001
 
 
+class TestReasoningBank:
+    @pytest.mark.asyncio
+    async def test_on_strategy_match_appends_reasoning_entry(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+        mock_db_pool.set_result("fetchval", 1)
+
+        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        queries = mock_db_pool._conn.queries
+        assert len(queries) == 2
+        assert "INSERT INTO aureus_trade_journal" in queries[0][1]
+        assert "INSERT INTO aureus_reasoning_entries" in queries[1][1]
+        args = queries[1][2]
+        assert args[0] == "trace-test-journal-001"
+        assert args[1] == 1
+        assert args[2] == 101
+        assert args[3] == "chandelier_breakout"
+        assert args[4] == "XAUUSD"
+        assert args[5] == "BUY"
+        assert args[6] == 0.85
+        assert json.loads(args[7])[0]["tag"] == "liquidity_sweep"
+        assert json.loads(args[8])["session"] == "london"
+        assert args[9] == "CISD + sweep aligned"
+        assert args[10] == "BUY"
+
+    @pytest.mark.asyncio
+    async def test_on_strategy_match_reasoning_insert_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        class ReasoningFailConnection:
+            def __init__(self):
+                self.queries = []
+                self.calls = 0
+
+            async def fetchval(self, query, *args):
+                self.calls += 1
+                self.queries.append(("fetchval", query, args))
+                if self.calls == 2:
+                    raise RuntimeError("reasoning insert failed")
+                return 1
+
+        conn = ReasoningFailConnection()
+        mock_db_pool._conn = conn
+
+        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        assert len(conn.queries) == 2
+        assert "INSERT INTO aureus_reasoning_entries" in conn.queries[1][1]
+
+    @pytest.mark.asyncio
+    async def test_on_order_opened_links_reasoning_entry(self, journal_manager, valid_order_opened_event, mock_db_pool):
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+
+        assert result is True
+        queries = mock_db_pool._conn.queries
+        reasoning_updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1]]
+        assert len(reasoning_updates) == 1
+        args = reasoning_updates[0][2]
+        assert args[0] == 1
+        assert args[2] == 12345
+        assert args[5] == "trace-test-journal-001"
+
+    @pytest.mark.asyncio
+    async def test_on_order_closed_attaches_reasoning_outcome(self, journal_manager, valid_order_closed_event, mock_db_pool):
+        mock_db_pool.set_result("fetchrow", {
+            "id": 1,
+            "trace_id": "trace-test-journal-001",
+            "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
+            "direction": "BUY",
+            "symbol": "XAUUSD"
+        })
+        mock_db_pool.set_result("fetchval", 1)
+
+        result = await journal_manager.on_order_closed(valid_order_closed_event)
+
+        assert result is True
+        queries = mock_db_pool._conn.queries
+        reasoning_updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1]]
+        assert len(reasoning_updates) == 1
+        args = reasoning_updates[0][2]
+        assert args[0] is True
+        assert args[1] == 1000.0
+        assert args[2] == 10.0
+        assert args[3] == 1000.0
+        assert args[4] == "WIN"
+        assert args[6] == "trace-test-journal-001"
+
+
 class TestOnOrderClosedInputValidation:
     """TJ-IN-11 through TJ-IN-13: Input validation for on_order_closed."""
 
