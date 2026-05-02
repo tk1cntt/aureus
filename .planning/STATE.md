@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-04-25
+last_activity: 2026-05-01 - Completed quick task 260501-ock: Preserve legacy/default-old management for unmapped profile magic
 progress:
   total_phases: 4
   completed_phases: 2
@@ -102,6 +102,9 @@ Last activity: 2026-05-01 - Completed quick task 260501-eka: Implement history-b
 | 260430-uij | Implement optimized MT5 order dispatch roadmap: observability, provider-local unsupported-symbol ignore for broadcast multi-MT5, bounded lane scheduler, ACK/result state machine, reconcile timeout, gateway/MT5 optimization if metrics show bottleneck | 2026-04-30 | 8acd1c1 | Verified | [260430-uij-implement-optimized-mt5-order-dispatch-r](./quick/260430-uij-implement-optimized-mt5-order-dispatch-r/) |
 | 260501-720 | Fix MT5 ProcessIncomingCommands to handle multiple concatenated order JSON messages per socket read | 2026-04-30 | 66824ef | Completed | [260501-720-fix-mt5-processincomingcommands-to-handl](./quick/260501-720-fix-mt5-processincomingcommands-to-handl/) |
 | 260501-eka | Implement history-based cooldown in AureusProvider_v2 scoped by symbol magic direction | 2026-05-01 | e2c49ee | Verified | [260501-eka-implement-history-based-cooldown-in-aure](./quick/260501-eka-implement-history-based-cooldown-in-aure/) |
+| 260501-i1p | Triển khai strategy-aware position management trong AureusProvider_v2 | 2026-05-01 | d3f52e9 | Verified | [260501-i1p-tri-n-khai-strategy-aware-position-manag](./quick/260501-i1p-tri-n-khai-strategy-aware-position-manag/) |
+| 260501-knj | Refactor strategy-aware position management with anti-lack coverage | 2026-05-01 | d5d3bd3 | Verified | [260501-knj-refactor-strategy-aware-position-managem](./quick/260501-knj-refactor-strategy-aware-position-managem/) |
+| 260501-ock | Preserve legacy/default-old management for unmapped profile magic | 2026-05-01 | 9daeb2b | Verified | [260501-ock-ph-i-gi-nguy-n-logic-c-v-i-case-profile-](./quick/260501-ock-ph-i-gi-nguy-n-logic-c-v-i-case-profile-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution

@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            AureusProvider.mq5     |
 //|                    Aureus Data Provider — Multi-Symbol Streaming   |
 //|                    Streams market data + receives order commands   |
@@ -28,6 +28,7 @@ input int      InpMaxSlippage        = 20;                       // Max slippage
 input int      InpMaxCmdIdHistory    = 500;                      // Max command ID history for dedup
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
 input double   InpBEProfitTarget     = 20.0;                     // Profit target ($) to activate breakeven management
+input string   InpMagicManagementProfiles = "607000:breakout_protect;2603000:trend_runner;1391000:basket_escape"; // magic:profile pairs
 input bool     InpDebugMode          = false;
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
@@ -92,6 +93,81 @@ CTrade        trade;
 
 CISDDCAState g_cisdDCAStates[];         // Per-symbol provider-local DCA gate state
 HistoryCooldownState g_historyCooldowns[]; // Provider-local history cooldown by symbol + magic + direction
+
+const string PROFILE_CONSERVATIVE     = "conservative";
+const string PROFILE_TREND_RUNNER     = "trend_runner";
+const string PROFILE_BREAKOUT_PROTECT = "breakout_protect";
+const string PROFILE_BASKET_ESCAPE    = "basket_escape";
+const string PROFILE_LEGACY           = "legacy";
+
+string TrimProfileToken(string value)
+  {
+   StringTrimLeft(value);
+   StringTrimRight(value);
+   return value;
+  }
+
+bool IsKnownManagementProfile(string profile)
+  {
+   return profile == PROFILE_CONSERVATIVE ||
+          profile == PROFILE_TREND_RUNNER ||
+          profile == PROFILE_BREAKOUT_PROTECT ||
+          profile == PROFILE_BASKET_ESCAPE;
+  }
+
+string ResolveManagementProfile(long magic, bool &fallback_used)
+  {
+   fallback_used = true;
+   string pairs[];
+   int pair_count = StringSplit(InpMagicManagementProfiles, ';', pairs);
+   for(int i = 0; i < pair_count; i++)
+     {
+      string pair = TrimProfileToken(pairs[i]);
+      if(pair == "")
+         continue;
+
+      int sep = StringFind(pair, ":");
+      if(sep <= 0 || sep >= StringLen(pair) - 1)
+         continue;
+
+      string magic_text = TrimProfileToken(StringSubstr(pair, 0, sep));
+      string profile = TrimProfileToken(StringSubstr(pair, sep + 1));
+      long mapped_magic = StringToInteger(magic_text);
+      if(mapped_magic == 0 || mapped_magic != magic)
+         continue;
+
+      if(IsKnownManagementProfile(profile))
+        {
+         fallback_used = false;
+         return profile;
+        }
+
+      PrintFormat("[ManagePositionProfitBreakEvent] magic=%lld unknown_profile=%s fallback_profile=%s", magic, profile, PROFILE_CONSERVATIVE);
+      return PROFILE_CONSERVATIVE;
+     }
+
+   return PROFILE_LEGACY;
+  }
+
+void LogManagementDecision(string symbol,
+                           long magic,
+                           string direction,
+                           string profile,
+                           string action,
+                           string reason,
+                           int positions_count,
+                           double net_profit,
+                           int age_seconds,
+                           string primitive,
+                           ulong ticket = 0,
+                           double target_sl = 0)
+  {
+   string target = (ticket > 0)
+                   ? StringFormat(" ticket=%I64u target_sl=%.5f", ticket, target_sl)
+                   : "";
+   PrintFormat("[ManagePositionDecision] symbol=%s magic=%lld direction=%s profile=%s action=%s reason=%s primitive=%s positions_count=%d net_profit=%.2f age_seconds=%d%s",
+               symbol, magic, direction, profile, action, reason, primitive, positions_count, net_profit, age_seconds, target);
+  }
 //+------------------------------------------------------------------+
 //| History cooldown helpers                                           |
 //+------------------------------------------------------------------+
@@ -1378,85 +1454,117 @@ bool IsImbalanceDown(string symbol, ENUM_TIMEFRAMES timeframe, int index)
 //+------------------------------------------------------------------+
 //| Manage one provider-scoped symbol + magic + direction group      |
 //+------------------------------------------------------------------+
-void ProcessPositionsByType(string symbol,
-                            long magic,
-                            ENUM_POSITION_TYPE target_type,
-                            const ulong &tickets[],
-                            double total_profit,
-                            double total_volume,
-                            double weighted_price_sum,
-                            datetime earliest_open_time)
+double GetPositionCommissionCostPerLot(string symbol)
+  {
+   if(!IsForexPair(symbol) && !(StringFind(symbol, "XAU") >= 0))
+      return 0;
+   return commission_per_lot;
+  }
+
+void CalculatePositionGroupCosts(string symbol,
+                                 const ulong &tickets[],
+                                 double total_profit,
+                                 double total_volume,
+                                 double &total_commission,
+                                 double &total_swap,
+                                 double &net_profit)
+  {
+   total_commission = total_volume * GetPositionCommissionCostPerLot(symbol);
+   total_swap = 0;
+   for(int i = 0; i < ArraySize(tickets); i++)
+     {
+      if(PositionSelectByTicket(tickets[i]))
+         total_swap += PositionGetDouble(POSITION_SWAP);
+     }
+   net_profit = total_profit - total_commission + total_swap;
+  }
+
+bool ClosePositionTickets(string symbol,
+                          long magic,
+                          string pos_type_str,
+                          string profile,
+                          const ulong &tickets[],
+                          double net_profit,
+                          int age_seconds,
+                          string reason,
+                          string primitive)
+  {
+   int positions_count = ArraySize(tickets);
+   LogManagementDecision(symbol, magic, pos_type_str, profile, "CLOSE", reason, positions_count, net_profit, age_seconds, primitive);
+   for(int i = 0; i < positions_count; i++)
+      trade.PositionClose(tickets[i]);
+   return true;
+  }
+
+bool MovePositionsSL(string symbol,
+                     long magic,
+                     ENUM_POSITION_TYPE target_type,
+                     string profile,
+                     const ulong &tickets[],
+                     double net_profit,
+                     int age_seconds,
+                     double proposed_sl_price,
+                     string action,
+                     string reason,
+                     string primitive)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
    string log_prefix = StringFormat("[ManagePositionProfitBreakEvent] [%s:%lld:%s] ", symbol, magic, pos_type_str);
-   int positions_count = ArraySize(tickets);
-   if(positions_count <= 0 || total_volume <= 0)
-      return;
-
-   double commission_cost_per_lot = commission_per_lot;
-   if(!IsForexPair(symbol) && !(StringFind(symbol, "XAU") >= 0))
-      commission_cost_per_lot = 0;
-   double total_commission = total_volume * commission_cost_per_lot;
-   double net_profit = total_profit - total_commission;
-
-   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1) || (positions_count == 4 && net_profit > 0))
-     {
-      Print(log_prefix, StringFormat("Closing %d positions. profit=%.2f commission=%.2f net=%.2f", positions_count, total_profit, total_commission, net_profit));
-      for(int i = 0; i < positions_count; i++)
-         trade.PositionClose(tickets[i]);
-      return;
-     }
-
-   if(net_profit > 0 && positions_count == 1 && TimeCurrent() - earliest_open_time > 1800)
-     {
-      Print(log_prefix, "Closing stale profitable single position.");
-      for(int i = 0; i < positions_count; i++)
-         trade.PositionClose(tickets[i]);
-      return;
-     }
-
-   double weighted_avg_open_price = weighted_price_sum / total_volume;
-   if(net_profit <= positions_count * InpBEProfitTarget / 2)
-      return;
-
-   double current_sl = 0;
-   if(PositionSelectByTicket(tickets[0]))
-      current_sl = PositionGetDouble(POSITION_SL);
-
-   double proposed_sl_price = current_sl;
-   bool is_new_sl_found = false;
    int symbol_digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   int positions_count = ArraySize(tickets);
+   proposed_sl_price = NormalizeDouble(proposed_sl_price, symbol_digits);
+   int success_count = 0;
 
+   for(int i = 0; i < positions_count; i++)
+     {
+      double tp_for_this_pos = 0;
+      if(PositionSelectByTicket(tickets[i]))
+         tp_for_this_pos = PositionGetDouble(POSITION_TP);
+      if(trade.PositionModify(tickets[i], proposed_sl_price, tp_for_this_pos))
+        {
+         success_count++;
+         LogManagementDecision(symbol, magic, pos_type_str, profile, action, reason, positions_count, net_profit, age_seconds, primitive, tickets[i], proposed_sl_price);
+        }
+      else
+         Print(log_prefix, "SL modify failed for ticket ", tickets[i], ": ", trade.ResultComment());
+     }
+
+   Print(log_prefix, StringFormat("Moved SL to %.*f for %d/%d positions.", symbol_digits, proposed_sl_price, success_count, positions_count));
+   return success_count > 0;
+  }
+
+bool FindStructureSLTarget(string symbol, ENUM_POSITION_TYPE target_type, double current_sl, double &proposed_sl_price)
+  {
    if(target_type == POSITION_TYPE_BUY && IsImbalanceUp(symbol, PERIOD_CURRENT, 2))
      {
       double imbalance_sl_candidate = iLow(symbol, PERIOD_CURRENT, 2);
       if(imbalance_sl_candidate > current_sl)
         {
          proposed_sl_price = imbalance_sl_candidate;
-         is_new_sl_found = true;
+         return true;
         }
      }
-   else
-      if(target_type == POSITION_TYPE_SELL && IsImbalanceDown(symbol, PERIOD_CURRENT, 2))
-        {
-         double imbalance_sl_candidate = iHigh(symbol, PERIOD_CURRENT, 2);
-         if(imbalance_sl_candidate < current_sl || current_sl == 0)
-           {
-            proposed_sl_price = imbalance_sl_candidate;
-            is_new_sl_found = true;
-           }
-        }
-
-   if(!is_new_sl_found)
-      return;
-
-   double total_swap = 0;
-   for(int i = 0; i < positions_count; i++)
+   else if(target_type == POSITION_TYPE_SELL && IsImbalanceDown(symbol, PERIOD_CURRENT, 2))
      {
-      if(PositionSelectByTicket(tickets[i]))
-         total_swap += PositionGetDouble(POSITION_SWAP);
+      double imbalance_sl_candidate = iHigh(symbol, PERIOD_CURRENT, 2);
+      if(imbalance_sl_candidate < current_sl || current_sl == 0)
+        {
+         proposed_sl_price = imbalance_sl_candidate;
+         return true;
+        }
      }
 
+   return false;
+  }
+
+bool IsSLProfitable(string symbol,
+                    ENUM_POSITION_TYPE target_type,
+                    double proposed_sl_price,
+                    double weighted_avg_open_price,
+                    double total_volume,
+                    double total_commission,
+                    double total_swap)
+  {
    double cost_offset_in_price = 0;
    double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
    double point_size = SymbolInfoDouble(symbol, SYMBOL_POINT);
@@ -1467,24 +1575,215 @@ void ProcessPositionsByType(string symbol,
    double breakeven_price_with_costs = (target_type == POSITION_TYPE_BUY)
                                       ? weighted_avg_open_price + cost_offset_in_price
                                       : weighted_avg_open_price - cost_offset_in_price;
-   bool is_sl_profitable = (target_type == POSITION_TYPE_BUY && proposed_sl_price > breakeven_price_with_costs) ||
-                           (target_type == POSITION_TYPE_SELL && proposed_sl_price < breakeven_price_with_costs);
-   if(!is_sl_profitable)
+   return (target_type == POSITION_TYPE_BUY && proposed_sl_price > breakeven_price_with_costs) ||
+          (target_type == POSITION_TYPE_SELL && proposed_sl_price < breakeven_price_with_costs);
+  }
+
+void ProcessLegacyPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
       return;
 
-   proposed_sl_price = NormalizeDouble(proposed_sl_price, symbol_digits);
-   int success_count = 0;
-   for(int i = 0; i < positions_count; i++)
+   double total_commission = 0;
+   double total_swap = 0;
+   double net_profit = 0;
+   CalculatePositionGroupCosts(symbol, tickets, total_profit, total_volume, total_commission, total_swap, net_profit);
+   int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1))
      {
-      double tp_for_this_pos = 0;
-      if(PositionSelectByTicket(tickets[i]))
-         tp_for_this_pos = PositionGetDouble(POSITION_TP);
-      if(trade.PositionModify(tickets[i], proposed_sl_price, tp_for_this_pos))
-         success_count++;
-      else
-         Print(log_prefix, "SL modify failed for ticket ", tickets[i], ": ", trade.ResultComment());
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_LEGACY, tickets, net_profit, age_seconds, "severe_risk_guard", "P-05/P-06");
+      return;
      }
-   Print(log_prefix, StringFormat("Moved SL to %.*f for %d/%d positions.", symbol_digits, proposed_sl_price, success_count, positions_count));
+   if(positions_count == 4 && net_profit > 0)
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_LEGACY, tickets, net_profit, age_seconds, "legacy_basket_recovery_profit", "P-07");
+      return;
+     }
+   if(positions_count == 1 && age_seconds > 1800 && net_profit > 0)
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_LEGACY, tickets, net_profit, age_seconds, "legacy_stale_profitable_single", "P-08");
+      return;
+     }
+
+   LogManagementDecision(symbol, magic, pos_type_str, PROFILE_LEGACY, "HOLD", "legacy_no_rule_matched", positions_count, net_profit, age_seconds, "P-03");
+  }
+
+void ProcessConservativePositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
+      return;
+
+   double total_commission = 0;
+   double total_swap = 0;
+   double net_profit = 0;
+   CalculatePositionGroupCosts(symbol, tickets, total_profit, total_volume, total_commission, total_swap, net_profit);
+   int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1))
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_CONSERVATIVE, tickets, net_profit, age_seconds, "severe_risk_guard", "P-05/P-06");
+      return;
+     }
+
+   LogManagementDecision(symbol, magic, pos_type_str, PROFILE_CONSERVATIVE, "HOLD", "conservative_hold_only", positions_count, net_profit, age_seconds, "P-08");
+  }
+
+void ProcessTrendRunnerPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
+      return;
+
+   double total_commission = 0;
+   double total_swap = 0;
+   double net_profit = 0;
+   CalculatePositionGroupCosts(symbol, tickets, total_profit, total_volume, total_commission, total_swap, net_profit);
+   int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1))
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_TREND_RUNNER, tickets, net_profit, age_seconds, "severe_risk_guard", "P-05/P-06");
+      return;
+     }
+   if(net_profit <= positions_count * InpBEProfitTarget / 2)
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_TREND_RUNNER, "HOLD", "trend_profit_below_trailing_threshold", positions_count, net_profit, age_seconds, "P-09/P-14");
+      return;
+     }
+
+   double current_sl = 0;
+   if(PositionSelectByTicket(tickets[0]))
+      current_sl = PositionGetDouble(POSITION_SL);
+
+   double proposed_sl_price = current_sl;
+   if(!FindStructureSLTarget(symbol, target_type, current_sl, proposed_sl_price))
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_TREND_RUNNER, "HOLD", "trend_no_structure_trailing_target", positions_count, net_profit, age_seconds, "P-10/P-11/P-15");
+      return;
+     }
+
+   double weighted_avg_open_price = weighted_price_sum / total_volume;
+   if(!IsSLProfitable(symbol, target_type, proposed_sl_price, weighted_avg_open_price, total_volume, total_commission, total_swap))
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_TREND_RUNNER, "HOLD", "trend_sl_target_not_profitable", positions_count, net_profit, age_seconds, "P-12");
+      return;
+     }
+
+   MovePositionsSL(symbol, magic, target_type, PROFILE_TREND_RUNNER, tickets, net_profit, age_seconds, proposed_sl_price, "TRAIL_SL", "trend_structure_trailing", "P-10/P-11/P-12/P-13");
+  }
+
+void ProcessBreakoutProtectPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
+      return;
+
+   double total_commission = 0;
+   double total_swap = 0;
+   double net_profit = 0;
+   CalculatePositionGroupCosts(symbol, tickets, total_profit, total_volume, total_commission, total_swap, net_profit);
+   int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1))
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, "severe_risk_guard", "P-05/P-06");
+      return;
+     }
+
+   double weighted_avg_open_price = weighted_price_sum / total_volume;
+   if(positions_count == 1 && age_seconds > 1800 && net_profit > 0)
+     {
+      MovePositionsSL(symbol, magic, target_type, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, weighted_avg_open_price, "MOVE_SL", "breakout_time_stop_tighten", "P-13/P-15");
+      return;
+     }
+   if(net_profit <= positions_count * InpBEProfitTarget / 2)
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_profit_below_protection_threshold", positions_count, net_profit, age_seconds, "P-09/P-14");
+      return;
+     }
+
+   double current_sl = 0;
+   if(PositionSelectByTicket(tickets[0]))
+      current_sl = PositionGetDouble(POSITION_SL);
+
+   double proposed_sl_price = current_sl;
+   if(!FindStructureSLTarget(symbol, target_type, current_sl, proposed_sl_price))
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_no_structure_protection_target", positions_count, net_profit, age_seconds, "P-10/P-11/P-15");
+      return;
+     }
+   if(!IsSLProfitable(symbol, target_type, proposed_sl_price, weighted_avg_open_price, total_volume, total_commission, total_swap))
+     {
+      LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_sl_target_not_profitable", positions_count, net_profit, age_seconds, "P-12");
+      return;
+     }
+
+   MovePositionsSL(symbol, magic, target_type, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, proposed_sl_price, "TRAIL_SL", "breakout_structure_protection", "P-10/P-11/P-12/P-13");
+  }
+
+void ProcessBasketEscapePositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
+  {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   int positions_count = ArraySize(tickets);
+   if(positions_count <= 0 || total_volume <= 0)
+      return;
+
+   double total_commission = 0;
+   double total_swap = 0;
+   double net_profit = 0;
+   CalculatePositionGroupCosts(symbol, tickets, total_profit, total_volume, total_commission, total_swap, net_profit);
+   int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+
+   if(net_profit < -max_loss_amount || (net_profit < -max_loss_amount / 2 && positions_count == 1))
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_BASKET_ESCAPE, tickets, net_profit, age_seconds, "severe_risk_guard", "P-05/P-06");
+      return;
+     }
+   if(positions_count >= 4 && net_profit > 0)
+     {
+      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_BASKET_ESCAPE, tickets, net_profit, age_seconds, "basket_recovery_profit", "P-07");
+      return;
+     }
+
+   LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BASKET_ESCAPE, "HOLD", "basket_wait_for_recovery", positions_count, net_profit, age_seconds, "P-07/P-08");
+  }
+
+void ProcessPositionsByType(string symbol,
+                            long magic,
+                            ENUM_POSITION_TYPE target_type,
+                            const ulong &tickets[],
+                            double total_profit,
+                            double total_volume,
+                            double weighted_price_sum,
+                            datetime earliest_open_time)
+  {
+   bool profile_fallback = false;
+   string profile = ResolveManagementProfile(magic, profile_fallback);
+   if(profile_fallback)
+     {
+      string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+      int positions_count = ArraySize(tickets);
+      int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
+      LogManagementDecision(symbol, magic, pos_type_str, profile, "HOLD", "profile_fallback", positions_count, total_profit, age_seconds, "P-03/P-16");
+     }
+
+   if(profile == PROFILE_CONSERVATIVE)
+      ProcessConservativePositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+   else if(profile == PROFILE_TREND_RUNNER)
+      ProcessTrendRunnerPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+   else if(profile == PROFILE_BREAKOUT_PROTECT)
+      ProcessBreakoutProtectPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+   else if(profile == PROFILE_BASKET_ESCAPE)
+      ProcessBasketEscapePositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+   else
+      ProcessLegacyPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
   }
 
 //+------------------------------------------------------------------+

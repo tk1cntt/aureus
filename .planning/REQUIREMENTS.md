@@ -187,6 +187,53 @@
 - [ ] Có artifact EXPLAIN/ANALYZE cho truy vấn hot để chứng minh readiness thực thi production-scale.
 
 
+## Architecture Addendum — Strategy-aware MT5 Position Management
+
+**Recorded:** 2026-05-01
+**Scope:** `mql5/AureusProvider_v2.mq5` position management after order execution.
+**Goal:** Quản lý lệnh theo strategy đầu vào thay vì dùng một bộ rule cố định cho mọi `symbol + magic + direction`.
+
+### Requirements
+
+- [ ] **STRAT-MGMT-01**: Position management phải giữ group identity tối thiểu là `symbol + magic + direction` để không trộn lệnh giữa symbol, strategy hoặc hướng giao dịch khác nhau.
+- [ ] **STRAT-MGMT-02**: Provider phải resolve được management profile từ `magic` hoặc strategy identity; nếu không match thì dùng default profile an toàn.
+- [ ] **STRAT-MGMT-03**: Mỗi profile phải tách rõ điều kiện và action quản lý lệnh, ví dụ: hold, move SL to breakeven, tighten SL, close single, close basket.
+- [ ] **STRAT-MGMT-04**: Không được dùng rule global “single profitable age > 30m thì close” cho mọi strategy; rule này chỉ được bật trong profile cụ thể nếu strategy đó cần time-stop.
+- [ ] **STRAT-MGMT-05**: Mọi quyết định quản lý lệnh phải log đủ: `symbol`, `magic`, `direction`, `profile`, `action`, `reason`, `positions_count`, `net_profit`, `age_seconds` và ticket/action target nếu có.
+- [ ] **STRAT-MGMT-06**: Phase đầu chỉ hỗ trợ built-in profiles trong MQL5 để giảm rủi ro runtime; external config/file chỉ là phase sau khi metrics chứng minh cần thiết.
+- [ ] **STRAT-MGMT-07**: Các profile ban đầu nên giới hạn ở nhóm tối thiểu: `trend_runner`, `breakout_protect`, `basket_escape`; các profile khác chỉ thêm khi có strategy cụ thể cần.
+- [ ] **STRAT-MGMT-08**: Close action phải conservative by default; ưu tiên move SL/breakeven/trailing trước khi auto-close, trừ khi profile có rule rõ ràng.
+
+### Suggested Initial Profiles
+
+| Profile | Mục tiêu | Rule trọng tâm | Không nên làm |
+|---|---|---|---|
+| `trend_runner` | Giữ lệnh thắng để chạy trend | BE/trailing theo profit hoặc structure | Không close lệnh lời chỉ vì quá 30 phút |
+| `breakout_protect` | Bảo vệ breakout fail nhanh | Time-stop hoặc tighten SL nếu không đi đúng hướng sau N phút | Không giữ lệnh fail quá lâu chỉ vì chưa chạm SL |
+| `basket_escape` | Thoát basket/DCA khi recover | Close basket khi net positive hoặc đạt ngưỡng recover | Không áp dụng cho single trend entry |
+
+### Acceptance Tests
+
+- [ ] **TC-STRAT-MGMT-001**: Hai lệnh cùng symbol nhưng khác magic dùng hai profile khác nhau và sinh decision khác nhau theo rule profile.
+- [ ] **TC-STRAT-MGMT-002**: `trend_runner` không auto-close single profitable position chỉ vì age > 30 phút.
+- [ ] **TC-STRAT-MGMT-003**: `basket_escape` vẫn có thể close group nhiều position khi net profit/recovery đạt điều kiện.
+- [ ] **TC-STRAT-MGMT-004**: Magic không có mapping dùng default profile và log rõ fallback.
+- [ ] **TC-STRAT-MGMT-005**: Decision log chứa đủ field bắt buộc để audit vì sao lệnh bị move SL/close/hold.
+- [ ] **TC-STRAT-MGMT-006**: Compile `AureusProvider_v2.mq5` bằng MetaEditor đạt `0 errors, 0 warnings`.
+
+### Architecture Decision
+
+- **Chosen direction:** Built-in strategy profile engine trong provider, mapping `magic -> profile` bằng input string ngắn gọn ở phase đầu.
+- **Deferred:** External JSON/file config, runtime hot-reload, expression DSL cho rule động.
+- **Rationale:** MQL5 không phù hợp để bắt đầu bằng config engine phức tạp; built-in profiles đủ để gỡ rule global sai, dễ compile/test, ít surface lỗi hơn.
+
+### Adversarial Risks
+
+- Mapping sai magic có thể áp dụng nhầm policy và close/move SL sai strategy.
+- Quá nhiều profile ngay từ đầu sẽ biến provider thành rule engine khó debug.
+- Nếu chỉ log action mà không log `reason/profile/state`, về sau vẫn khó truy nguyên vì sao lệnh bị cắt.
+- Nếu external config được đưa vào quá sớm, lỗi parse/config có thể làm provider fail trong runtime MT5.
+
 ## Non-Goals (v1.6)
 
 - Không mở rộng sang execution optimization ngoài phạm vi evaluation/reporting.
