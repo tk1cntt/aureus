@@ -264,6 +264,53 @@ def format_signal_event(event: dict) -> str:
     return message
 
 
+def _format_reasoning_bank_section(reasoning_bank: dict) -> str:
+    if not isinstance(reasoning_bank, dict):
+        return ""
+    lines = ["", "<b>Reasoning Bank</b>"]
+    sample_size = reasoning_bank.get("sample_size")
+    stats = []
+    if sample_size is not None:
+        stats.append(f"sample={html.escape(str(sample_size))}")
+    success_rate = reasoning_bank.get("success_rate")
+    if success_rate is not None:
+        try:
+            stats.append(f"success={float(success_rate) * 100:.1f}%")
+        except (TypeError, ValueError):
+            pass
+    avg_reward = reasoning_bank.get("avg_reward")
+    if avg_reward is not None:
+        try:
+            stats.append(f"avg reward={float(avg_reward):.2f}")
+        except (TypeError, ValueError):
+            pass
+    avg_pnl_pips = reasoning_bank.get("avg_pnl_pips")
+    if avg_pnl_pips is not None:
+        try:
+            stats.append(f"avg pips={float(avg_pnl_pips):.1f}")
+        except (TypeError, ValueError):
+            pass
+    lines.append("• " + html.escape(" | ".join(stats) if stats else "unavailable"))
+
+    lessons = []
+    for key in ("similar_lessons", "recent_lessons"):
+        for lesson in reasoning_bank.get(key) or []:
+            if lesson and lesson not in lessons:
+                lessons.append(lesson)
+            if len(lessons) >= 3:
+                break
+        if len(lessons) >= 3:
+            break
+    if lessons:
+        lines.append("• Lessons:")
+        for lesson in lessons[:3]:
+            text = " ".join(str(lesson).split())
+            if len(text) > 220:
+                text = text[:219].rstrip() + "…"
+            lines.append(f"  • {html.escape(text)}")
+    return "\n".join(lines)
+
+
 def format_strategy_match(event: dict) -> str:
     """Format a STRATEGY_MATCH into an HTML message for Telegram.
 
@@ -348,6 +395,8 @@ def format_strategy_match(event: dict) -> str:
     else:
         direction_emoji = "⚪"
 
+    reasoning_section = _format_reasoning_bank_section(data.get("reasoning_bank"))
+
     parts = [
         f'🎯 <b>STRATEGY MATCH</b>',
         f'━━━━━━━━━━━━━━━━━━━',
@@ -363,9 +412,16 @@ def format_strategy_match(event: dict) -> str:
         f'',
         f'<b>Reason:</b> {reason_code}',
         f'<b>Time:</b> {utc_time} UTC',
+    ]
+    if reasoning_section:
+        parts.append(reasoning_section)
+    parts.extend([
         f'',
         f'#{symbol} #{strategy} #{side}',
-    ]
+    ])
 
     message = "\n".join(parts)
+    if len(message) > 4095 and reasoning_section:
+        parts = [p for p in parts if p != reasoning_section]
+        message = "\n".join(parts)
     return message[:4095]  # Telegram limit is 4096 chars

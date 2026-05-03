@@ -527,3 +527,56 @@ def test_format_signal_event_cisd_mtf_filtered_from_active_signals():
     assert "cisd_m30" not in active_signals_section
     assert "cisd_h1" not in active_signals_section
     assert "choch_up" in active_signals_section
+
+
+def test_format_strategy_match_reasoning_bank_section_escaped_and_trimmed():
+    event = {
+        "type": "STRATEGY_MATCH",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "strategy": "STRAT_A",
+            "strategy_id": 10,
+            "side": "BUY",
+            "entry_type": "MARKET",
+            "sl": 1950.50,
+            "tp": 1970.00,
+            "size_value": 1.0,
+            "reason_code": "OK",
+            "reasoning_bank": {
+                "sample_size": 4,
+                "success_rate": 0.75,
+                "avg_reward": 1.5,
+                "avg_pnl_pips": 12.25,
+                "recent_lessons": ["A lesson <b>safe</b>", "B lesson", "C lesson", "D lesson"],
+            },
+        },
+    }
+    result = format_strategy_match(event)
+    assert "<b>Reasoning Bank</b>" in result
+    assert "success=75.0%" in result
+    assert "avg reward=1.50" in result
+    assert "avg pips=12.2" in result
+    assert "A lesson &lt;b&gt;safe&lt;/b&gt;" in result
+    assert "D lesson" not in result
+    assert len(result) <= 4095
+
+
+def test_format_strategy_match_without_reasoning_bank_unchanged_section_absent():
+    event = {
+        "type": "STRATEGY_MATCH",
+        "symbol": "XAUUSD",
+        "t": 1712345678,
+        "data": {
+            "strategy": "STRAT_A",
+            "strategy_id": 10,
+            "side": "BUY",
+            "entry_type": "MARKET",
+            "sl": 1950.50,
+            "tp": 1970.00,
+            "size_value": 1.0,
+            "reason_code": "OK",
+        },
+    }
+    result = format_strategy_match(event)
+    assert "Reasoning Bank" not in result

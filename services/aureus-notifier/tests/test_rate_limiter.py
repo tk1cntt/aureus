@@ -221,3 +221,75 @@ async def test_enqueue_empty_formats_dropped(dispatcher):
 
     assert count == 0
     assert "chat_1" not in dispatcher.queues or dispatcher.queues["chat_1"].empty()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_strategy_match_enriches_reasoning_bank(dispatcher, monkeypatch):
+    async def fake_fetch(conn, strategy_name, symbol=None, direction=None, query_text=None):
+        assert strategy_name == "CHOCH_UP"
+        assert symbol == "XAUUSD"
+        assert direction == "BUY"
+        return {"sample_size": 1, "recent_lessons": ["strategy A lesson"]}
+
+    class FakeAcquire:
+        async def __aenter__(self):
+            return object()
+        async def __aexit__(self, *args):
+            pass
+
+    class FakePool:
+        def acquire(self):
+            return FakeAcquire()
+
+    monkeypatch.setattr("rate_limiter.fetch_strategy_reasoning_insights", fake_fetch)
+    dispatcher._db_pool = FakePool()
+    event = _make_strategy_event()
+    routes = [Route(chat_id="chat_2", event_types=["STRATEGY_MATCH"], symbols=None)]
+
+    count = await dispatcher.enqueue(event, routes)
+
+    assert count == 1
+    _, text, _ = dispatcher.queues["chat_2"].get_nowait()
+    assert "Reasoning Bank" in text
+    assert "strategy A lesson" in text
+
+
+@pytest.mark.asyncio
+async def test_enqueue_strategy_match_reasoning_failure_still_enqueues(dispatcher, monkeypatch):
+    async def fail_fetch(*args, **kwargs):
+        raise RuntimeError("db down")
+
+    class FakeAcquire:
+        async def __aenter__(self):
+            return object()
+        async def __aexit__(self, *args):
+            pass
+
+    class FakePool:
+        def acquire(self):
+            return FakeAcquire()
+
+    monkeypatch.setattr("rate_limiter.fetch_strategy_reasoning_insights", fail_fetch)
+    dispatcher._db_pool = FakePool()
+    event = _make_strategy_event()
+    routes = [Route(chat_id="chat_2", event_types=["STRATEGY_MATCH"], symbols=None)]
+
+    count = await dispatcher.enqueue(event, routes)
+
+    assert count == 1
+    _, text, _ = dispatcher.queues["chat_2"].get_nowait()
+    assert "STRATEGY MATCH" in text
+    assert "Reasoning Bank" not in text
+
+
+@pytest.mark.asyncio
+async def test_enqueue_signal_event_does_not_call_reasoning_helper(dispatcher, monkeypatch):
+    helper = AsyncMock()
+    monkeypatch.setattr("rate_limiter.fetch_strategy_reasoning_insights", helper)
+    event = _make_signal_event()
+    routes = [Route(chat_id="chat_1", event_types=["SIGNAL_EVENT"], symbols=None)]
+
+    count = await dispatcher.enqueue(event, routes)
+
+    assert count == 1
+    helper.assert_not_called()
