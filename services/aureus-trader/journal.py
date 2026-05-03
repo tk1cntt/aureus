@@ -595,17 +595,11 @@ class TradeJournalManager:
                             UPDATE aureus_reasoning_entries
                             SET trade_journal_id = $1,
                                 signal_snapshot_id = COALESCE($2, signal_snapshot_id),
-                                ticket = $3,
-                                pending_order_id = COALESCE($4, pending_order_id),
-                                entry_time = $5,
                                 updated_at = now()
-                            WHERE trace_id = $6
+                            WHERE trace_id = $3
                             """,
                             trade_journal_id,
                             snapshot_id,
-                            ticket,
-                            event.get("pending_order_id"),
-                            entry_time,
                             trace_id,
                         )
                         logger.info(
@@ -778,27 +772,13 @@ class TradeJournalManager:
                     pnl, pnl_pips, commission, swap, result, trace_id
                 )
                 if result_id:
-                    success = True if result == "WIN" else False if result == "LOSS" else None
-                    reward = pnl_pips if pnl_pips is not None else pnl
                     await conn.execute(
                         """
                         UPDATE aureus_reasoning_entries
-                        SET success = $1,
-                            reward = $2,
-                            pnl = $3,
-                            pnl_pips = $4,
-                            result = $5,
-                            exit_time = $6,
-                            evaluated_at = now(),
+                        SET evaluated_at = now(),
                             updated_at = now()
-                        WHERE trace_id = $7
+                        WHERE trace_id = $1
                         """,
-                        success,
-                        reward,
-                        pnl,
-                        pnl_pips,
-                        result,
-                        exit_time,
                         trace_id,
                     )
 

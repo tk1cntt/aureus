@@ -73,7 +73,6 @@ async def main():
         })
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM aureus_reasoning_entries WHERE trace_id=$1", trace_id)
-        assert row["ticket"] == ticket
         assert row["trade_journal_id"] is not None
         assert row["signal_snapshot_id"] is not None
 
@@ -90,10 +89,11 @@ async def main():
         })
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM aureus_reasoning_entries WHERE trace_id=$1", trace_id)
-        assert row["success"] is True
-        assert row["reward"] == 400.0
-        assert row["pnl"] == 9.5
+            journal_row = await conn.fetchrow("SELECT result, pnl, pnl_pips FROM aureus_trade_journal WHERE trace_id=$1", trace_id)
         assert row["evaluated_at"] is not None
+        assert journal_row["result"] == "WIN"
+        assert journal_row["pnl"] == 9.5
+        assert journal_row["pnl_pips"] == 400.0
         print(f"PASS reasoning bank DB E2E trace_id={trace_id}")
     finally:
         async with pool.acquire() as conn:
