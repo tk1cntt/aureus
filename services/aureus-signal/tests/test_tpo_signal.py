@@ -219,10 +219,11 @@ def test_tpo_block_includes_shape_confidence_and_scores():
     assert 99.0 <= total_scores <= 101.0
 
 
-def _classify_fixture(counts, tick_size=0.1):
+def _classify_fixture(counts, tick_size=0.1, poc_idx=None):
     sig = TPOSignal(value_area_pct=0.7, tick_size=tick_size)
     levels = [100.0 + (i * tick_size) for i in range(len(counts))]
-    poc_idx = max(range(len(counts)), key=lambda i: (counts[i], -abs(i - (len(counts) // 2)))) if counts else 0
+    if poc_idx is None:
+        poc_idx = max(range(len(counts)), key=lambda i: (counts[i], -abs(i - (len(counts) // 2)))) if counts else 0
     return sig._classify_shape(levels, counts, poc_idx=poc_idx)
 
 
@@ -239,6 +240,48 @@ def test_tpo_classify_shape_returns_valid_probability_distribution():
     shape, confidence, scores = _classify_fixture([2, 4, 8, 4, 2])
 
     _assert_scores_contract(shape, confidence, scores)
+
+
+def test_tpo_classify_shape_d_uses_middle_poc_and_balanced_value_area():
+    shape, confidence, scores = _classify_fixture([1, 3, 7, 11, 13, 11, 7, 3, 1], poc_idx=4)
+
+    _assert_scores_contract(shape, confidence, scores)
+    assert shape == "D"
+    assert scores["D"] == max(scores.values())
+    assert confidence >= 55.0
+
+
+def test_tpo_classify_shape_p_uses_upper_third_poc_position():
+    shape, confidence, scores = _classify_fixture([4, 8, 9, 8, 7, 4, 12, 9, 7], poc_idx=6)
+
+    _assert_scores_contract(shape, confidence, scores)
+    assert shape == "p"
+    assert scores["p"] == max(scores.values())
+    assert confidence >= 45.0
+
+
+def test_tpo_classify_shape_b_uses_lower_third_poc_position():
+    shape, confidence, scores = _classify_fixture([7, 9, 12, 4, 7, 8, 9, 8, 4], poc_idx=2)
+
+    _assert_scores_contract(shape, confidence, scores)
+    assert shape == "b"
+    assert scores["b"] == max(scores.values())
+    assert confidence >= 45.0
+
+
+def test_tpo_classify_shape_b_requires_near_equal_separated_peaks():
+    shape, confidence, scores = _classify_fixture([1, 3, 12, 3, 1, 1, 3, 11, 3, 1], poc_idx=2)
+    unequal_shape, unequal_confidence, unequal_scores = _classify_fixture([1, 3, 12, 3, 1, 1, 3, 6, 3, 1], poc_idx=2)
+    adjacent_shape, adjacent_confidence, adjacent_scores = _classify_fixture([1, 3, 12, 11, 3, 1, 1, 1, 1, 1], poc_idx=2)
+
+    _assert_scores_contract(shape, confidence, scores)
+    _assert_scores_contract(unequal_shape, unequal_confidence, unequal_scores)
+    _assert_scores_contract(adjacent_shape, adjacent_confidence, adjacent_scores)
+    assert shape == "B"
+    assert scores["B"] == max(scores.values())
+    assert confidence >= 55.0
+    assert not (unequal_shape == "B" and unequal_confidence >= 50.0)
+    assert not (adjacent_shape == "B" and adjacent_confidence >= 50.0)
 
 
 def test_tpo_classify_shape_calibrates_clear_d_profile():
