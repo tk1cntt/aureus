@@ -594,43 +594,49 @@ class TradeJournalManager:
                                 trade_journal_id,
                             )
                         try:
-                            parent_exists = await conn.fetchval(
-                                "SELECT 1 FROM aureus_trades WHERE trace_id = $1",
+                            await conn.execute(
+                                """
+                                INSERT INTO aureus_trades (
+                                    trace_id, symbol, direction, entry_type, entry_price, status, ticket
+                                ) VALUES ($1, $2, $3, 'MARKET', $4, 'OPEN', $5)
+                                ON CONFLICT (trace_id) DO NOTHING
+                                """,
                                 trace_id,
+                                symbol,
+                                journal_row.get("direction"),
+                                entry_price,
+                                ticket,
                             )
-                            if parent_exists:
-                                reasoning_text = _build_reasoning_text(journal_row, snapshot_columns, signal_snapshot)
-                                reasoning_entry_id = await conn.fetchval(
-                                    """
-                                    INSERT INTO aureus_reasoning_entries (
-                                        trace_id, trade_journal_id, signal_snapshot_id,
-                                        strategy_name, symbol, direction,
-                                        active_signals, context_filters, reasoning_text, decision_action
-                                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                                    RETURNING id
-                                    """,
-                                    trace_id,
-                                    trade_journal_id,
-                                    snapshot_id,
-                                    strategy_name,
-                                    symbol,
-                                    journal_row.get("direction"),
-                                    json.dumps(journal_row.get("active_signals") or []),
-                                    json.dumps(journal_row.get("context_filters") or {}),
-                                    reasoning_text,
-                                    journal_row.get("direction"),
-                                )
-                                if reasoning_entry_id:
-                                    try:
-                                        sources = select_embedding_sources({"reasoning_text": reasoning_text})
-                                        if sources and self.redis is None:
-                                            logger.warning("Reasoning embedding enqueue skipped for trace_id=%s: Redis client missing", trace_id)
-                                        elif sources:
-                                            await enqueue_reasoning_embedding_job(self.redis, reasoning_entry_id, sources, trace_id)
-                                    except Exception as exc:
-                                        logger.warning("Reasoning embedding enqueue failed for trace_id=%s: %s", trace_id, exc)
-                            else:
-                                logger.warning("Reasoning entry deferred for trace_id=%s: parent trade missing", trace_id)
+                            reasoning_text = _build_reasoning_text(journal_row, snapshot_columns, signal_snapshot)
+                            reasoning_entry_id = await conn.fetchval(
+                                """
+                                INSERT INTO aureus_reasoning_entries (
+                                    trace_id, trade_journal_id, signal_snapshot_id,
+                                    strategy_name, symbol, direction,
+                                    active_signals, context_filters, reasoning_text, decision_action
+                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                RETURNING id
+                                """,
+                                trace_id,
+                                trade_journal_id,
+                                snapshot_id,
+                                strategy_name,
+                                symbol,
+                                journal_row.get("direction"),
+                                json.dumps(journal_row.get("active_signals") or []),
+                                json.dumps(journal_row.get("context_filters") or {}),
+                                reasoning_text,
+                                journal_row.get("direction"),
+                            )
+                            if reasoning_entry_id:
+                                try:
+                                    sources = select_embedding_sources({"reasoning_text": reasoning_text})
+                                    if sources and self.redis is None:
+                                        logger.warning("Reasoning embedding enqueue skipped for trace_id=%s: Redis client missing", trace_id)
+                                    elif sources:
+                                        await enqueue_reasoning_embedding_job(self.redis, reasoning_entry_id, sources, trace_id)
+                                except Exception as exc:
+                                    logger.warning("Reasoning embedding enqueue failed for trace_id=%s: %s", trace_id, exc)
                         except Exception as exc:
                             logger.warning("Reasoning entry insert failed for trace_id=%s: %s", trace_id, exc)
                         logger.info(
