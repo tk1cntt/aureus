@@ -45,9 +45,10 @@ def _assert_tpo_block_contract(block):
         "distribution_regime",
     }
     assert block["VAL"] <= block["POC"] <= block["VAH"]
-    assert block["shape"] in {"D", "B", "p", "b"}
+    assert block["shape"] in {"D", "p", "b", None}
     assert 0.0 <= block["shape_confidence_pct"] <= 100.0
     assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+    assert block["shape_scores_pct"]["B"] == 0.0
     assert block["distr"] >= 0.0
     assert block["distribution_regime"] in {"TREND", "NORMAL", "NEUTRAL", "UNKNOWN"}
 
@@ -211,9 +212,10 @@ def test_tpo_block_includes_shape_confidence_and_scores():
     assert res is not None
     d1 = res["value"]["tpo_d1"]
     assert d1 is not None
-    assert d1["shape"] in {"D", "B", "p", "b"}
+    assert d1["shape"] in {"D", "p", "b", None}
     assert 0.0 <= d1["shape_confidence_pct"] <= 100.0
     assert set(d1["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
+    assert d1["shape_scores_pct"]["B"] == 0.0
 
     total_scores = round(sum(d1["shape_scores_pct"].values()), 2)
     assert 99.0 <= total_scores <= 101.0
@@ -228,12 +230,16 @@ def _classify_fixture(counts, tick_size=0.1, poc_idx=None):
 
 
 def _assert_scores_contract(shape, confidence, scores, *, non_empty=True):
-    assert shape in {"D", "B", "p", "b"}
+    assert shape in {"D", "p", "b", None}
     assert 0.0 <= confidence <= 100.0
     assert set(scores.keys()) == {"D", "B", "p", "b"}
+    assert scores["B"] == 0.0
     if non_empty:
         assert abs(sum(scores.values()) - 100.0) <= 0.1
-    assert abs(scores[shape] - confidence) <= max(65.0, 100.0 - confidence)
+    if shape is None:
+        assert confidence == 0.0
+    else:
+        assert scores[shape] > 70.0
 
 
 def test_tpo_classify_shape_returns_valid_probability_distribution():
@@ -269,7 +275,7 @@ def test_tpo_classify_shape_b_uses_lower_third_poc_position():
     assert confidence >= 45.0
 
 
-def test_tpo_classify_shape_b_requires_near_equal_separated_peaks():
+def test_tpo_classify_shape_never_emits_b_for_former_two_peak_profile():
     shape, confidence, scores = _classify_fixture([1, 3, 12, 3, 1, 1, 3, 11, 3, 1], poc_idx=2)
     unequal_shape, unequal_confidence, unequal_scores = _classify_fixture([1, 3, 12, 3, 1, 1, 3, 6, 3, 1], poc_idx=2)
     adjacent_shape, adjacent_confidence, adjacent_scores = _classify_fixture([1, 3, 12, 11, 3, 1, 1, 1, 1, 1], poc_idx=2)
@@ -277,11 +283,9 @@ def test_tpo_classify_shape_b_requires_near_equal_separated_peaks():
     _assert_scores_contract(shape, confidence, scores)
     _assert_scores_contract(unequal_shape, unequal_confidence, unequal_scores)
     _assert_scores_contract(adjacent_shape, adjacent_confidence, adjacent_scores)
-    assert shape == "B"
-    assert scores["B"] == max(scores.values())
-    assert confidence >= 55.0
-    assert not (unequal_shape == "B" and unequal_confidence >= 50.0)
-    assert not (adjacent_shape == "B" and adjacent_confidence >= 50.0)
+    assert shape != "B"
+    assert unequal_shape != "B"
+    assert adjacent_shape != "B"
 
 
 def test_tpo_classify_shape_calibrates_clear_d_profile():
@@ -292,19 +296,34 @@ def test_tpo_classify_shape_calibrates_clear_d_profile():
     _assert_scores_contract(sparse_shape, sparse_confidence, sparse_scores)
     assert d_shape == "D"
     assert d_confidence >= 55.0
-    assert sparse_confidence <= 35.0
+    assert sparse_shape is None
+    assert sparse_confidence == 0.0
     assert d_confidence > sparse_confidence
 
 
-def test_tpo_classify_shape_requires_separated_peaks_for_b_profile():
+def test_tpo_classify_shape_requires_best_score_strictly_above_70():
+    confirmed_shape, confirmed_confidence, confirmed_scores = _classify_fixture([1, 0, 0, 3], poc_idx=3)
+    unconfirmed_shape, unconfirmed_confidence, unconfirmed_scores = _classify_fixture([1, 1, 0, 2], poc_idx=3)
+
+    _assert_scores_contract(confirmed_shape, confirmed_confidence, confirmed_scores)
+    _assert_scores_contract(unconfirmed_shape, unconfirmed_confidence, unconfirmed_scores)
+    assert max(confirmed_scores.values()) > 70.0
+    assert confirmed_shape == "p"
+    assert confirmed_confidence > 0.0
+    assert max(unconfirmed_scores.values()) <= 70.0
+    assert unconfirmed_shape is None
+    assert unconfirmed_confidence == 0.0
+
+
+def test_tpo_classify_shape_two_peak_profile_is_unconfirmed_not_b():
     b_shape, b_confidence, b_scores = _classify_fixture([1, 3, 10, 3, 1, 3, 10, 3, 1])
     lumpy_shape, lumpy_confidence, lumpy_scores = _classify_fixture([1, 4, 9, 8, 7, 8, 9, 4, 1])
 
     _assert_scores_contract(b_shape, b_confidence, b_scores)
     _assert_scores_contract(lumpy_shape, lumpy_confidence, lumpy_scores)
-    assert b_shape == "B"
-    assert b_confidence >= 55.0
-    assert not (lumpy_shape == "B" and lumpy_confidence >= 50.0)
+    assert b_shape != "B"
+    assert b_scores["B"] == 0.0
+    assert lumpy_shape != "B"
 
 
 def test_tpo_classify_shape_identifies_p_and_b_profiles():
