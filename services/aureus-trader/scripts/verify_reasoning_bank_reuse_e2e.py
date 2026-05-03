@@ -117,6 +117,26 @@ async def run_e2e():
             assert "BUY" in no_parent_reasoning_text
             assert "london" in no_parent_reasoning_text
             assert "cisd_m15=1" in no_parent_reasoning_text
+            no_parent_trade = await conn.fetchrow(
+                """
+                SELECT trace_id, ticket, symbol, direction, entry_type, entry_price, sl, tp, volume, payload
+                FROM aureus_trades
+                WHERE trace_id=$1
+                """,
+                no_parent_trace_id,
+            )
+            assert no_parent_trade is not None
+            assert no_parent_trade["symbol"] == "XAUUSD"
+            assert no_parent_trade["direction"] == "BUY"
+            assert no_parent_trade["entry_type"] == "MARKET"
+            assert no_parent_trade["entry_price"] == 2320.5
+            assert no_parent_trade["ticket"] == ticket + 1
+            assert no_parent_trade["volume"] == 0.1
+            no_parent_payload = no_parent_trade["payload"]
+            if isinstance(no_parent_payload, str):
+                import json
+                no_parent_payload = json.loads(no_parent_payload)
+            assert no_parent_payload["source"] == "journal_parent_upsert"
             await conn.execute(
                 """
                 INSERT INTO aureus_trades (trace_id, symbol, direction, entry_type, entry_price, status)
@@ -244,6 +264,92 @@ async def run_e2e():
             assert row["timeframe"] == "M15"
             assert row["atr"] == 2.5
             assert row["cisd_m15"] == 1
+
+            enrichment_trace_id = f"e2e-reasoning-enrich-{uuid.uuid4().hex[:12]}"
+            await _cleanup(conn, enrichment_trace_id)
+            await conn.execute(
+                """
+                INSERT INTO aureus_trades (trace_id, symbol, direction, entry_type, entry_price, status, payload)
+                VALUES ($1, 'PLACEHOLDER', 'BUY', 'MARKET', 1.0, 'OPEN', '{"source":"journal_parent_upsert"}'::jsonb)
+                """,
+                enrichment_trace_id,
+            )
+            canonical_payload = {
+                "source": "db_writer",
+                "trace_id": enrichment_trace_id,
+                "ticket": 9500000003,
+                "symbol": "XAUUSD",
+                "magic_number": 260503,
+                "strategy_id": 26050306,
+                "strategy_name": "reasoning_reuse_enrichment",
+                "direction": "BUY",
+                "entry_type": "LIMIT",
+                "status": "SENT",
+                "entry_price": 2322.5,
+                "sl": 2318.0,
+                "tp": 2330.0,
+                "volume": 0.2,
+            }
+            await conn.execute(
+                """
+                INSERT INTO aureus_trades (
+                    trace_id, ticket, symbol, magic_number, strategy_id, strategy_name,
+                    direction, entry_type, status, entry_price, exit_price,
+                    sl, tp, volume, commission, swap, profit,
+                    filled_at, closed_at, payload
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, 0, 0, 0, NULL, NULL, $14::jsonb)
+                ON CONFLICT (trace_id) DO UPDATE SET
+                    ticket = COALESCE(EXCLUDED.ticket, aureus_trades.ticket),
+                    symbol = COALESCE(EXCLUDED.symbol, aureus_trades.symbol),
+                    magic_number = COALESCE(EXCLUDED.magic_number, aureus_trades.magic_number),
+                    strategy_id = COALESCE(EXCLUDED.strategy_id, aureus_trades.strategy_id),
+                    strategy_name = COALESCE(EXCLUDED.strategy_name, aureus_trades.strategy_name),
+                    direction = COALESCE(EXCLUDED.direction, aureus_trades.direction),
+                    entry_type = COALESCE(EXCLUDED.entry_type, aureus_trades.entry_type),
+                    status = EXCLUDED.status,
+                    entry_price = COALESCE(EXCLUDED.entry_price, aureus_trades.entry_price),
+                    exit_price = COALESCE(EXCLUDED.exit_price, aureus_trades.exit_price),
+                    sl = COALESCE(EXCLUDED.sl, aureus_trades.sl),
+                    tp = COALESCE(EXCLUDED.tp, aureus_trades.tp),
+                    volume = COALESCE(EXCLUDED.volume, aureus_trades.volume),
+                    commission = COALESCE(EXCLUDED.commission, aureus_trades.commission),
+                    swap = COALESCE(EXCLUDED.swap, aureus_trades.swap),
+                    profit = COALESCE(EXCLUDED.profit, aureus_trades.profit),
+                    filled_at = COALESCE(EXCLUDED.filled_at, aureus_trades.filled_at),
+                    closed_at = COALESCE(EXCLUDED.closed_at, aureus_trades.closed_at),
+                    updated_at = NOW(),
+                    payload = aureus_trades.payload || EXCLUDED.payload
+                """,
+                enrichment_trace_id,
+                canonical_payload["ticket"],
+                canonical_payload["symbol"],
+                canonical_payload["magic_number"],
+                canonical_payload["strategy_id"],
+                canonical_payload["strategy_name"],
+                canonical_payload["direction"],
+                canonical_payload["entry_type"],
+                canonical_payload["status"],
+                canonical_payload["entry_price"],
+                canonical_payload["sl"],
+                canonical_payload["tp"],
+                canonical_payload["volume"],
+                json.dumps(canonical_payload),
+            )
+            enriched = await conn.fetchrow("SELECT * FROM aureus_trades WHERE trace_id=$1", enrichment_trace_id)
+            assert enriched["entry_type"] == "LIMIT"
+            assert enriched["symbol"] == "XAUUSD"
+            assert enriched["direction"] == "BUY"
+            assert enriched["entry_price"] == 2322.5
+            assert enriched["sl"] == 2318.0
+            assert enriched["tp"] == 2330.0
+            assert enriched["volume"] == 0.2
+            assert enriched["ticket"] == 9500000003
+            enriched_payload = enriched["payload"]
+            if isinstance(enriched_payload, str):
+                import json
+                enriched_payload = json.loads(enriched_payload)
+            assert enriched_payload["source"] == "db_writer"
+            await _cleanup(conn, enrichment_trace_id)
 
             insights = await fetch_strategy_reasoning_insights(
                 conn,
