@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from reasoning_embeddings import REASONING_EMBEDDING_QUEUE_KEY, enqueue_reasoning_embedding_job
+from reasoning_embeddings import REASONING_EMBEDDING_QUEUE_KEY, ReasoningEmbeddingWorker, enqueue_reasoning_embedding_job
 
 
 class FakeRedisStream:
@@ -67,3 +67,72 @@ async def test_enqueue_reasoning_embedding_job_redis_failure_returns_false():
     )
 
     assert result is False
+
+
+class FakeWorkerRedis:
+    def __init__(self, payload):
+        self.payload = payload
+        self.deleted = []
+
+    async def xread(self, streams, count=1, block=10000):
+        return [(REASONING_EMBEDDING_QUEUE_KEY, [("1-0", {"job": json.dumps(self.payload)})])]
+
+    async def xdel(self, stream, message_id):
+        self.deleted.append((stream, message_id))
+        return 1
+
+
+class FakeWorkerPool:
+    def __init__(self):
+        self.conn = object()
+
+    def acquire(self):
+        return self
+
+    async def __aenter__(self):
+        return self.conn
+
+    async def __aexit__(self, *args):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_worker_consumes_job_and_acknowledges_after_success(monkeypatch):
+    redis = FakeWorkerRedis({
+        "entry_id": 123,
+        "trace_id": "trace-123",
+        "sources": {"reasoning_text": "CISD aligned"},
+    })
+    pool = FakeWorkerPool()
+    calls = []
+    client = object()
+
+    async def fake_embed(conn, entry_id, sources, embed_client):
+        calls.append((conn, entry_id, sources, embed_client))
+        return 1
+
+    monkeypatch.setattr("reasoning_embeddings.embed_reasoning_entry", fake_embed)
+    worker = ReasoningEmbeddingWorker(pool, redis, client=client)
+
+    assert await worker.process_once(timeout=0.1) is True
+    assert calls == [(pool.conn, 123, {"reasoning_text": "CISD aligned"}, client)]
+    assert redis.deleted == [(REASONING_EMBEDDING_QUEUE_KEY, "1-0")]
+
+
+@pytest.mark.asyncio
+async def test_worker_embedding_exception_leaves_job_retryable(monkeypatch):
+    redis = FakeWorkerRedis({
+        "entry_id": 123,
+        "trace_id": "trace-123",
+        "sources": {"reasoning_text": "CISD aligned"},
+    })
+
+    async def fake_embed(conn, entry_id, sources, client):
+        raise RuntimeError("embedding down")
+
+    monkeypatch.setattr("reasoning_embeddings.embed_reasoning_entry", fake_embed)
+    worker = ReasoningEmbeddingWorker(FakeWorkerPool(), redis, client=object())
+
+    with pytest.raises(RuntimeError):
+        await worker.process_once(timeout=0.1)
+    assert redis.deleted == []

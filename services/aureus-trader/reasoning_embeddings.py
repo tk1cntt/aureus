@@ -285,6 +285,32 @@ async def fetch_strategy_reasoning_insights(conn, strategy_name, symbol=None, di
     return insights
 
 
+class ReasoningEmbeddingWorker:
+    def __init__(self, db_pool, redis_client, client=None, queue_key=REASONING_EMBEDDING_QUEUE_KEY):
+        self.db_pool = db_pool
+        self.redis = redis_client
+        self.client = client or ReasoningEmbeddingClient()
+        self.queue_key = queue_key
+
+    async def process_once(self, timeout=10):
+        item = await _maybe_await(self.redis.xread({self.queue_key: "0-0"}, count=1, block=int(timeout * 1000)))
+        if not item:
+            return False
+        stream_name, messages = item[0]
+        message_id, fields = messages[0]
+        payload = fields.get("job") if isinstance(fields, dict) else None
+        job = json.loads(payload)
+        entry_id = int(job["entry_id"])
+        sources = select_embedding_sources(job.get("sources"))
+        if not sources:
+            logger.warning("Reasoning embedding job has no sources: %s", payload)
+            return False
+        async with self.db_pool.acquire() as conn:
+            await embed_reasoning_entry(conn, entry_id, sources, self.client)
+        await _maybe_await(self.redis.xdel(stream_name, message_id))
+        return True
+
+
 async def embed_reasoning_entry(conn, entry_id, sources, client=None):
     client = client or ReasoningEmbeddingClient()
     updates = {}
