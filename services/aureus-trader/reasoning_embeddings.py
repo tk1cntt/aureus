@@ -120,11 +120,26 @@ async def semantic_search_reasoning_entries(conn, query_text, limit=10, client=N
     vector_text = vector_to_pg(vector)
     return await conn.fetch(
         """
-        SELECT id, trace_id, strategy_name, symbol, reasoning_text,
-               reasoning_embedding <=> $1::vector AS distance
-        FROM aureus_reasoning_entries
-        WHERE reasoning_embedding IS NOT NULL
-        ORDER BY reasoning_embedding <=> $1::vector
+        SELECT re.id,
+               re.trace_id,
+               COALESCE(tj.strategy_name, re.strategy_name) AS strategy_name,
+               COALESCE(tj.symbol, re.symbol) AS symbol,
+               COALESCE(tj.direction, re.direction) AS direction,
+               ts.timeframe,
+               ts.signal_schema_version,
+               ts.atr,
+               ts.session,
+               ts.cisd_m5,
+               ts.cisd_m15,
+               ts.cisd_m30,
+               ts.cisd_h1,
+               re.reasoning_text,
+               re.reasoning_embedding <=> $1::vector AS distance
+        FROM aureus_reasoning_entries re
+        LEFT JOIN aureus_trade_journal tj ON tj.id = re.trade_journal_id
+        LEFT JOIN aureus_trade_signal_snapshots ts ON ts.id = re.signal_snapshot_id
+        WHERE re.reasoning_embedding IS NOT NULL
+        ORDER BY re.reasoning_embedding <=> $1::vector
         LIMIT $2
         """,
         vector_text,
@@ -154,16 +169,16 @@ def _trim_lesson(value, max_len=280):
 
 
 def _strategy_scope_where(start_index, symbol=None, direction=None, embedding=False):
-    clauses = [f"strategy_name = ${start_index}"]
+    clauses = [f"COALESCE(tj.strategy_name, re.strategy_name) = ${start_index}"]
     args_offset = start_index
     if symbol:
         args_offset += 1
-        clauses.append(f"symbol = ${args_offset}")
+        clauses.append(f"COALESCE(tj.symbol, re.symbol) = ${args_offset}")
     if direction:
         args_offset += 1
-        clauses.append(f"direction = ${args_offset}")
+        clauses.append(f"COALESCE(tj.direction, re.direction) = ${args_offset}")
     if embedding:
-        clauses.append("reasoning_embedding IS NOT NULL")
+        clauses.append("re.reasoning_embedding IS NOT NULL")
     return " AND ".join(clauses)
 
 
@@ -186,10 +201,12 @@ async def fetch_strategy_reasoning_insights(conn, strategy_name, symbol=None, di
     stats = await conn.fetchrow(
         f"""
         SELECT count(*)::int AS sample_size,
-               avg(CASE WHEN success IS NULL THEN NULL WHEN success THEN 1.0 ELSE 0.0 END)::float AS success_rate,
-               avg(reward)::float AS avg_reward,
-               avg(pnl_pips)::float AS avg_pnl_pips
-        FROM aureus_reasoning_entries
+               avg(CASE WHEN tj.result = 'WIN' THEN 1.0 WHEN tj.result = 'LOSS' THEN 0.0 ELSE NULL END)::float AS success_rate,
+               avg(COALESCE(tj.pnl_pips, tj.pnl))::float AS avg_reward,
+               avg(tj.pnl_pips)::float AS avg_pnl_pips
+        FROM aureus_reasoning_entries re
+        LEFT JOIN aureus_trade_journal tj ON tj.id = re.trade_journal_id
+        LEFT JOIN aureus_trade_signal_snapshots ts ON ts.id = re.signal_snapshot_id
         WHERE {where}
         """,
         *args,
@@ -202,11 +219,13 @@ async def fetch_strategy_reasoning_insights(conn, strategy_name, symbol=None, di
 
     recent_rows = await conn.fetch(
         f"""
-        SELECT reasoning_text
-        FROM aureus_reasoning_entries
+        SELECT re.reasoning_text
+        FROM aureus_reasoning_entries re
+        LEFT JOIN aureus_trade_journal tj ON tj.id = re.trade_journal_id
+        LEFT JOIN aureus_trade_signal_snapshots ts ON ts.id = re.signal_snapshot_id
         WHERE {where}
-          AND reasoning_text IS NOT NULL
-        ORDER BY COALESCE(evaluated_at, created_at) DESC NULLS LAST, id DESC
+          AND re.reasoning_text IS NOT NULL
+        ORDER BY COALESCE(re.evaluated_at, re.created_at) DESC NULLS LAST, re.id DESC
         LIMIT ${len(args) + 1}
         """,
         *args,
@@ -223,11 +242,13 @@ async def fetch_strategy_reasoning_insights(conn, strategy_name, symbol=None, di
             similar_where = _strategy_scope_where(2, symbol=symbol, direction=direction, embedding=True)
             rows = await conn.fetch(
                 f"""
-                SELECT reasoning_text, reasoning_embedding <=> $1::vector AS distance
-                FROM aureus_reasoning_entries
+                SELECT re.reasoning_text, re.reasoning_embedding <=> $1::vector AS distance
+                FROM aureus_reasoning_entries re
+                LEFT JOIN aureus_trade_journal tj ON tj.id = re.trade_journal_id
+                LEFT JOIN aureus_trade_signal_snapshots ts ON ts.id = re.signal_snapshot_id
                 WHERE {similar_where}
-                  AND reasoning_text IS NOT NULL
-                ORDER BY reasoning_embedding <=> $1::vector
+                  AND re.reasoning_text IS NOT NULL
+                ORDER BY re.reasoning_embedding <=> $1::vector
                 LIMIT ${len(similar_args)}
                 """,
                 *similar_args,
