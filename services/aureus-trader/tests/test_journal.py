@@ -199,7 +199,7 @@ class TestPendingOrderLifecycle:
 
 class TestReasoningBank:
     @pytest.mark.asyncio
-    async def test_on_strategy_match_appends_reasoning_entry(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+    async def test_on_strategy_match_skips_reasoning_entry_without_parent_trade(self, journal_manager, valid_strategy_match_event, mock_db_pool):
         valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
         mock_db_pool.set_result("fetchval", 1)
 
@@ -207,26 +207,22 @@ class TestReasoningBank:
 
         assert result is True
         queries = mock_db_pool._conn.queries
-        assert len(queries) == 2
+        assert len(queries) == 1
         assert "INSERT INTO aureus_trade_journal" in queries[0][1]
-        assert "INSERT INTO aureus_reasoning_entries" in queries[1][1]
-        args = queries[1][2]
-        assert args[0] == "trace-test-journal-001"
-        assert args[1] == 1
-        assert args[2] == 101
-        assert args[3] == "chandelier_breakout"
-        assert args[4] == "XAUUSD"
-        assert args[5] == "BUY"
-        assert args[6] == 0.85
-        assert json.loads(args[7])[0]["tag"] == "liquidity_sweep"
-        assert json.loads(args[8])["session"] == "london"
-        assert args[9] == "CISD + sweep aligned"
-        assert args[10] is None
-        assert args[11] is None
-        assert args[12] == "BUY"
+        assert not any("INSERT INTO aureus_reasoning_entries" in q[1] for q in queries)
 
     @pytest.mark.asyncio
-    async def test_on_strategy_match_enqueue_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+    async def test_on_strategy_match_reasoning_deferral_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool, caplog):
+        valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+        mock_db_pool.set_result("fetchval", 1)
+
+        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        assert any("Reasoning entry deferred" in record.message for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_on_strategy_match_enqueue_not_attempted_before_parent_trade(self, journal_manager, valid_strategy_match_event, mock_db_pool):
         valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
         journal_manager.redis = MagicMock()
         mock_db_pool.set_result("fetchval", 1)
@@ -235,7 +231,7 @@ class TestReasoningBank:
             result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
-        enqueue_mock.assert_awaited_once()
+        enqueue_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_on_strategy_match_captures_raw_prompt_context_only(self, journal_manager, valid_strategy_match_event, mock_db_pool):
@@ -253,54 +249,66 @@ class TestReasoningBank:
             result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
-        args = mock_db_pool._conn.queries[1][2]
-        assert args[10] == "raw prompt text"
-        assert args[11] == "raw context text"
-        sources = enqueue_mock.await_args.args[2]
-        assert sources == {
-            "reasoning_text": "real reasoning",
-            "prompt_text": "raw prompt text",
-            "context_text": "raw context text",
-        }
-        assert "digest-should-not-embed" not in sources.values()
-        assert "hash-should-not-embed" not in sources.values()
+        assert len(mock_db_pool._conn.queries) == 1
+        enqueue_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_on_strategy_match_reasoning_insert_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+    async def test_on_order_opened_reasoning_insert_failure_non_blocking(self, journal_manager, valid_order_opened_event, mock_db_pool):
         class ReasoningFailConnection:
             def __init__(self):
                 self.queries = []
-                self.calls = 0
+
+            def transaction(self):
+                class Ctx:
+                    async def __aenter__(inner_self):
+                        return self
+                    async def __aexit__(inner_self, *args):
+                        pass
+                return Ctx()
+
+            async def fetchrow(self, query, *args):
+                self.queries.append(("fetchrow", query, args))
+                return {
+                    "id": 1,
+                    "trace_id": "trace-test-journal-001",
+                    "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
+                    "direction": "BUY",
+                    "symbol": "XAUUSD",
+                    "active_signals": [],
+                    "context_filters": {},
+                    "strategy_name": "chandelier_breakout",
+                }
 
             async def fetchval(self, query, *args):
-                self.calls += 1
                 self.queries.append(("fetchval", query, args))
-                if self.calls == 2:
+                if "INSERT INTO aureus_trade_signal_snapshots" in query:
+                    return 1
+                if "INSERT INTO aureus_reasoning_entries" in query:
                     raise RuntimeError("reasoning insert failed")
                 return 1
+
+            async def execute(self, query, *args):
+                self.queries.append(("execute", query, args))
+                return "UPDATE 1"
 
         conn = ReasoningFailConnection()
         mock_db_pool._conn = conn
 
-        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
 
         assert result is True
-        assert len(conn.queries) == 2
-        assert "INSERT INTO aureus_reasoning_entries" in conn.queries[1][1]
+        assert any("INSERT INTO aureus_reasoning_entries" in q[1] for q in conn.queries)
 
     @pytest.mark.asyncio
-    async def test_on_strategy_match_enqueues_reasoning_embedding_job(self, journal_manager, valid_strategy_match_event, mock_db_pool):
-        valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+    async def test_on_order_opened_enqueues_reasoning_embedding_job(self, journal_manager, valid_order_opened_event, mock_db_pool):
         journal_manager.redis = MagicMock()
-        mock_db_pool.set_result("fetchval", 1)
 
         with patch("journal.enqueue_reasoning_embedding_job", new=AsyncMock(return_value=True)) as enqueue_mock:
-            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+            result = await journal_manager.on_order_opened(valid_order_opened_event)
 
         assert result is True
         enqueue_mock.assert_awaited_once()
         assert enqueue_mock.await_args.args[0] is journal_manager.redis
-        assert enqueue_mock.await_args.args[1] == 1
         assert enqueue_mock.await_args.args[3] == "trace-test-journal-001"
 
     def test_main_runtime_wires_redis_into_trade_journal_manager(self):
@@ -360,10 +368,8 @@ class TestReasoningBank:
 
         mock_db_pool.set_result("fetchval", 1)
         assert await journal_manager.on_strategy_match(strategy_event) is True
-        insert_args = mock_db_pool._conn.queries[1][2]
-        assert insert_args[9] is None
-        assert insert_args[10] is None
-        assert insert_args[11] is None
+        assert len(mock_db_pool._conn.queries) == 1
+        assert "INSERT INTO aureus_trade_journal" in mock_db_pool._conn.queries[0][1]
 
         mock_db_pool.set_result("fetchrow", {
             "id": 1,
@@ -380,10 +386,10 @@ class TestReasoningBank:
             assert await journal_manager.on_order_opened(order_event) is True
 
         queries = mock_db_pool._conn.queries
-        updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1] and "reasoning_text IS NULL" in q[1]]
-        assert len(updates) == 1
-        update_args = updates[0][2]
-        generated_text = update_args[2]
+        inserts = [q for q in queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
+        assert len(inserts) == 1
+        insert_args = inserts[0][2]
+        generated_text = insert_args[9]
         assert "TREND_CONT_BULL" in generated_text
         assert "XAUUSD" in generated_text
         assert "BUY" in generated_text
