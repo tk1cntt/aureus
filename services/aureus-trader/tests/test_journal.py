@@ -8,6 +8,8 @@ import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import reasoning_embeddings
+
 from journal import TradeJournalManager, VALID_EXIT_REASONS, VALID_DIRECTIONS, PIP_VALUES
 
 
@@ -219,7 +221,47 @@ class TestReasoningBank:
         assert json.loads(args[7])[0]["tag"] == "liquidity_sweep"
         assert json.loads(args[8])["session"] == "london"
         assert args[9] == "CISD + sweep aligned"
-        assert args[10] == "BUY"
+        assert args[10] is None
+        assert args[11] is None
+        assert args[12] == "BUY"
+
+    @pytest.mark.asyncio
+    async def test_on_strategy_match_embedding_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+        mock_db_pool.set_result("fetchval", 1)
+
+        with patch("journal.embed_reasoning_entry", new=AsyncMock(side_effect=RuntimeError("embedding down"))) as embed_mock:
+            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        embed_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_on_strategy_match_captures_raw_prompt_context_only(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        valid_strategy_match_event["data"].update({
+            "reasoning": "real reasoning",
+            "prompt_text": "raw prompt text",
+            "context_text": "raw context text",
+            "prompt_digest": "digest-should-not-embed",
+            "input_context_hash": "hash-should-not-embed",
+        })
+        mock_db_pool.set_result("fetchval", 1)
+
+        with patch("journal.embed_reasoning_entry", new=AsyncMock(return_value=3)) as embed_mock:
+            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        args = mock_db_pool._conn.queries[1][2]
+        assert args[10] == "raw prompt text"
+        assert args[11] == "raw context text"
+        sources = embed_mock.await_args.args[2]
+        assert sources == {
+            "reasoning_text": "real reasoning",
+            "prompt_text": "raw prompt text",
+            "context_text": "raw context text",
+        }
+        assert "digest-should-not-embed" not in sources.values()
+        assert "hash-should-not-embed" not in sources.values()
 
     @pytest.mark.asyncio
     async def test_on_strategy_match_reasoning_insert_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):

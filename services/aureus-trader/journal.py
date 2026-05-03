@@ -10,6 +10,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from reasoning_embeddings import ReasoningEmbeddingClient, embed_reasoning_entry, select_embedding_sources
+
 logger = logging.getLogger(__name__)
 
 EXCLUDED_SIGNAL_STATE_TAGS = {
@@ -279,13 +281,15 @@ class TradeJournalManager:
                 if result:
                     try:
                         reasoning_text = data.get("reasoning", data.get("rationale", match_data.get("reasoning", match_data.get("rationale"))))
-                        await conn.fetchval(
+                        prompt_text = data.get("prompt_text", data.get("raw_prompt", match_data.get("prompt_text", match_data.get("raw_prompt"))))
+                        context_text = data.get("context_text", data.get("raw_context", match_data.get("context_text", match_data.get("raw_context"))))
+                        reasoning_entry_id = await conn.fetchval(
                             """
                             INSERT INTO aureus_reasoning_entries (
                                 trace_id, trade_journal_id, strategy_id, strategy_name, symbol,
                                 direction, confidence, active_signals, context_filters,
-                                reasoning_text, decision_action
-                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                reasoning_text, prompt_text, context_text, decision_action
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                             RETURNING id
                             """,
                             trace_id,
@@ -298,8 +302,22 @@ class TradeJournalManager:
                             json.dumps(active_signals),
                             json.dumps(context_filters),
                             reasoning_text,
+                            prompt_text,
+                            context_text,
                             direction,
                         )
+                        try:
+                            sources = select_embedding_sources({
+                                "reasoning_text": reasoning_text,
+                                "prompt_text": prompt_text,
+                                "context_text": context_text,
+                                "prompt_digest": data.get("prompt_digest", match_data.get("prompt_digest")),
+                                "decision_digest": data.get("decision_digest", match_data.get("decision_digest")),
+                                "input_context_hash": data.get("input_context_hash", match_data.get("input_context_hash")),
+                            })
+                            await embed_reasoning_entry(conn, reasoning_entry_id, sources, ReasoningEmbeddingClient())
+                        except Exception as exc:
+                            logger.warning("Reasoning embedding failed for trace_id=%s: %s", trace_id, exc)
                     except Exception as exc:
                         logger.warning("Reasoning entry insert failed for trace_id=%s: %s", trace_id, exc)
 
