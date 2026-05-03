@@ -29,10 +29,10 @@ class TestOnStrategyMatchInputValidation:
         assert len(mock_db_pool.acquired) == 1
         # Verify INSERT query called
         queries = mock_db_pool._conn.queries
-        assert len(queries) == 2
+        assert len(queries) == 1
         assert queries[0][0] == "fetchval"
         assert "INSERT INTO aureus_trade_journal" in queries[0][1]
-        assert "INSERT INTO aureus_reasoning_entries" in queries[1][1]
+        assert "INSERT INTO aureus_reasoning_entries" not in queries[0][1]
 
     @pytest.mark.asyncio
     async def test_TJ_IN_02_missing_trace_id(self, journal_manager, valid_strategy_match_event):
@@ -322,11 +322,11 @@ class TestReasoningBank:
 
         assert result is True
         queries = mock_db_pool._conn.queries
-        reasoning_updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1]]
-        assert len(reasoning_updates) == 1
-        args = reasoning_updates[0][2]
-        assert args[0] == 1
-        assert args[3] == "trace-test-journal-001"
+        reasoning_inserts = [q for q in queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
+        assert len(reasoning_inserts) == 1
+        args = reasoning_inserts[0][2]
+        assert args[0] == "trace-test-journal-001"
+        assert args[1] == 1
 
     @pytest.mark.asyncio
     async def test_post_snapshot_generates_reasoning_text_without_prompt_context(self, journal_manager, mock_db_pool):
@@ -389,7 +389,7 @@ class TestReasoningBank:
         inserts = [q for q in queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
         assert len(inserts) == 1
         insert_args = inserts[0][2]
-        generated_text = insert_args[9]
+        generated_text = insert_args[8]
         assert "TREND_CONT_BULL" in generated_text
         assert "XAUUSD" in generated_text
         assert "BUY" in generated_text
@@ -409,9 +409,9 @@ class TestReasoningBank:
         assert await journal_manager.on_strategy_match(valid_strategy_match_event) is True
         assert await journal_manager.on_order_opened(valid_order_opened_event) is True
 
-        updates = [q for q in mock_db_pool._conn.queries if "UPDATE aureus_reasoning_entries" in q[1] and "reasoning_text IS NULL" in q[1]]
-        assert len(updates) == 1
-        assert "reasoning_text IS NULL" in updates[0][1]
+        inserts = [q for q in mock_db_pool._conn.queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
+        assert len(inserts) == 1
+        assert "COALESCE(aureus_reasoning_entries.reasoning_text, EXCLUDED.reasoning_text)" in inserts[0][1]
 
     @pytest.mark.asyncio
     async def test_on_order_closed_attaches_reasoning_outcome(self, journal_manager, valid_order_closed_event, mock_db_pool):
