@@ -203,7 +203,8 @@ class TestReasoningBank:
         valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
         mock_db_pool.set_result("fetchval", 1)
 
-        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+        with patch("journal.embed_reasoning_entry", new=AsyncMock(return_value=0)):
+            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
         queries = mock_db_pool._conn.queries

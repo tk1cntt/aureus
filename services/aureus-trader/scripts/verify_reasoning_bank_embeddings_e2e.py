@@ -21,7 +21,8 @@ async def main():
         "AUREUS_DB_DSN",
         f"postgresql://{cfg.db_user}:{cfg.db_password}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}",
     )
-    client = verify_embedding_service("http://localhost:8005")
+    embedding_base_url = os.getenv("AUREUS_EMBEDDING_BASE_URL", "http://localhost:8005")
+    client = verify_embedding_service(embedding_base_url)
     trace_id = f"e2e-reasoning-embedding-{uuid.uuid4().hex[:12]}"
     legacy_trace_id = f"e2e-reasoning-legacy-{uuid.uuid4().hex[:12]}"
     pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=2)
