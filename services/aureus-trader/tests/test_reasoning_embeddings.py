@@ -1,6 +1,6 @@
 import json
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from reasoning_embeddings import (
     semantic_search_reasoning_entries,
     vector_to_pg,
 )
+from scripts.backfill_reasoning_embeddings import backfill
 
 
 class FakeResponse:
@@ -113,3 +114,64 @@ async def test_semantic_search_uses_parameterized_pgvector_query():
 def test_vector_to_pg_rejects_non_finite_values():
     with pytest.raises(ReasoningEmbeddingError):
         vector_to_pg([0.1, float("nan")])
+
+
+@pytest.mark.asyncio
+async def test_backfill_reports_hash_only_prompt_context_unavailable(monkeypatch):
+    calls = []
+
+    class FakePool:
+        def __init__(self):
+            self.conn = FakeBackfillConn()
+
+        def acquire(self):
+            return FakeAcquire(self.conn)
+
+        async def close(self):
+            pass
+
+    class FakeAcquire:
+        def __init__(self, conn):
+            self.conn = conn
+
+        async def __aenter__(self):
+            return self.conn
+
+        async def __aexit__(self, *args):
+            pass
+
+    class FakeBackfillConn:
+        async def execute(self, *args):
+            calls.append(("execute", args))
+            return "OK"
+
+        async def fetch(self, *args):
+            return [{
+                "id": 10,
+                "reasoning_text": None,
+                "prompt_text": None,
+                "context_text": None,
+                "prompt_digest": "digest-only",
+                "decision_digest": "decision-only",
+                "input_context_hash": "hash-only",
+            }]
+
+    class Client:
+        model = None
+
+        def embed(self, text):
+            raise AssertionError("hash/digest must not be embedded")
+
+    async def fake_create_pool(*args, **kwargs):
+        return FakePool()
+
+    monkeypatch.setattr("scripts.backfill_reasoning_embeddings.verify_embedding_service", lambda base_url: Client())
+    monkeypatch.setattr("scripts.backfill_reasoning_embeddings.asyncpg.create_pool", fake_create_pool)
+    monkeypatch.setattr("scripts.backfill_reasoning_embeddings._ensure_schema", AsyncMock())
+    monkeypatch.setattr("scripts.backfill_reasoning_embeddings._dsn", lambda: "postgresql://test")
+
+    stats = await backfill(limit=1)
+
+    assert stats["updated_rows"] == 0
+    assert stats["skipped_rows"] == 1
+    assert stats["unavailable_raw_prompt_context"] == 1
