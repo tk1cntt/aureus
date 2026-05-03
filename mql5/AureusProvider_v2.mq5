@@ -216,6 +216,21 @@ bool IsMarketClosedCloseGuardActive(string symbol, long magic, string direction,
    return guardUntil > TimeCurrent();
   }
 
+bool IsSymbolMarketClosedCloseGuardActive(string symbol, datetime &guardUntil)
+  {
+   guardUntil = 0;
+   for(int i = 0; i < ArraySize(g_marketClosedCloseGuards); i++)
+     {
+      if(g_marketClosedCloseGuards[i].symbol != symbol)
+         continue;
+      if(g_marketClosedCloseGuards[i].guard_until <= TimeCurrent())
+         continue;
+      if(g_marketClosedCloseGuards[i].guard_until > guardUntil)
+         guardUntil = g_marketClosedCloseGuards[i].guard_until;
+     }
+   return guardUntil > 0;
+  }
+
 void SetMarketClosedCloseGuard(string symbol, long magic, string direction)
   {
    int idx = EnsureMarketClosedCloseGuardState(symbol, magic, direction);
@@ -1911,7 +1926,7 @@ void ProcessPositionsByType(string symbol,
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
    datetime guardUntil = 0;
-   if(IsMarketClosedCloseGuardActive(symbol, magic, pos_type_str, guardUntil))
+   if(IsSymbolMarketClosedCloseGuardActive(symbol, guardUntil))
       return;
 
    bool profile_fallback = false;
@@ -2011,6 +2026,9 @@ void ManagePositionProfitBreakEvent()
 void DoDCA(int order_type_signal, string symbol, long magic)
   {
    string log_prefix = StringFormat("[DoDCA] [%s:%lld] ", symbol, magic);
+   datetime guardUntil = 0;
+   if(IsSymbolMarketClosedCloseGuardActive(symbol, guardUntil))
+      return;
 
    if(order_type_signal != 1 && order_type_signal != -1)
      {
