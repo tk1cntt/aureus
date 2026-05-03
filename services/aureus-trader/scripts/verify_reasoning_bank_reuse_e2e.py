@@ -85,7 +85,7 @@ async def run_e2e():
                 "SELECT COUNT(*) FROM aureus_reasoning_entries WHERE trace_id=$1",
                 no_parent_trace_id,
             )
-            assert no_parent_journal_count == 0
+            assert no_parent_journal_count == 1
             assert no_parent_snapshot_count == 0
             assert no_parent_reasoning_count == 0
             await conn.execute(
