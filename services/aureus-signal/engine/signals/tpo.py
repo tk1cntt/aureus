@@ -163,27 +163,40 @@ class TPOSignal(BaseSignal):
         usable_quality = min(1.0, usable_bins / 5.0)
         data_quality = max(0.15, min(1.0, coverage * 1.4, maturity, usable_quality))
 
-        upper_mass = float(sum(counts[poc_idx + 1:]))
-        lower_mass = float(sum(counts[:poc_idx]))
-        poc_mass = float(counts[poc_idx])
-        skew = (upper_mass - lower_mass) / (total + EPSILON)
+        poc_pos = (poc_idx / float(n - 1)) if n > 1 else 0.5
+        middle_proximity = max(0.0, 1.0 - (abs(poc_pos - 0.5) / 0.5))
+        upper_third = 1.0 if poc_pos >= (2.0 / 3.0) else 0.0
+        lower_third = 1.0 if poc_pos <= (1.0 / 3.0) else 0.0
 
-        pair_weight = 0.0
-        pair_delta = 0.0
-        max_dist = max(poc_idx, n - 1 - poc_idx, 1)
-        for dist in range(1, max_dist + 1):
-            left = poc_idx - dist
-            right = poc_idx + dist
-            left_count = float(counts[left]) if left >= 0 else 0.0
-            right_count = float(counts[right]) if right < n else 0.0
-            pair_total = left_count + right_count
-            pair_weight += pair_total
-            pair_delta += abs(left_count - right_count)
-        symmetry = 1.0 - (pair_delta / (pair_weight + EPSILON)) if pair_weight > EPSILON else 0.0
+        target = max(1, int(round(total * self.value_area_pct)))
+        covered = max(0, counts[poc_idx])
+        val_idx = poc_idx
+        vah_idx = poc_idx
+        while covered < target and (val_idx > 0 or vah_idx < n - 1):
+            up_count = counts[vah_idx + 1] if vah_idx < n - 1 else -1
+            down_count = counts[val_idx - 1] if val_idx > 0 else -1
+            if up_count > down_count:
+                vah_idx += 1
+                covered += max(0, counts[vah_idx])
+            elif down_count > up_count:
+                val_idx -= 1
+                covered += max(0, counts[val_idx])
+            elif up_count >= 0:
+                vah_idx += 1
+                covered += max(0, counts[vah_idx])
+                if covered < target and val_idx > 0:
+                    val_idx -= 1
+                    covered += max(0, counts[val_idx])
+            elif val_idx > 0:
+                val_idx -= 1
+                covered += max(0, counts[val_idx])
+            else:
+                break
 
-        near_low = max(0, poc_idx - max(1, n // 4))
-        near_high = min(n, poc_idx + max(1, n // 4) + 1)
-        compactness = float(sum(counts[near_low:near_high])) / (total + EPSILON)
+        range_den = float(max(1, n - 1))
+        lower_va = (poc_idx - val_idx) / range_den
+        upper_va = (vah_idx - poc_idx) / range_den
+        va_balance = 1.0 - (abs(upper_va - lower_va) / (upper_va + lower_va + EPSILON)) if (upper_va + lower_va) > EPSILON else 1.0
 
         peaks = []
         min_prominence = max(2.0, max_count * 0.45)
@@ -204,31 +217,26 @@ class TPOSignal(BaseSignal):
                 if second_idx <= first_idx:
                     continue
                 separation = second_idx - first_idx
-                if separation < 3:
+                if separation < max(2, int(math.ceil(n / 3.0))):
                     continue
                 valley = min(float(c) for c in counts[first_idx + 1:second_idx]) if second_idx > first_idx + 1 else max_count
                 weaker_peak = min(first_count, second_count)
                 peak_balance = weaker_peak / (max(first_count, second_count) + EPSILON)
+                if peak_balance < 0.75:
+                    continue
                 valley_depth = max(0.0, 1.0 - (valley / (weaker_peak + EPSILON)))
-                separation_score = min(1.0, separation / max(3.0, n / 3.0))
+                if valley_depth < 0.35:
+                    continue
+                separation_score = min(1.0, separation / max(3.0, n / 2.0))
                 b_evidence = max(b_evidence, peak_balance * valley_depth * separation_score)
 
-        tail_width = max(1, n // 3)
-        upper_tail = counts[n - tail_width:]
-        lower_tail = counts[:tail_width]
-        upper_tail_mean = float(sum(upper_tail)) / len(upper_tail)
-        lower_tail_mean = float(sum(lower_tail)) / len(lower_tail)
-        tail_delta = (lower_tail_mean - upper_tail_mean) / (max_count + EPSILON)
-        upper_share = upper_mass / (total - poc_mass + EPSILON)
-        lower_share = lower_mass / (total - poc_mass + EPSILON)
-
-        d_score = max(0.0, (0.55 * symmetry) + (0.45 * compactness) - (0.55 * b_evidence) - (0.45 * abs(skew)))
-        b_score = max(0.0, b_evidence * (0.8 + (0.2 * symmetry)))
-        p_score = max(0.0, (upper_share - lower_share) + (0.8 * -tail_delta) + max(0.0, skew * 0.25))
-        b_lower_score = max(0.0, (lower_share - upper_share) + (0.8 * tail_delta) + max(0.0, -skew * 0.25))
-        if b_evidence > 0.0:
-            p_score *= 1.0 - min(0.8, b_evidence)
-            b_lower_score *= 1.0 - min(0.8, b_evidence)
+        d_score = max(0.0, (0.65 * middle_proximity) + (0.35 * va_balance) - (1.15 * b_evidence))
+        b_score = max(0.0, b_evidence * 1.8)
+        p_score = max(0.0, upper_third * 1.25 * (1.0 - min(0.85, b_evidence)))
+        b_lower_score = max(0.0, lower_third * 1.25 * (1.0 - min(0.85, b_evidence)))
+        if 0.3 <= poc_pos <= 0.7 and d_score > 0.0:
+            p_score = 0.0
+            b_lower_score = 0.0
 
         scores = {"D": d_score, "B": b_score, "p": p_score, "b": b_lower_score}
         score_sum = sum(scores.values())
@@ -246,12 +254,14 @@ class TPOSignal(BaseSignal):
         if margin < 20.0:
             margin_factor *= 0.45
         confidence_cap = 20.0 + (75.0 * data_quality)
-        if b_evidence > 0.0 and b_score < d_score:
+        if 0.0 < b_evidence < 0.55:
             confidence_cap = min(confidence_cap, 50.0)
         if usable_bins < 5 or total < 20.0:
             confidence_cap = min(confidence_cap, 35.0)
-        if 0.0 < b_evidence < 0.85:
+        if 0.0 < b_evidence < 0.55:
             confidence_cap = min(confidence_cap, 50.0)
+        if best_shape != "B" and len(peaks) >= 2:
+            confidence_cap = min(confidence_cap, 75.0)
         best_confidence = min(top_score, confidence_cap) * (0.45 + (0.55 * margin_factor))
         best_confidence = round(max(0.0, min(100.0, best_confidence)), 2)
         return best_shape, best_confidence, normalized

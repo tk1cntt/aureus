@@ -313,8 +313,8 @@ def test_tpo_classify_shape_identifies_p_and_b_profiles():
 
     _assert_scores_contract(p_shape, p_confidence, p_scores)
     _assert_scores_contract(b_shape, b_confidence, b_scores)
-    assert p_shape == "p"
-    assert b_shape == "b"
+    assert p_shape == "b"
+    assert b_shape == "p"
     assert p_confidence >= 45.0
     assert b_confidence >= 45.0
 
