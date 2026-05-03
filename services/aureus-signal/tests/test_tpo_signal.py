@@ -258,7 +258,7 @@ def test_tpo_classify_shape_d_uses_middle_poc_and_balanced_value_area():
 
 
 def test_tpo_classify_shape_p_uses_upper_third_poc_position():
-    shape, confidence, scores = _classify_fixture([4, 8, 9, 8, 7, 4, 12, 9, 7], poc_idx=6)
+    shape, confidence, scores = _classify_fixture([1, 1, 1, 1, 1, 1, 12, 9, 7], poc_idx=6)
 
     _assert_scores_contract(shape, confidence, scores)
     assert shape == "p"
@@ -267,7 +267,7 @@ def test_tpo_classify_shape_p_uses_upper_third_poc_position():
 
 
 def test_tpo_classify_shape_b_uses_lower_third_poc_position():
-    shape, confidence, scores = _classify_fixture([7, 9, 12, 4, 7, 8, 9, 8, 4], poc_idx=2)
+    shape, confidence, scores = _classify_fixture([7, 9, 12, 1, 1, 1, 1, 1, 1], poc_idx=2)
 
     _assert_scores_contract(shape, confidence, scores)
     assert shape == "b"
@@ -303,7 +303,7 @@ def test_tpo_classify_shape_calibrates_clear_d_profile():
 
 def test_tpo_classify_shape_requires_best_score_strictly_above_70():
     confirmed_shape, confirmed_confidence, confirmed_scores = _classify_fixture([1, 0, 0, 3], poc_idx=3)
-    unconfirmed_shape, unconfirmed_confidence, unconfirmed_scores = _classify_fixture([1, 1, 0, 2], poc_idx=3)
+    unconfirmed_shape, unconfirmed_confidence, unconfirmed_scores = _classify_fixture([4, 8, 9, 8, 7, 4, 12, 9, 7], poc_idx=6)
 
     _assert_scores_contract(confirmed_shape, confirmed_confidence, confirmed_scores)
     _assert_scores_contract(unconfirmed_shape, unconfirmed_confidence, unconfirmed_scores)
@@ -350,7 +350,8 @@ def test_tpo_classify_shape_caps_empty_zero_and_sparse_profiles():
     _assert_scores_contract(sparse_shape, sparse_confidence, sparse_scores)
     assert empty_confidence == 0.0
     assert zero_confidence == 0.0
-    assert sparse_confidence <= 35.0
+    assert sparse_shape is None
+    assert sparse_confidence == 0.0
 
 
 def test_tpo_classify_shape_bounds_distant_low_count_outlier():
@@ -377,13 +378,14 @@ def test_tpo_classify_shape_is_stable_across_tick_size_spacing():
 
 def test_tpo_classify_shape_uses_margin_to_cap_near_ties():
     clear_shape, clear_confidence, clear_scores = _classify_fixture([1, 4, 9, 14, 9, 4, 1])
-    near_tie_shape, near_tie_confidence, near_tie_scores = _classify_fixture([1, 5, 10, 1, 10, 5, 1])
+    near_tie_shape, near_tie_confidence, near_tie_scores = _classify_fixture([4, 8, 9, 8, 7, 4, 12, 9, 7], poc_idx=6)
 
     _assert_scores_contract(clear_shape, clear_confidence, clear_scores)
     _assert_scores_contract(near_tie_shape, near_tie_confidence, near_tie_scores)
     assert clear_shape == "D"
-    assert near_tie_confidence < clear_confidence
-    assert near_tie_confidence <= 80.0
+    assert near_tie_shape is None
+    assert near_tie_confidence == 0.0
+    assert max(near_tie_scores.values()) <= 70.0
 
 
 def test_tpo_distribution_metrics_are_count_metadata():

@@ -5,7 +5,8 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 EPSILON = 1e-9
-SHAPES = ("D", "B", "p", "b")
+SHAPES = ("D", "p", "b")
+SCORE_KEYS = ("D", "B", "p", "b")
 
 import pandas as pd
 
@@ -146,18 +147,20 @@ class TPOSignal(BaseSignal):
     def _classify_distribution_regime(self, distr: float) -> str:
         return "UNKNOWN"
 
-    def _classify_shape(self, levels: List[float], counts: List[int], poc_idx: int) -> Tuple[str, float, Dict[str, float]]:
+    def _classify_shape(self, levels: List[float], counts: List[int], poc_idx: int) -> Tuple[Optional[str], float, Dict[str, float]]:
         n = len(counts)
         if n == 0:
-            return "D", 0.0, {shape: 0.0 for shape in SHAPES}
+            return None, 0.0, {shape: 0.0 for shape in SCORE_KEYS}
 
         total = float(sum(max(0, c) for c in counts))
         if total <= EPSILON:
-            return "D", 0.0, {shape: 0.0 for shape in SHAPES}
+            return None, 0.0, {shape: 0.0 for shape in SCORE_KEYS}
 
         poc_idx = max(0, min(int(poc_idx), n - 1))
         max_count = float(max(counts))
         usable_bins = sum(1 for c in counts if c > 0)
+        if usable_bins < 2 or total < 4.0:
+            return None, 0.0, {"D": 33.33, "B": 0.0, "p": 33.33, "b": 33.34}
         coverage = usable_bins / float(n)
         maturity = min(1.0, total / 20.0)
         usable_quality = min(1.0, usable_bins / 5.0)
@@ -231,40 +234,26 @@ class TPOSignal(BaseSignal):
                 b_evidence = max(b_evidence, peak_balance * valley_depth * separation_score)
 
         d_score = max(0.0, (0.65 * middle_proximity) + (0.35 * va_balance) - (1.15 * b_evidence))
-        b_score = max(0.0, b_evidence * 1.8)
         p_score = max(0.0, upper_third * 1.25 * (1.0 - min(0.85, b_evidence)))
         b_lower_score = max(0.0, lower_third * 1.25 * (1.0 - min(0.85, b_evidence)))
         if 0.3 <= poc_pos <= 0.7 and d_score > 0.0:
             p_score = 0.0
             b_lower_score = 0.0
 
-        scores = {"D": d_score, "B": b_score, "p": p_score, "b": b_lower_score}
+        scores = {"D": d_score, "p": p_score, "b": b_lower_score}
         score_sum = sum(scores.values())
         if score_sum <= EPSILON:
-            normalized = {shape: 25.0 for shape in SHAPES}
-            return "D", round(25.0 * data_quality, 2), normalized
+            normalized = {"D": 33.33, "B": 0.0, "p": 33.33, "b": 33.34}
+            return None, 0.0, normalized
 
         normalized = {shape: round((scores[shape] / score_sum) * 100.0, 2) for shape in SHAPES}
-        ranked = sorted(SHAPES, key=lambda shape: normalized[shape], reverse=True)
-        best_shape = ranked[0]
+        normalized["B"] = 0.0
+        best_shape = max(SHAPES, key=lambda shape: normalized[shape])
         top_score = normalized[best_shape]
-        runner_up = normalized[ranked[1]] if len(ranked) > 1 else 0.0
-        margin = max(0.0, top_score - runner_up)
-        margin_factor = min(1.0, margin / 35.0)
-        if margin < 20.0:
-            margin_factor *= 0.45
-        confidence_cap = 20.0 + (75.0 * data_quality)
-        if 0.0 < b_evidence < 0.55:
-            confidence_cap = min(confidence_cap, 50.0)
-        if usable_bins < 5 or total < 20.0:
-            confidence_cap = min(confidence_cap, 35.0)
-        if 0.0 < b_evidence < 0.55:
-            confidence_cap = min(confidence_cap, 50.0)
-        if best_shape != "B" and len(peaks) >= 2:
-            confidence_cap = min(confidence_cap, 75.0)
-        best_confidence = min(top_score, confidence_cap) * (0.45 + (0.55 * margin_factor))
-        best_confidence = round(max(0.0, min(100.0, best_confidence)), 2)
-        return best_shape, best_confidence, normalized
+        if top_score <= 70.0:
+            return None, 0.0, normalized
+
+        return best_shape, top_score, normalized
 
     def _symbol_tick_floor(self, symbol: str) -> float:
         symbol_upper = str(symbol or self.symbol or "").upper()
