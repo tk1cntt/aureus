@@ -253,6 +253,22 @@ class TestReasoningBank:
         enqueue_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_on_order_opened_ensures_parent_trade_before_reasoning_insert(self, journal_manager, valid_order_opened_event, mock_db_pool):
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+
+        assert result is True
+        queries = mock_db_pool._conn.queries
+        parent_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_trades" in q[1])
+        reasoning_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_reasoning_entries" in q[1])
+        assert parent_insert_index < reasoning_insert_index
+        parent_args = queries[parent_insert_index][2]
+        assert parent_args[0] == "trace-test-journal-001"
+        assert parent_args[1] == "XAUUSD"
+        assert parent_args[2] == "BUY"
+        assert parent_args[3] == 3250.50
+        assert parent_args[4] == 12345
+
+    @pytest.mark.asyncio
     async def test_on_order_opened_reasoning_insert_failure_non_blocking(self, journal_manager, valid_order_opened_event, mock_db_pool):
         class ReasoningFailConnection:
             def __init__(self):
@@ -297,6 +313,7 @@ class TestReasoningBank:
         result = await journal_manager.on_order_opened(valid_order_opened_event)
 
         assert result is True
+        assert any("INSERT INTO aureus_trades" in q[1] for q in conn.queries)
         assert any("INSERT INTO aureus_reasoning_entries" in q[1] for q in conn.queries)
 
     @pytest.mark.asyncio

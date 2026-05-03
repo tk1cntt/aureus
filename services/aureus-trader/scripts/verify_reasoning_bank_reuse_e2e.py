@@ -68,8 +68,27 @@ async def run_e2e():
                 "symbol": "XAUUSD",
                 "score": 0.88,
                 "reasoning": "real no-parent reasoning",
-                "active_signals": [{"tag": "cisd_bull", "status": "active"}],
+                "active_signals": [{"tag": "cisd_bull", "status": "active", "atr": 2.25}],
                 "context_filters": {"session": "london"},
+            },
+        })
+        assert await journal.on_order_opened({
+            "type": "ORDER_OPENED",
+            "trace_id": no_parent_trace_id,
+            "ticket": ticket + 1,
+            "open_price": 2320.5,
+            "volume": 0.1,
+            "time": 1775642400,
+            "timeframe": "M15",
+            "signal_schema_version": "sig-v2.0.0",
+            "signal_snapshot": {
+                "active_signals": [{"tag": "cisd_bull", "atr": 2.25}],
+                "context_filters": {"session": "london"},
+                "trend": "bullish",
+                "tpo_shape": "D",
+                "session": "london",
+                "atr": 2.25,
+                "cisd_m15": "BULL",
             },
         })
         async with pool.acquire() as conn:
@@ -85,9 +104,19 @@ async def run_e2e():
                 "SELECT COUNT(*) FROM aureus_reasoning_entries WHERE trace_id=$1",
                 no_parent_trace_id,
             )
+            no_parent_reasoning_text = await conn.fetchval(
+                "SELECT reasoning_text FROM aureus_reasoning_entries WHERE trace_id=$1",
+                no_parent_trace_id,
+            )
             assert no_parent_journal_count == 1
-            assert no_parent_snapshot_count == 0
-            assert no_parent_reasoning_count == 0
+            assert no_parent_snapshot_count == 1
+            assert no_parent_reasoning_count == 1
+            assert no_parent_reasoning_text
+            assert "reasoning_reuse_no_parent" in no_parent_reasoning_text
+            assert "XAUUSD" in no_parent_reasoning_text
+            assert "BUY" in no_parent_reasoning_text
+            assert "london" in no_parent_reasoning_text
+            assert "cisd_m15=1" in no_parent_reasoning_text
             await conn.execute(
                 """
                 INSERT INTO aureus_trades (trace_id, symbol, direction, entry_type, entry_price, status)
