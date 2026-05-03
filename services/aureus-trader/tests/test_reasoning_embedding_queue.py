@@ -133,6 +133,5 @@ async def test_worker_embedding_exception_leaves_job_retryable(monkeypatch):
     monkeypatch.setattr("reasoning_embeddings.embed_reasoning_entry", fake_embed)
     worker = ReasoningEmbeddingWorker(FakeWorkerPool(), redis, client=object())
 
-    with pytest.raises(RuntimeError):
-        await worker.process_once(timeout=0.1)
+    assert await worker.process_once(timeout=0.1) is False
     assert redis.deleted == []

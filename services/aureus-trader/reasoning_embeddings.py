@@ -305,8 +305,12 @@ class ReasoningEmbeddingWorker:
         if not sources:
             logger.warning("Reasoning embedding job has no sources: %s", payload)
             return False
-        async with self.db_pool.acquire() as conn:
-            await embed_reasoning_entry(conn, entry_id, sources, self.client)
+        try:
+            async with self.db_pool.acquire() as conn:
+                await embed_reasoning_entry(conn, entry_id, sources, self.client)
+        except Exception:
+            logger.exception("Reasoning embedding job failed; leaving message retryable: %s", payload)
+            return False
         await _maybe_await(self.redis.xdel(stream_name, message_id))
         return True
 

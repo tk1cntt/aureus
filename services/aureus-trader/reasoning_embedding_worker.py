@@ -27,7 +27,10 @@ async def main_async(args):
         if args.once:
             return 0 if await worker.process_once(timeout=args.timeout) else 1
         while True:
-            await worker.process_once(timeout=args.timeout)
+            try:
+                await worker.process_once(timeout=args.timeout)
+            except Exception as exc:
+                print(f"Reasoning embedding worker loop error: {exc}")
     finally:
         await redis_client.close()
         await pool.close()
