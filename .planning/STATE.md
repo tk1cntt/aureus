@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-03 - Completed quick task 260503-ltx: Stop repeated MT5 close attempts when market closed
+last_activity: 2026-05-03 - Completed quick task 260503-mjm: Pre-check market availability before MT5 close and stop spam logs
 progress:
   total_phases: 4
   completed_phases: 2
@@ -116,6 +116,7 @@ Last activity: 2026-05-02 - Completed quick task 260502-wur: Thực hiện imple
 | 260503-g9l | Tạo reasoning_text sau khi aureus_trade_journal và aureus_trade_signal_snapshots đã lưu xong | 2026-05-03 | 5ad6a40 | Verified | [260503-g9l-t-o-reasoning-text-sau-khi-aureus-trade-](./quick/260503-g9l-t-o-reasoning-text-sau-khi-aureus-trade-/) |
 | 260503-kb8 | Tạo test E2E từ trigger đến aureus_reasoning_entries | 2026-05-03 | 2f0f6a1 | Verified | [260503-kb8-t-o-test-e2e-t-khi-b-t-u-trigger-n-khi-l](./quick/260503-kb8-t-o-test-e2e-t-khi-b-t-u-trigger-n-khi-l/) |
 | 260503-ltx | Stop repeated MT5 close attempts when market closed | 2026-05-03 | 9731162 | Needs Review | [260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n](./quick/260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n/) |
+| 260503-mjm | Pre-check market availability before MT5 close and stop spam logs | 2026-05-03 | 7a66fd1 | Needs Review | [260503-mjm-market-closed-guard-v-n-spam-log-hold-pr](./quick/260503-mjm-market-closed-guard-v-n-spam-log-hold-pr/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
