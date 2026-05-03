@@ -318,7 +318,94 @@ class TestReasoningBank:
         assert len(reasoning_updates) == 1
         args = reasoning_updates[0][2]
         assert args[0] == 1
-        assert args[2] == "trace-test-journal-001"
+        assert args[3] == "trace-test-journal-001"
+
+    @pytest.mark.asyncio
+    async def test_post_snapshot_generates_reasoning_text_without_prompt_context(self, journal_manager, mock_db_pool):
+        strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": "trace-test-journal-001",
+            "data": {
+                "strategy_name": "TREND_CONT_BULL",
+                "strategy_id": 101,
+                "direction": "BUY",
+                "symbol": "XAUUSD",
+                "score": 0.85,
+                "active_signals": [{"tag": "cisd_bull", "status": "active"}],
+                "context_filters": {"session": "london"},
+            },
+        }
+        order_event = {
+            "type": "ORDER_OPENED",
+            "trace_id": "trace-test-journal-001",
+            "ticket": 12345,
+            "open_price": 3250.50,
+            "volume": 0.01,
+            "time": 1744095600,
+            "timeframe": "M15",
+            "signal_snapshot": {
+                "active_signals": [{"tag": "cisd_bull", "status": "active"}],
+                "context_filters": {"session": "london"},
+                "trend": "bullish",
+                "cisd_m15": "BULL",
+                "tpo_shape": "D",
+                "session": "london",
+                "atr": 2.5,
+                "ema21": 3249.1,
+                "ema55": 3240.2,
+                "bb_m5_up": 3260.0,
+                "bb_m5_dn": 3230.0,
+            },
+        }
+
+        mock_db_pool.set_result("fetchval", 1)
+        assert await journal_manager.on_strategy_match(strategy_event) is True
+        insert_args = mock_db_pool._conn.queries[1][2]
+        assert insert_args[9] is None
+        assert insert_args[10] is None
+        assert insert_args[11] is None
+
+        mock_db_pool.set_result("fetchrow", {
+            "id": 1,
+            "trace_id": "trace-test-journal-001",
+            "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
+            "direction": "BUY",
+            "symbol": "XAUUSD",
+            "active_signals": [{"tag": "cisd_bull", "status": "active"}],
+            "context_filters": {"session": "london"},
+            "strategy_name": "TREND_CONT_BULL",
+        })
+        journal_manager.redis = MagicMock()
+        with patch("journal.enqueue_reasoning_embedding_job", new=AsyncMock(side_effect=RuntimeError("redis down"))) as enqueue_mock:
+            assert await journal_manager.on_order_opened(order_event) is True
+
+        queries = mock_db_pool._conn.queries
+        updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1] and "reasoning_text IS NULL" in q[1]]
+        assert len(updates) == 1
+        update_args = updates[0][2]
+        generated_text = update_args[2]
+        assert "TREND_CONT_BULL" in generated_text
+        assert "XAUUSD" in generated_text
+        assert "BUY" in generated_text
+        assert "london" in generated_text
+        assert "cisd_m15=1" in generated_text
+        enqueue_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_post_snapshot_does_not_overwrite_upstream_reasoning(self, journal_manager, valid_strategy_match_event, valid_order_opened_event, mock_db_pool):
+        valid_strategy_match_event["data"].update({
+            "reasoning": "Upstream reasoning stays",
+            "prompt_text": "raw prompt",
+            "context_text": "raw context",
+        })
+        mock_db_pool.set_result("fetchval", 1)
+
+        assert await journal_manager.on_strategy_match(valid_strategy_match_event) is True
+        assert await journal_manager.on_order_opened(valid_order_opened_event) is True
+
+        updates = [q for q in mock_db_pool._conn.queries if "UPDATE aureus_reasoning_entries" in q[1] and "reasoning_text IS NULL" in q[1]]
+        assert len(updates) == 1
+        assert "reasoning_text IS NULL" in updates[0][1]
 
     @pytest.mark.asyncio
     async def test_on_order_closed_attaches_reasoning_outcome(self, journal_manager, valid_order_closed_event, mock_db_pool):

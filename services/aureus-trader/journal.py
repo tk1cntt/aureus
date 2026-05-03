@@ -166,6 +166,39 @@ def _normalize_polarity_code(value):
     return None
 
 
+def _reasoning_value(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list, tuple, set)):
+        return json.dumps(value, sort_keys=True, default=str)
+    return str(value)
+
+
+def _build_reasoning_text(journal_row: dict, snapshot_columns: dict, signal_snapshot: dict) -> str:
+    parts = []
+    for key in ("strategy_name", "symbol", "direction"):
+        value = _reasoning_value(journal_row.get(key))
+        if value:
+            parts.append(f"{key}={value}")
+
+    for key in ("context_filters", "active_signals"):
+        value = _reasoning_value(journal_row.get(key))
+        if value:
+            parts.append(f"{key}={value}")
+
+    snapshot_facts = dict(snapshot_columns or {})
+    for raw_key in ("trend", "tpo_shape"):
+        if isinstance(signal_snapshot, dict) and signal_snapshot.get(raw_key) is not None:
+            snapshot_facts[raw_key] = signal_snapshot.get(raw_key)
+
+    for key in sorted(snapshot_facts):
+        value = _reasoning_value(snapshot_facts.get(key))
+        if value:
+            parts.append(f"{key}={value}")
+
+    return " | ".join(parts)
+
+
 VALID_EXIT_REASONS = {
     "TP_HIT", "SL_HIT", "TRAILING_STOP", "MANUAL_CLOSE", "SIGNAL_EXIT"
 }
@@ -467,7 +500,7 @@ class TradeJournalManager:
                     OR ($8::text IS NULL AND $9::bigint IS NOT NULL AND pending_order_id = $9)
                     OR ($8::text IS NULL AND $11::text IS NOT NULL AND cmd_id = $11)
                   )
-                RETURNING id, strategy_name, symbol, active_signals, context_filters
+                RETURNING id, strategy_name, symbol, direction, active_signals, context_filters
             """
 
             updated = False
@@ -594,18 +627,54 @@ class TradeJournalManager:
                             snapshot_columns["cisd_h1"],
                             entry_time,
                         )
-                        await conn.execute(
+                        if snapshot_id is None:
+                            snapshot_id = await conn.fetchval(
+                                """
+                                SELECT id
+                                FROM aureus_trade_signal_snapshots
+                                WHERE trade_journal_id = $1
+                                """,
+                                trade_journal_id,
+                            )
+                        reasoning_text = _build_reasoning_text(journal_row, snapshot_columns, signal_snapshot)
+                        reasoning_entry_id = await conn.fetchval(
                             """
                             UPDATE aureus_reasoning_entries
                             SET trade_journal_id = $1,
                                 signal_snapshot_id = COALESCE($2, signal_snapshot_id),
+                                reasoning_text = $3,
                                 updated_at = now()
-                            WHERE trace_id = $3
+                            WHERE trace_id = $4
+                              AND reasoning_text IS NULL
+                            RETURNING id
                             """,
                             trade_journal_id,
                             snapshot_id,
+                            reasoning_text,
                             trace_id,
                         )
+                        if reasoning_entry_id:
+                            try:
+                                sources = select_embedding_sources({"reasoning_text": reasoning_text})
+                                if sources and self.redis is None:
+                                    logger.warning("Reasoning embedding enqueue skipped for trace_id=%s: Redis client missing", trace_id)
+                                elif sources:
+                                    await enqueue_reasoning_embedding_job(self.redis, reasoning_entry_id, sources, trace_id)
+                            except Exception as exc:
+                                logger.warning("Reasoning embedding enqueue failed for trace_id=%s: %s", trace_id, exc)
+                        else:
+                            await conn.execute(
+                                """
+                                UPDATE aureus_reasoning_entries
+                                SET trade_journal_id = $1,
+                                    signal_snapshot_id = COALESCE($2, signal_snapshot_id),
+                                    updated_at = now()
+                                WHERE trace_id = $3
+                                """,
+                                trade_journal_id,
+                                snapshot_id,
+                                trace_id,
+                            )
                         logger.info(
                             "on_order_opened: snapshot_insert trace_id=%s ticket=%s snapshot_id=%s",
                             trace_id,
