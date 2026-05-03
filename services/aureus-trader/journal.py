@@ -607,11 +607,6 @@ class TradeJournalManager:
                                         strategy_name, symbol, direction,
                                         active_signals, context_filters, reasoning_text, decision_action
                                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                                    ON CONFLICT (trace_id) DO UPDATE
-                                    SET trade_journal_id = EXCLUDED.trade_journal_id,
-                                        signal_snapshot_id = COALESCE(EXCLUDED.signal_snapshot_id, aureus_reasoning_entries.signal_snapshot_id),
-                                        reasoning_text = COALESCE(aureus_reasoning_entries.reasoning_text, EXCLUDED.reasoning_text),
-                                        updated_at = now()
                                     RETURNING id
                                     """,
                                     trace_id,

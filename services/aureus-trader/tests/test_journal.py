@@ -411,7 +411,7 @@ class TestReasoningBank:
 
         inserts = [q for q in mock_db_pool._conn.queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
         assert len(inserts) == 1
-        assert "COALESCE(aureus_reasoning_entries.reasoning_text, EXCLUDED.reasoning_text)" in inserts[0][1]
+        assert "ON CONFLICT" not in inserts[0][1]
 
     @pytest.mark.asyncio
     async def test_on_order_closed_attaches_reasoning_outcome(self, journal_manager, valid_order_closed_event, mock_db_pool):

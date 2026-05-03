@@ -46,6 +46,7 @@ async def run_e2e():
         f"postgresql://{cfg.db_user}:{cfg.db_password}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}",
     )
     trace_id = f"e2e-reasoning-reuse-{uuid.uuid4().hex[:12]}"
+    no_parent_trace_id = f"e2e-reasoning-noparent-{uuid.uuid4().hex[:12]}"
     ticket = 9500000001
     pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=2)
     journal = TradeJournalManager(pool)
@@ -53,7 +54,30 @@ async def run_e2e():
     try:
         async with pool.acquire() as conn:
             await _ensure_schema(conn)
+            await _cleanup(conn, no_parent_trace_id)
             await _cleanup(conn, trace_id)
+
+        assert await journal.on_strategy_match({
+            "type": "STRATEGY_MATCH",
+            "trace_id": no_parent_trace_id,
+            "data": {
+                "trace_id": no_parent_trace_id,
+                "strategy_name": "reasoning_reuse_no_parent",
+                "strategy_id": 26050306,
+                "direction": "BUY",
+                "symbol": "XAUUSD",
+                "score": 0.88,
+                "reasoning": "real no-parent reasoning",
+                "active_signals": [{"tag": "cisd_bull", "status": "active"}],
+                "context_filters": {"session": "london"},
+            },
+        })
+        async with pool.acquire() as conn:
+            no_parent_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_reasoning_entries WHERE trace_id=$1",
+                no_parent_trace_id,
+            )
+            assert no_parent_count == 0
             await conn.execute(
                 """
                 INSERT INTO aureus_trades (trace_id, symbol, direction, entry_type, entry_price, status)
@@ -197,9 +221,10 @@ async def run_e2e():
             assert "prompt_text" not in match
             assert "context_text" not in match
 
-        print(f"PASS reasoning bank reuse DB E2E trace_id={trace_id}")
+        print(f"PASS reasoning bank reuse DB E2E trace_id={trace_id} no_parent_trace_id={no_parent_trace_id}")
     finally:
         async with pool.acquire() as conn:
+            await _cleanup(conn, no_parent_trace_id)
             await _cleanup(conn, trace_id)
         await pool.close()
 
