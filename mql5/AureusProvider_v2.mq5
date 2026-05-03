@@ -79,6 +79,14 @@ struct MarketClosedCloseGuardState
    datetime          guard_until;
   };
 
+struct HoldDecisionLogState
+  {
+   string            symbol;
+   long              magic;
+   string            direction;
+   string            reason;
+  };
+
 //+------------------------------------------------------------------+
 //| Global Variables                                                   |
 //+------------------------------------------------------------------+
@@ -102,6 +110,7 @@ CTrade        trade;
 CISDDCAState g_cisdDCAStates[];         // Per-symbol provider-local DCA gate state
 HistoryCooldownState g_historyCooldowns[]; // Provider-local history cooldown by symbol + magic + direction
 MarketClosedCloseGuardState g_marketClosedCloseGuards[]; // Provider-local close guard by symbol + magic + direction
+HoldDecisionLogState g_holdDecisionLogs[]; // Provider-local HOLD decision log suppression by symbol + magic + direction + reason
 
 const string PROFILE_CONSERVATIVE     = "conservative";
 const string PROFILE_TREND_RUNNER     = "trend_runner";
@@ -158,6 +167,31 @@ string ResolveManagementProfile(long magic, bool &fallback_used)
    return PROFILE_LEGACY;
   }
 
+bool ShouldSuppressRepeatedHoldDecisionLog(string symbol, long magic, string direction, string action, string reason)
+  {
+   if(action != "HOLD")
+      return false;
+   if(reason != "profile_fallback" && reason != "legacy_no_rule_matched")
+      return false;
+
+   for(int i = 0; i < ArraySize(g_holdDecisionLogs); i++)
+     {
+      if(g_holdDecisionLogs[i].symbol == symbol &&
+         g_holdDecisionLogs[i].magic == magic &&
+         g_holdDecisionLogs[i].direction == direction &&
+         g_holdDecisionLogs[i].reason == reason)
+         return true;
+     }
+
+   int idx = ArraySize(g_holdDecisionLogs);
+   ArrayResize(g_holdDecisionLogs, idx + 1);
+   g_holdDecisionLogs[idx].symbol = symbol;
+   g_holdDecisionLogs[idx].magic = magic;
+   g_holdDecisionLogs[idx].direction = direction;
+   g_holdDecisionLogs[idx].reason = reason;
+   return false;
+  }
+
 void LogManagementDecision(string symbol,
                            long magic,
                            string direction,
@@ -171,6 +205,11 @@ void LogManagementDecision(string symbol,
                            ulong ticket = 0,
                            double target_sl = 0)
   {
+   if(action == "HOLD" &&
+      (reason == "profile_fallback" || reason == "legacy_no_rule_matched") &&
+      ShouldSuppressRepeatedHoldDecisionLog(symbol, magic, direction, action, reason))
+      return;
+
    string target = (ticket > 0)
                    ? StringFormat(" ticket=%I64u target_sl=%.5f", ticket, target_sl)
                    : "";
@@ -452,6 +491,7 @@ int OnInit()
    ArrayResize(g_cisdDCAStates, g_symbolCount);
    ArrayResize(g_historyCooldowns, 0);
    ArrayResize(g_marketClosedCloseGuards, 0);
+   ArrayResize(g_holdDecisionLogs, 0);
 
    for(int i = 0; i < g_symbolCount; i++)
      {
