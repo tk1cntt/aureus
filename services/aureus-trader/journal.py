@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from reasoning_embeddings import ReasoningEmbeddingClient, embed_reasoning_entry, select_embedding_sources
+from reasoning_embeddings import enqueue_reasoning_embedding_job, select_embedding_sources
 
 logger = logging.getLogger(__name__)
 
@@ -185,9 +185,10 @@ PIP_VALUES = {
 class TradeJournalManager:
     """Manages trade journal entries for strategy analysis."""
 
-    def __init__(self, db_pool):
+    def __init__(self, db_pool, redis_client=None):
         """:param db_pool: asyncpg connection pool"""
         self.db = db_pool
+        self.redis = redis_client
 
     async def on_strategy_match(self, event: dict) -> bool:
         """Create journal entry when strategy match is received.
@@ -315,9 +316,12 @@ class TradeJournalManager:
                                 "decision_digest": data.get("decision_digest", match_data.get("decision_digest")),
                                 "input_context_hash": data.get("input_context_hash", match_data.get("input_context_hash")),
                             })
-                            await embed_reasoning_entry(conn, reasoning_entry_id, sources, ReasoningEmbeddingClient())
+                            if sources and self.redis is None:
+                                logger.warning("Reasoning embedding enqueue skipped for trace_id=%s: Redis client missing", trace_id)
+                            elif sources:
+                                await enqueue_reasoning_embedding_job(self.redis, reasoning_entry_id, sources, trace_id)
                         except Exception as exc:
-                            logger.warning("Reasoning embedding failed for trace_id=%s: %s", trace_id, exc)
+                            logger.warning("Reasoning embedding enqueue failed for trace_id=%s: %s", trace_id, exc)
                     except Exception as exc:
                         logger.warning("Reasoning entry insert failed for trace_id=%s: %s", trace_id, exc)
 

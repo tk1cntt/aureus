@@ -63,7 +63,7 @@ async def run_trader():
             min_size=1,
             max_size=3,
         )
-        journal = TradeJournalManager(db_pool)
+        journal = TradeJournalManager(db_pool, redis_client=r)
         logger.info(
             f"Trade journal initialized (db={config.db_host}:{config.db_port}/{config.db_name})"
         )

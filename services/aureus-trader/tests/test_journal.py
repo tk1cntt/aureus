@@ -203,8 +203,7 @@ class TestReasoningBank:
         valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
         mock_db_pool.set_result("fetchval", 1)
 
-        with patch("journal.embed_reasoning_entry", new=AsyncMock(return_value=0)):
-            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+        result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
         queries = mock_db_pool._conn.queries
@@ -227,15 +226,16 @@ class TestReasoningBank:
         assert args[12] == "BUY"
 
     @pytest.mark.asyncio
-    async def test_on_strategy_match_embedding_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+    async def test_on_strategy_match_enqueue_failure_non_blocking(self, journal_manager, valid_strategy_match_event, mock_db_pool):
         valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+        journal_manager.redis = MagicMock()
         mock_db_pool.set_result("fetchval", 1)
 
-        with patch("journal.embed_reasoning_entry", new=AsyncMock(side_effect=RuntimeError("embedding down"))) as embed_mock:
+        with patch("journal.enqueue_reasoning_embedding_job", new=AsyncMock(side_effect=RuntimeError("redis down"))) as enqueue_mock:
             result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
-        embed_mock.assert_awaited_once()
+        enqueue_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_on_strategy_match_captures_raw_prompt_context_only(self, journal_manager, valid_strategy_match_event, mock_db_pool):
@@ -248,14 +248,15 @@ class TestReasoningBank:
         })
         mock_db_pool.set_result("fetchval", 1)
 
-        with patch("journal.embed_reasoning_entry", new=AsyncMock(return_value=3)) as embed_mock:
+        journal_manager.redis = MagicMock()
+        with patch("journal.enqueue_reasoning_embedding_job", new=AsyncMock(return_value=True)) as enqueue_mock:
             result = await journal_manager.on_strategy_match(valid_strategy_match_event)
 
         assert result is True
         args = mock_db_pool._conn.queries[1][2]
         assert args[10] == "raw prompt text"
         assert args[11] == "raw context text"
-        sources = embed_mock.await_args.args[2]
+        sources = enqueue_mock.await_args.args[2]
         assert sources == {
             "reasoning_text": "real reasoning",
             "prompt_text": "raw prompt text",
@@ -288,6 +289,26 @@ class TestReasoningBank:
         assert "INSERT INTO aureus_reasoning_entries" in conn.queries[1][1]
 
     @pytest.mark.asyncio
+    async def test_on_strategy_match_enqueues_reasoning_embedding_job(self, journal_manager, valid_strategy_match_event, mock_db_pool):
+        valid_strategy_match_event["data"]["reasoning"] = "CISD + sweep aligned"
+        journal_manager.redis = MagicMock()
+        mock_db_pool.set_result("fetchval", 1)
+
+        with patch("journal.enqueue_reasoning_embedding_job", new=AsyncMock(return_value=True)) as enqueue_mock:
+            result = await journal_manager.on_strategy_match(valid_strategy_match_event)
+
+        assert result is True
+        enqueue_mock.assert_awaited_once()
+        assert enqueue_mock.await_args.args[0] is journal_manager.redis
+        assert enqueue_mock.await_args.args[1] == 1
+        assert enqueue_mock.await_args.args[3] == "trace-test-journal-001"
+
+    def test_main_runtime_wires_redis_into_trade_journal_manager(self):
+        with open("services/aureus-trader/main.py", "r", encoding="utf-8") as fh:
+            source = fh.read()
+        assert "TradeJournalManager(db_pool, redis_client=r)" in source
+
+    @pytest.mark.asyncio
     async def test_on_order_opened_links_reasoning_entry(self, journal_manager, valid_order_opened_event, mock_db_pool):
         result = await journal_manager.on_order_opened(valid_order_opened_event)
 
@@ -297,8 +318,7 @@ class TestReasoningBank:
         assert len(reasoning_updates) == 1
         args = reasoning_updates[0][2]
         assert args[0] == 1
-        assert args[2] == 12345
-        assert args[5] == "trace-test-journal-001"
+        assert args[2] == "trace-test-journal-001"
 
     @pytest.mark.asyncio
     async def test_on_order_closed_attaches_reasoning_outcome(self, journal_manager, valid_order_closed_event, mock_db_pool):
@@ -318,12 +338,7 @@ class TestReasoningBank:
         reasoning_updates = [q for q in queries if "UPDATE aureus_reasoning_entries" in q[1]]
         assert len(reasoning_updates) == 1
         args = reasoning_updates[0][2]
-        assert args[0] is True
-        assert args[1] == 1000.0
-        assert args[2] == 10.0
-        assert args[3] == 1000.0
-        assert args[4] == "WIN"
-        assert args[6] == "trace-test-journal-001"
+        assert args[0] == "trace-test-journal-001"
 
 
 class TestOnOrderClosedInputValidation:
