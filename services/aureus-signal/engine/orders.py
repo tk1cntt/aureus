@@ -702,6 +702,7 @@ class SimulatedTradeManager:
                             continue
                 valid_pivots.append(pivot_price)
 
+            valid_pivots.sort(reverse=('BUY' in side))
             if len(valid_pivots) >= pivot_index:
                 selected_pivot = valid_pivots[pivot_index - 1]
 
