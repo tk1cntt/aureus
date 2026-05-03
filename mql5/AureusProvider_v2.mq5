@@ -231,6 +231,51 @@ void SetMarketClosedCloseGuard(string symbol, long magic, string direction)
                TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
   }
 
+bool IsSymbolCloseAvailableNow(string symbol, string &reason)
+  {
+   long trade_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE);
+   if(trade_mode == SYMBOL_TRADE_MODE_DISABLED)
+     {
+      reason = "trade_mode_disabled";
+      return false;
+     }
+
+   MqlDateTime now;
+   TimeToStruct(TimeTradeServer(), now);
+   int now_seconds = now.hour * 3600 + now.min * 60 + now.sec;
+   datetime session_from = 0;
+   datetime session_to = 0;
+   bool has_sessions = false;
+
+   for(uint session = 0; SymbolInfoSessionTrade(symbol, (ENUM_DAY_OF_WEEK)now.day_of_week, session, session_from, session_to); session++)
+     {
+      has_sessions = true;
+      MqlDateTime from_dt;
+      MqlDateTime to_dt;
+      TimeToStruct(session_from, from_dt);
+      TimeToStruct(session_to, to_dt);
+      int from_seconds = from_dt.hour * 3600 + from_dt.min * 60 + from_dt.sec;
+      int to_seconds = to_dt.hour * 3600 + to_dt.min * 60 + to_dt.sec;
+
+      if(from_seconds <= to_seconds)
+        {
+         if(now_seconds >= from_seconds && now_seconds <= to_seconds)
+            return true;
+        }
+      else if(now_seconds >= from_seconds || now_seconds <= to_seconds)
+         return true;
+     }
+
+   if(has_sessions)
+     {
+      reason = "outside_trade_session";
+      return false;
+     }
+
+   reason = "no_trade_session_data";
+   return true;
+  }
+
 //+------------------------------------------------------------------+
 //| History cooldown helpers                                           |
 //+------------------------------------------------------------------+
@@ -1556,12 +1601,12 @@ bool ClosePositionTickets(string symbol,
    int positions_count = ArraySize(tickets);
    datetime guardUntil = 0;
    if(IsMarketClosedCloseGuardActive(symbol, magic, pos_type_str, guardUntil))
+      return false;
+
+   string close_unavailable_reason = "";
+   if(!IsSymbolCloseAvailableNow(symbol, close_unavailable_reason))
      {
-      PrintFormat("[MarketClosedCloseGuard] Skip close symbol=%s magic=%lld direction=%s until=%s reason=MARKET_CLOSED",
-                  symbol,
-                  magic,
-                  pos_type_str,
-                  TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
+      SetMarketClosedCloseGuard(symbol, magic, pos_type_str);
       return false;
      }
 
