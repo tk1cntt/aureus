@@ -71,6 +71,14 @@ struct HistoryCooldownState
    ulong             processed_deals[];
   };
 
+struct MarketClosedCloseGuardState
+  {
+   string            symbol;
+   long              magic;
+   string            direction;
+   datetime          guard_until;
+  };
+
 //+------------------------------------------------------------------+
 //| Global Variables                                                   |
 //+------------------------------------------------------------------+
@@ -93,6 +101,7 @@ CTrade        trade;
 
 CISDDCAState g_cisdDCAStates[];         // Per-symbol provider-local DCA gate state
 HistoryCooldownState g_historyCooldowns[]; // Provider-local history cooldown by symbol + magic + direction
+MarketClosedCloseGuardState g_marketClosedCloseGuards[]; // Provider-local close guard by symbol + magic + direction
 
 const string PROFILE_CONSERVATIVE     = "conservative";
 const string PROFILE_TREND_RUNNER     = "trend_runner";
@@ -168,6 +177,60 @@ void LogManagementDecision(string symbol,
    PrintFormat("[ManagePositionDecision] symbol=%s magic=%lld direction=%s profile=%s action=%s reason=%s primitive=%s positions_count=%d net_profit=%.2f age_seconds=%d%s",
                symbol, magic, direction, profile, action, reason, primitive, positions_count, net_profit, age_seconds, target);
   }
+//+------------------------------------------------------------------+
+//| Market-closed close guard helpers                                  |
+//+------------------------------------------------------------------+
+int FindMarketClosedCloseGuardIndex(string symbol, long magic, string direction)
+  {
+   for(int i = 0; i < ArraySize(g_marketClosedCloseGuards); i++)
+     {
+      if(g_marketClosedCloseGuards[i].symbol == symbol &&
+         g_marketClosedCloseGuards[i].magic == magic &&
+         g_marketClosedCloseGuards[i].direction == direction)
+         return i;
+     }
+   return -1;
+  }
+
+int EnsureMarketClosedCloseGuardState(string symbol, long magic, string direction)
+  {
+   int idx = FindMarketClosedCloseGuardIndex(symbol, magic, direction);
+   if(idx >= 0)
+      return idx;
+
+   idx = ArraySize(g_marketClosedCloseGuards);
+   ArrayResize(g_marketClosedCloseGuards, idx + 1);
+   g_marketClosedCloseGuards[idx].symbol = symbol;
+   g_marketClosedCloseGuards[idx].magic = magic;
+   g_marketClosedCloseGuards[idx].direction = direction;
+   g_marketClosedCloseGuards[idx].guard_until = 0;
+   return idx;
+  }
+
+bool IsMarketClosedCloseGuardActive(string symbol, long magic, string direction, datetime &guardUntil)
+  {
+   int idx = FindMarketClosedCloseGuardIndex(symbol, magic, direction);
+   if(idx < 0)
+      return false;
+   guardUntil = g_marketClosedCloseGuards[idx].guard_until;
+   return guardUntil > TimeCurrent();
+  }
+
+void SetMarketClosedCloseGuard(string symbol, long magic, string direction)
+  {
+   int idx = EnsureMarketClosedCloseGuardState(symbol, magic, direction);
+   datetime guardUntil = TimeCurrent() + 5 * 60;
+   if(guardUntil <= g_marketClosedCloseGuards[idx].guard_until)
+      return;
+
+   g_marketClosedCloseGuards[idx].guard_until = guardUntil;
+   PrintFormat("[MarketClosedCloseGuard] Set guard symbol=%s magic=%lld direction=%s until=%s reason=MARKET_CLOSED",
+               symbol,
+               magic,
+               direction,
+               TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
+  }
+
 //+------------------------------------------------------------------+
 //| History cooldown helpers                                           |
 //+------------------------------------------------------------------+
@@ -328,6 +391,7 @@ int OnInit()
    ArrayResize(g_contexts, g_symbolCount);
    ArrayResize(g_cisdDCAStates, g_symbolCount);
    ArrayResize(g_historyCooldowns, 0);
+   ArrayResize(g_marketClosedCloseGuards, 0);
 
    for(int i = 0; i < g_symbolCount; i++)
      {
@@ -1490,10 +1554,46 @@ bool ClosePositionTickets(string symbol,
                           string primitive)
   {
    int positions_count = ArraySize(tickets);
+   datetime guardUntil = 0;
+   if(IsMarketClosedCloseGuardActive(symbol, magic, pos_type_str, guardUntil))
+     {
+      PrintFormat("[MarketClosedCloseGuard] Skip close symbol=%s magic=%lld direction=%s until=%s reason=MARKET_CLOSED",
+                  symbol,
+                  magic,
+                  pos_type_str,
+                  TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
+      return false;
+     }
+
    LogManagementDecision(symbol, magic, pos_type_str, profile, "CLOSE", reason, positions_count, net_profit, age_seconds, primitive);
+   int success_count = 0;
    for(int i = 0; i < positions_count; i++)
-      trade.PositionClose(tickets[i]);
-   return true;
+     {
+      bool ok = trade.PositionClose(tickets[i]);
+      if(ok)
+        {
+         success_count++;
+         continue;
+        }
+
+      int retcode = (int)trade.ResultRetcode();
+      string retcode_reason = RetcodeToReason(retcode);
+      string result_comment = trade.ResultComment();
+      PrintFormat("[ManagePositionProfitBreakEvent] Close failed symbol=%s magic=%lld direction=%s ticket=%I64u retcode=%d reason=%s comment=%s",
+                  symbol,
+                  magic,
+                  pos_type_str,
+                  tickets[i],
+                  retcode,
+                  retcode_reason,
+                  result_comment);
+      if(retcode == TRADE_RETCODE_MARKET_CLOSED || retcode == 10018)
+        {
+         SetMarketClosedCloseGuard(symbol, magic, pos_type_str);
+         return success_count > 0;
+        }
+     }
+   return success_count > 0;
   }
 
 bool MovePositionsSL(string symbol,
