@@ -1,6 +1,7 @@
 """Reasoning Bank embedding helpers."""
 import asyncio
 import json
+import logging
 import math
 import urllib.error
 import urllib.request
@@ -9,6 +10,9 @@ from datetime import datetime, timezone
 DEFAULT_EMBEDDING_BASE_URL = "http://host.docker.internal:8005"
 TEXT_SOURCE_FIELDS = ("reasoning_text", "prompt_text", "context_text")
 DIGEST_FIELDS = {"prompt_digest", "decision_digest", "input_context_hash"}
+REASONING_EMBEDDING_QUEUE_KEY = "aureus:reasoning:embedding_jobs"
+
+logger = logging.getLogger(__name__)
 
 
 class ReasoningEmbeddingError(RuntimeError):
@@ -104,6 +108,27 @@ def select_embedding_sources(row):
         if isinstance(value, str) and value.strip():
             sources[field] = value.strip()
     return sources
+
+
+async def enqueue_reasoning_embedding_job(redis_client, entry_id, sources, trace_id, queue_key=REASONING_EMBEDDING_QUEUE_KEY):
+    clean_sources = select_embedding_sources(sources)
+    if not clean_sources:
+        return False
+    job = {
+        "entry_id": int(entry_id),
+        "trace_id": str(trace_id),
+        "sources": clean_sources,
+    }
+    try:
+        payload = json.dumps(job, ensure_ascii=False)
+        if hasattr(redis_client, "xadd"):
+            await _maybe_await(redis_client.xadd(queue_key, {"job": payload}))
+        else:
+            await _maybe_await(redis_client.rpush(queue_key, payload))
+        return True
+    except Exception as exc:
+        logger.warning("Reasoning embedding enqueue failed for trace_id=%s: %s", trace_id, exc)
+        return False
 
 
 def vector_to_pg(vector):
