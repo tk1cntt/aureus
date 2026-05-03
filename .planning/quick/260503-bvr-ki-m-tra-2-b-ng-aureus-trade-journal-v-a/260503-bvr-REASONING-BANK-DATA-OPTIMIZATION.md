@@ -218,7 +218,7 @@ Do future work chạm database, phải test E2E với DB runtime thật:
 3. Gọi `TradeJournalManager.on_strategy_match()` tạo `aureus_trade_journal` và `aureus_reasoning_entries` với memory fields + join ids.
 4. Gọi `on_order_opened()` tạo `aureus_trade_signal_snapshots` và link `signal_snapshot_id`.
 5. Gọi `on_order_closed()` đóng journal.
-6. Query joined read model xác nhận strategy stats, recent lessons, similar lessons dùng joined lifecycle/outcome fields.
+6. Query joined insight/read model xác nhận strategy stats, recent lessons, similar lessons dùng joined lifecycle/outcome fields.
 7. Chạy semantic search xác nhận `reasoning_embedding` vẫn searchable.
 8. So sánh parity: stats old duplicate columns vs stats joined journal trước khi stop duplicate updates.
 9. Xác nhận Telegram/read model không expose raw `prompt_text`/`context_text` mặc định.
