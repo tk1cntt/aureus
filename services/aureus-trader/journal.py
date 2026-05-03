@@ -594,18 +594,41 @@ class TradeJournalManager:
                                 trade_journal_id,
                             )
                         try:
+                            raw_entry_type = event.get("entry_type", event.get("order_type", event.get("type")))
+                            entry_type = str(raw_entry_type).strip().upper() if raw_entry_type is not None else "MARKET"
+                            if entry_type not in {"MARKET", "LIMIT", "STOP"}:
+                                entry_type = "MARKET"
+                            parent_payload = json.dumps({"source": "journal_parent_upsert", "event": event}, sort_keys=True, default=str)
                             await conn.execute(
                                 """
                                 INSERT INTO aureus_trades (
-                                    trace_id, symbol, direction, entry_type, entry_price, status, ticket
-                                ) VALUES ($1, $2, $3, 'MARKET', $4, 'OPEN', $5)
-                                ON CONFLICT (trace_id) DO NOTHING
+                                    trace_id, symbol, direction, entry_type, entry_price, status, ticket,
+                                    sl, tp, volume, strategy_name, payload
+                                ) VALUES ($1, $2, $3, $4, $5, 'OPEN', $6, $7, $8, $9, $10, $11::jsonb)
+                                ON CONFLICT (trace_id) DO UPDATE SET
+                                    ticket = COALESCE(EXCLUDED.ticket, aureus_trades.ticket),
+                                    symbol = COALESCE(EXCLUDED.symbol, aureus_trades.symbol),
+                                    direction = COALESCE(EXCLUDED.direction, aureus_trades.direction),
+                                    entry_type = COALESCE(NULLIF(EXCLUDED.entry_type, 'MARKET'), aureus_trades.entry_type, EXCLUDED.entry_type),
+                                    entry_price = COALESCE(EXCLUDED.entry_price, aureus_trades.entry_price),
+                                    sl = COALESCE(EXCLUDED.sl, aureus_trades.sl),
+                                    tp = COALESCE(EXCLUDED.tp, aureus_trades.tp),
+                                    volume = COALESCE(EXCLUDED.volume, aureus_trades.volume),
+                                    strategy_name = COALESCE(EXCLUDED.strategy_name, aureus_trades.strategy_name),
+                                    payload = aureus_trades.payload || EXCLUDED.payload,
+                                    updated_at = now()
                                 """,
                                 trace_id,
                                 symbol,
                                 journal_row.get("direction"),
+                                entry_type,
                                 entry_price,
                                 ticket,
+                                sl,
+                                tp,
+                                volume,
+                                strategy_name,
+                                parent_payload,
                             )
                             reasoning_text = _build_reasoning_text(journal_row, snapshot_columns, signal_snapshot)
                             reasoning_entry_id = await conn.fetchval(

@@ -662,9 +662,22 @@ class DBWriter:
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
                         ON CONFLICT (trace_id) DO UPDATE SET
                             ticket = COALESCE(EXCLUDED.ticket, aureus_trades.ticket),
+                            symbol = COALESCE(EXCLUDED.symbol, aureus_trades.symbol),
+                            magic_number = COALESCE(EXCLUDED.magic_number, aureus_trades.magic_number),
+                            strategy_id = COALESCE(EXCLUDED.strategy_id, aureus_trades.strategy_id),
+                            strategy_name = COALESCE(EXCLUDED.strategy_name, aureus_trades.strategy_name),
+                            direction = COALESCE(EXCLUDED.direction, aureus_trades.direction),
+                            entry_type = COALESCE(EXCLUDED.entry_type, aureus_trades.entry_type),
                             status = EXCLUDED.status,
+                            entry_price = COALESCE(EXCLUDED.entry_price, aureus_trades.entry_price),
                             exit_price = COALESCE(EXCLUDED.exit_price, aureus_trades.exit_price),
+                            sl = COALESCE(EXCLUDED.sl, aureus_trades.sl),
+                            tp = COALESCE(EXCLUDED.tp, aureus_trades.tp),
+                            volume = COALESCE(EXCLUDED.volume, aureus_trades.volume),
+                            commission = COALESCE(EXCLUDED.commission, aureus_trades.commission),
+                            swap = COALESCE(EXCLUDED.swap, aureus_trades.swap),
                             profit = COALESCE(EXCLUDED.profit, aureus_trades.profit),
+                            filled_at = COALESCE(EXCLUDED.filled_at, aureus_trades.filled_at),
                             closed_at = COALESCE(EXCLUDED.closed_at, aureus_trades.closed_at),
                             updated_at = NOW(),
                             payload = aureus_trades.payload || EXCLUDED.payload
