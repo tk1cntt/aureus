@@ -171,7 +171,9 @@ bool ShouldSuppressRepeatedHoldDecisionLog(string symbol, long magic, string dir
   {
    if(action != "HOLD")
       return false;
-   if(reason != "profile_fallback" && reason != "legacy_no_rule_matched")
+   if(reason != "profile_fallback" &&
+      reason != "legacy_no_rule_matched" &&
+      reason != "breakout_profit_below_protection_threshold")
       return false;
 
    for(int i = 0; i < ArraySize(g_holdDecisionLogs); i++)
@@ -206,7 +208,9 @@ void LogManagementDecision(string symbol,
                            double target_sl = 0)
   {
    if(action == "HOLD" &&
-      (reason == "profile_fallback" || reason == "legacy_no_rule_matched") &&
+      (reason == "profile_fallback" ||
+       reason == "legacy_no_rule_matched" ||
+       reason == "breakout_profit_below_protection_threshold") &&
       ShouldSuppressRepeatedHoldDecisionLog(symbol, magic, direction, action, reason))
       return;
 
