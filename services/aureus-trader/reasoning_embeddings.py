@@ -132,6 +132,113 @@ async def semantic_search_reasoning_entries(conn, query_text, limit=10, client=N
     )
 
 
+def _empty_strategy_insights(strategy_name, symbol=None, direction=None):
+    return {
+        "strategy_name": strategy_name,
+        "symbol": symbol,
+        "direction": direction,
+        "sample_size": 0,
+        "success_rate": None,
+        "avg_reward": None,
+        "avg_pnl_pips": None,
+        "recent_lessons": [],
+        "similar_lessons": [],
+    }
+
+
+def _trim_lesson(value, max_len=280):
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _strategy_scope_where(start_index, symbol=None, direction=None, embedding=False):
+    clauses = [f"strategy_name = ${start_index}"]
+    args_offset = start_index
+    if symbol:
+        args_offset += 1
+        clauses.append(f"symbol = ${args_offset}")
+    if direction:
+        args_offset += 1
+        clauses.append(f"direction = ${args_offset}")
+    if embedding:
+        clauses.append("reasoning_embedding IS NOT NULL")
+    return " AND ".join(clauses)
+
+
+async def fetch_strategy_reasoning_insights(conn, strategy_name, symbol=None, direction=None, limit=5, query_text=None, client=None):
+    strategy_name = str(strategy_name or "").strip()
+    if not strategy_name:
+        raise ValueError("strategy_name is required")
+    safe_limit = int(limit)
+    if safe_limit < 1 or safe_limit > 20:
+        raise ValueError("limit must be between 1 and 20")
+
+    args = [strategy_name]
+    if symbol:
+        args.append(symbol)
+    if direction:
+        args.append(direction)
+    where = _strategy_scope_where(1, symbol=symbol, direction=direction)
+    insights = _empty_strategy_insights(strategy_name, symbol=symbol, direction=direction)
+
+    stats = await conn.fetchrow(
+        f"""
+        SELECT count(*)::int AS sample_size,
+               avg(CASE WHEN success IS NULL THEN NULL WHEN success THEN 1.0 ELSE 0.0 END)::float AS success_rate,
+               avg(reward)::float AS avg_reward,
+               avg(pnl_pips)::float AS avg_pnl_pips
+        FROM aureus_reasoning_entries
+        WHERE {where}
+        """,
+        *args,
+    )
+    if stats:
+        insights["sample_size"] = int(stats.get("sample_size") or 0)
+        insights["success_rate"] = stats.get("success_rate")
+        insights["avg_reward"] = stats.get("avg_reward")
+        insights["avg_pnl_pips"] = stats.get("avg_pnl_pips")
+
+    recent_rows = await conn.fetch(
+        f"""
+        SELECT reasoning_text
+        FROM aureus_reasoning_entries
+        WHERE {where}
+          AND reasoning_text IS NOT NULL
+        ORDER BY COALESCE(evaluated_at, created_at) DESC NULLS LAST, id DESC
+        LIMIT ${len(args) + 1}
+        """,
+        *args,
+        safe_limit,
+    )
+    insights["recent_lessons"] = [_trim_lesson(row.get("reasoning_text")) for row in recent_rows if row.get("reasoning_text")]
+
+    if query_text:
+        try:
+            client = client or ReasoningEmbeddingClient()
+            vector = await _maybe_await(client.embed(query_text))
+            vector_text = vector_to_pg(vector)
+            similar_args = [vector_text, *args, safe_limit]
+            similar_where = _strategy_scope_where(2, symbol=symbol, direction=direction, embedding=True)
+            rows = await conn.fetch(
+                f"""
+                SELECT reasoning_text, reasoning_embedding <=> $1::vector AS distance
+                FROM aureus_reasoning_entries
+                WHERE {similar_where}
+                  AND reasoning_text IS NOT NULL
+                ORDER BY reasoning_embedding <=> $1::vector
+                LIMIT ${len(similar_args)}
+                """,
+                *similar_args,
+            )
+            insights["similar_lessons"] = [_trim_lesson(row.get("reasoning_text")) for row in rows if row.get("reasoning_text")]
+        except Exception:
+            insights["similar_lessons"] = []
+
+    return insights
+
+
 async def embed_reasoning_entry(conn, entry_id, sources, client=None):
     client = client or ReasoningEmbeddingClient()
     updates = {}

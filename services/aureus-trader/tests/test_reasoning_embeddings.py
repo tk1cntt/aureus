@@ -8,6 +8,7 @@ from reasoning_embeddings import (
     ReasoningEmbeddingClient,
     ReasoningEmbeddingError,
     select_embedding_sources,
+    fetch_strategy_reasoning_insights,
     semantic_search_reasoning_entries,
     vector_to_pg,
 )
@@ -175,3 +176,71 @@ async def test_backfill_reports_hash_only_prompt_context_unavailable(monkeypatch
     assert stats["updated_rows"] == 0
     assert stats["skipped_rows"] == 1
     assert stats["unavailable_raw_prompt_context"] == 1
+
+
+class FakeInsightConn:
+    def __init__(self):
+        self.calls = []
+
+    async def fetchrow(self, query, *args):
+        self.calls.append(("fetchrow", query, args))
+        return {"sample_size": 2, "success_rate": 0.5, "avg_reward": 1.25, "avg_pnl_pips": 7.5}
+
+    async def fetch(self, query, *args):
+        self.calls.append(("fetch", query, args))
+        if "reasoning_embedding <=> $1::vector" in query:
+            return [{"reasoning_text": "strategy A similar"}]
+        return [{"reasoning_text": "strategy A recent"}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_strategy_reasoning_insights_requires_strategy_scope():
+    conn = FakeInsightConn()
+    insights = await fetch_strategy_reasoning_insights(conn, "STRAT_A", symbol="XAUUSD", direction="BUY", limit=3)
+
+    assert insights["strategy_name"] == "STRAT_A"
+    assert insights["sample_size"] == 2
+    assert insights["recent_lessons"] == ["strategy A recent"]
+    for _, query, args in conn.calls:
+        assert "strategy_name = $1" in query
+        assert "symbol = $2" in query
+        assert "direction = $3" in query
+        assert args[:3] == ("STRAT_A", "XAUUSD", "BUY")
+
+
+@pytest.mark.asyncio
+async def test_fetch_strategy_reasoning_insights_semantic_search_stays_strategy_scoped():
+    conn = FakeInsightConn()
+
+    class Client:
+        def embed(self, text):
+            assert text == "setup"
+            return [0.1, 0.2]
+
+    insights = await fetch_strategy_reasoning_insights(conn, "STRAT_A", limit=2, query_text="setup", client=Client())
+
+    assert insights["similar_lessons"] == ["strategy A similar"]
+    semantic_call = [call for call in conn.calls if "reasoning_embedding <=> $1::vector" in call[1]][0]
+    _, query, args = semantic_call
+    assert "strategy_name = $2" in query
+    assert "reasoning_embedding IS NOT NULL" in query
+    assert args == ("[0.1,0.2]", "STRAT_A", 2)
+
+
+@pytest.mark.asyncio
+async def test_fetch_strategy_reasoning_insights_rejects_empty_strategy_and_bad_limit():
+    conn = FakeInsightConn()
+    with pytest.raises(ValueError):
+        await fetch_strategy_reasoning_insights(conn, "")
+    with pytest.raises(ValueError):
+        await fetch_strategy_reasoning_insights(conn, "STRAT_A", limit=21)
+
+
+@pytest.mark.asyncio
+async def test_fetch_strategy_reasoning_insights_never_returns_other_strategy_rows():
+    conn = FakeInsightConn()
+    await fetch_strategy_reasoning_insights(conn, "STRAT_A")
+    for _, query, args in conn.calls:
+        assert "strategy_name" in query
+        assert "STRAT_A" in args
+        assert "STRAT_B" not in args
