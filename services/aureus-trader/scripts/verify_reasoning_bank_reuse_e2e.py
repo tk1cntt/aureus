@@ -73,11 +73,21 @@ async def run_e2e():
             },
         })
         async with pool.acquire() as conn:
-            no_parent_count = await conn.fetchval(
+            no_parent_journal_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_trade_journal WHERE trace_id=$1",
+                no_parent_trace_id,
+            )
+            no_parent_snapshot_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_trade_signal_snapshots WHERE trace_id=$1",
+                no_parent_trace_id,
+            )
+            no_parent_reasoning_count = await conn.fetchval(
                 "SELECT COUNT(*) FROM aureus_reasoning_entries WHERE trace_id=$1",
                 no_parent_trace_id,
             )
-            assert no_parent_count == 0
+            assert no_parent_journal_count == 0
+            assert no_parent_snapshot_count == 0
+            assert no_parent_reasoning_count == 0
             await conn.execute(
                 """
                 INSERT INTO aureus_trades (trace_id, symbol, direction, entry_type, entry_price, status)
@@ -168,6 +178,21 @@ async def run_e2e():
                 """,
                 trace_id,
             )
+            journal_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_trade_journal WHERE trace_id=$1",
+                trace_id,
+            )
+            snapshot_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_trade_signal_snapshots WHERE trace_id=$1",
+                trace_id,
+            )
+            reasoning_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM aureus_reasoning_entries WHERE trace_id=$1",
+                trace_id,
+            )
+            assert journal_count == 1
+            assert snapshot_count == 1
+            assert reasoning_count == 1
             assert len(rows) == 1
             row = rows[0]
             assert row["trade_journal_id"] is not None
