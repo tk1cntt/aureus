@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-03 - Completed quick task 260503-n24: Symbol-wide market-close guard stops all processing quietly
+last_activity: 2026-05-03 - Completed quick task 260503-neg: Suppress repeated HOLD decision logs
 progress:
   total_phases: 4
   completed_phases: 2
@@ -118,6 +118,7 @@ Last activity: 2026-05-02 - Completed quick task 260502-wur: Thực hiện imple
 | 260503-ltx | Stop repeated MT5 close attempts when market closed | 2026-05-03 | 9731162 | Needs Review | [260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n](./quick/260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n/) |
 | 260503-mjm | Pre-check market availability before MT5 close and stop spam logs | 2026-05-03 | 7a66fd1 | Needs Review | [260503-mjm-market-closed-guard-v-n-spam-log-hold-pr](./quick/260503-mjm-market-closed-guard-v-n-spam-log-hold-pr/) |
 | 260503-n24 | Symbol-wide market-close guard stops all processing quietly | 2026-05-03 | 71f756c | Needs Review | [260503-n24-update-khi-n-o-g-p-l-i-market-close-c-a-](./quick/260503-n24-update-khi-n-o-g-p-l-i-market-close-c-a-/) |
+| 260503-neg | Suppress repeated HOLD decision logs | 2026-05-03 | c4e20f3 | Needs Review | [260503-neg-fix-spam-managepositiondecision-hold-pro](./quick/260503-neg-fix-spam-managepositiondecision-hold-pro/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
