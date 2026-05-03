@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-DEFAULT_EMBEDDING_BASE_URL = "http://localhost:8005"
+DEFAULT_EMBEDDING_BASE_URL = "http://host.docker.internal:8005"
 TEXT_SOURCE_FIELDS = ("reasoning_text", "prompt_text", "context_text")
 DIGEST_FIELDS = {"prompt_digest", "decision_digest", "input_context_hash"}
 

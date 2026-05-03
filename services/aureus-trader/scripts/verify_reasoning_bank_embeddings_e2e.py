@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backfill_reasoning_embeddings import _ensure_schema
 from config import load_config
 from journal import TradeJournalManager
-from reasoning_embeddings import semantic_search_reasoning_entries, verify_embedding_service
+from reasoning_embeddings import DEFAULT_EMBEDDING_BASE_URL, semantic_search_reasoning_entries, verify_embedding_service
 
 
 async def main():
@@ -21,7 +21,7 @@ async def main():
         "AUREUS_DB_DSN",
         f"postgresql://{cfg.db_user}:{cfg.db_password}@{cfg.db_host}:{cfg.db_port}/{cfg.db_name}",
     )
-    embedding_base_url = os.getenv("AUREUS_EMBEDDING_BASE_URL", "http://localhost:8005")
+    embedding_base_url = os.getenv("AUREUS_EMBEDDING_BASE_URL", DEFAULT_EMBEDDING_BASE_URL)
     client = verify_embedding_service(embedding_base_url)
     trace_id = f"e2e-reasoning-embedding-{uuid.uuid4().hex[:12]}"
     legacy_trace_id = f"e2e-reasoning-legacy-{uuid.uuid4().hex[:12]}"

@@ -84,7 +84,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:8005/v1}
       - PYTHONUNBUFFERED=1
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-host-gateway}"
     volumes:
       - ./services/aureus-signal/brain:/app/brain
 
@@ -108,7 +108,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:8005/v1}
       - PYTHONUNBUFFERED=1
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-host-gateway}"
     command: ["python", "main_executor.py"]
     volumes:
       - ./services/aureus-signal/brain:/app/brain

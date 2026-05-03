@@ -10,7 +10,7 @@ import asyncpg
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import load_config
-from reasoning_embeddings import ReasoningEmbeddingClient, embed_reasoning_entry, select_embedding_sources, verify_embedding_service
+from reasoning_embeddings import DEFAULT_EMBEDDING_BASE_URL, embed_reasoning_entry, select_embedding_sources, verify_embedding_service
 
 
 async def _ensure_schema(conn):
@@ -27,7 +27,7 @@ def _dsn():
     )
 
 
-async def backfill(limit=100, base_url="http://localhost:8005"):
+async def backfill(limit=100, base_url=DEFAULT_EMBEDDING_BASE_URL):
     client = verify_embedding_service(base_url)
     pool = await asyncpg.create_pool(dsn=_dsn(), min_size=1, max_size=2)
     stats = {"updated_rows": 0, "updated_embeddings": 0, "skipped_rows": 0, "unavailable_raw_prompt_context": 0}
@@ -78,7 +78,7 @@ async def main_async(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--base-url", default="http://localhost:8005")
+    parser.add_argument("--base-url", default=DEFAULT_EMBEDDING_BASE_URL)
     args = parser.parse_args()
     asyncio.run(main_async(args))
 

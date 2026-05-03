@@ -101,7 +101,7 @@ services:
       - AUREUS_ENABLE_TPO_SIGNAL=1
       - AUREUS_STRUCTURE_OPT_MODE=shadow
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-172.21.80.1}"
     volumes:
       - ./services/aureus-signal:/app
       - ./logs:/app/logs
@@ -127,7 +127,7 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_FILE=/app/logs/aureus-strategy-executor.log
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-172.21.80.1}"
     command: ["python", "main_executor.py"]
     volumes:
       - ./services/aureus-signal:/app
@@ -292,7 +292,7 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_FILE=/app/logs/aureus-dashboard-api.log
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-172.21.80.1}"
     ports:
       - "${DEV_API_PORT:-8002}:8001"
     volumes:
@@ -343,6 +343,9 @@ services:
       - SYMBOLS=${SYMBOLS:-XAUUSD,BTCUSD,ETHUSD,USTEC,USDJPY,EURUSD,GBPUSD,AUDUSD}
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
+      - AUREUS_EMBEDDING_BASE_URL=http://host.docker.internal:8005
+    extra_hosts:
+      - "host.docker.internal:${DOCKER_HOST_GATEWAY:-172.21.80.1}"
     networks:
       - aureus_dev_net
     depends_on:
