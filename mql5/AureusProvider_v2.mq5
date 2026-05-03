@@ -1909,11 +1909,15 @@ void ProcessPositionsByType(string symbol,
                             double weighted_price_sum,
                             datetime earliest_open_time)
   {
+   string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+   datetime guardUntil = 0;
+   if(IsMarketClosedCloseGuardActive(symbol, magic, pos_type_str, guardUntil))
+      return;
+
    bool profile_fallback = false;
    string profile = ResolveManagementProfile(magic, profile_fallback);
    if(profile_fallback)
      {
-      string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
       int positions_count = ArraySize(tickets);
       int age_seconds = (earliest_open_time > 0) ? (int)(TimeCurrent() - earliest_open_time) : 0;
       LogManagementDecision(symbol, magic, pos_type_str, profile, "HOLD", "profile_fallback", positions_count, total_profit, age_seconds, "P-03/P-16");
