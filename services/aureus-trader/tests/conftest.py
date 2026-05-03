@@ -164,7 +164,8 @@ def valid_order_opened_event():
         "tp": 3256.50,
         "volume": 0.01,
         "position_id": 67890,
-        "time": 1744095600
+        "time": 1744095600,
+        "entry_type": "LIMIT"
     }
 
 

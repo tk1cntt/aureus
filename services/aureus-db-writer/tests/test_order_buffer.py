@@ -172,6 +172,17 @@ class TestOrderBufferConflictUpdate:
             query, data_rows = conn.executemany.call_args[0]
 
             assert "ON CONFLICT (trace_id) DO UPDATE SET" in query
+            assert "ticket = COALESCE(EXCLUDED.ticket, aureus_trades.ticket)" in query
+            assert "symbol = COALESCE(EXCLUDED.symbol, aureus_trades.symbol)" in query
+            assert "magic_number = COALESCE(EXCLUDED.magic_number, aureus_trades.magic_number)" in query
+            assert "strategy_id = COALESCE(EXCLUDED.strategy_id, aureus_trades.strategy_id)" in query
+            assert "strategy_name = COALESCE(EXCLUDED.strategy_name, aureus_trades.strategy_name)" in query
+            assert "direction = COALESCE(EXCLUDED.direction, aureus_trades.direction)" in query
+            assert "entry_type = COALESCE(EXCLUDED.entry_type, aureus_trades.entry_type)" in query
+            assert "entry_price = COALESCE(EXCLUDED.entry_price, aureus_trades.entry_price)" in query
+            assert "sl = COALESCE(EXCLUDED.sl, aureus_trades.sl)" in query
+            assert "tp = COALESCE(EXCLUDED.tp, aureus_trades.tp)" in query
+            assert "volume = COALESCE(EXCLUDED.volume, aureus_trades.volume)" in query
             assert "payload = aureus_trades.payload || EXCLUDED.payload" in query
 
         asyncio.run(run_test())

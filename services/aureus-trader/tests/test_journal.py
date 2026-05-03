@@ -261,12 +261,28 @@ class TestReasoningBank:
         parent_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_trades" in q[1])
         reasoning_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_reasoning_entries" in q[1])
         assert parent_insert_index < reasoning_insert_index
+        parent_query = queries[parent_insert_index][1]
         parent_args = queries[parent_insert_index][2]
+        assert "VALUES ($1, $2, $3, 'MARKET'" not in parent_query
+        assert "entry_type" in parent_query
+        assert "sl" in parent_query
+        assert "tp" in parent_query
+        assert "volume" in parent_query
+        assert "strategy_name" in parent_query
+        assert "payload" in parent_query
         assert parent_args[0] == "trace-test-journal-001"
         assert parent_args[1] == "XAUUSD"
         assert parent_args[2] == "BUY"
-        assert parent_args[3] == 3250.50
-        assert parent_args[4] == 12345
+        assert parent_args[3] == "LIMIT"
+        assert parent_args[4] == 3250.50
+        assert parent_args[5] == 12345
+        assert parent_args[6] == 3247.50
+        assert parent_args[7] == 3256.50
+        assert parent_args[8] == 0.01
+        assert parent_args[9] == "chandelier_breakout"
+        payload = json.loads(parent_args[10])
+        assert payload["source"] == "journal_parent_upsert"
+        assert payload["event"]["entry_type"] == "LIMIT"
 
     @pytest.mark.asyncio
     async def test_on_order_opened_reasoning_insert_failure_non_blocking(self, journal_manager, valid_order_opened_event, mock_db_pool):
