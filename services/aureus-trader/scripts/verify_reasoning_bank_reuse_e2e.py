@@ -74,9 +74,6 @@ async def run_e2e():
                 "score": 0.93,
                 "active_signals": [{"tag": "cisd_bull", "status": "active", "atr": 2.5}],
                 "context_filters": {"session": "london"},
-                "reasoning": "Joined source of truth should drive Reasoning Bank",
-                "prompt_text": "raw prompt must stay out of insight projection",
-                "context_text": "raw context must stay out of insight projection",
             },
         })
 
@@ -92,6 +89,9 @@ async def run_e2e():
             "signal_snapshot": {
                 "active_signals": [{"tag": "cisd_bull", "atr": 2.5}],
                 "context_filters": {"session": "london"},
+                "trend": "bullish",
+                "tpo_shape": "D",
+                "session": "london",
                 "atr": 2.5,
                 "cisd_m15": "BULL",
             },
@@ -149,8 +149,13 @@ async def run_e2e():
             assert row["trade_journal_id"] is not None
             assert row["signal_snapshot_id"] is not None
             assert row["reasoning_text"]
-            assert row["prompt_text"]
-            assert row["context_text"]
+            assert "reasoning_reuse_joined" in row["reasoning_text"]
+            assert "XAUUSD" in row["reasoning_text"]
+            assert "BUY" in row["reasoning_text"]
+            assert "london" in row["reasoning_text"]
+            assert "cisd_m15=1" in row["reasoning_text"]
+            assert row["prompt_text"] is None
+            assert row["context_text"] is None
             assert row["evaluated_at"] is not None
             assert row["strategy_name"] == "reasoning_reuse_joined"
             assert row["symbol"] == "XAUUSD"
