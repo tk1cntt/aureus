@@ -180,12 +180,10 @@ def _build_reasoning_text(journal_row: dict, snapshot_columns: dict, signal_snap
         value = _reasoning_value(journal_row.get(key))
         if value:
             parts.append(f"{key}={value}")
-
-    for key in ("context_filters", "active_signals"):
+    for key in ("context_filters",):
         value = _reasoning_value(journal_row.get(key))
         if value:
             parts.append(f"{key}={value}")
-
     snapshot_facts = dict(snapshot_columns or {})
     for raw_key in ("trend", "tpo_shape"):
         if isinstance(signal_snapshot, dict) and signal_snapshot.get(raw_key) is not None:
@@ -636,8 +634,8 @@ class TradeJournalManager:
                                 INSERT INTO aureus_reasoning_entries (
                                     trace_id, trade_journal_id, signal_snapshot_id,
                                     strategy_name, symbol, direction,
-                                    active_signals, context_filters, reasoning_text, decision_action
-                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                    context_filters, reasoning_text, decision_action
+                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                                 RETURNING id
                                 """,
                                 trace_id,
@@ -646,7 +644,6 @@ class TradeJournalManager:
                                 strategy_name,
                                 symbol,
                                 journal_row.get("direction"),
-                                json.dumps(journal_row.get("active_signals") or []),
                                 json.dumps(journal_row.get("context_filters") or {}),
                                 reasoning_text,
                                 journal_row.get("direction"),

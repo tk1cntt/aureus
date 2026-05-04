@@ -421,13 +421,18 @@ class TestReasoningBank:
         queries = mock_db_pool._conn.queries
         inserts = [q for q in queries if "INSERT INTO aureus_reasoning_entries" in q[1]]
         assert len(inserts) == 1
+        insert_query = inserts[0][1]
+        assert "active_signals" not in insert_query
         insert_args = inserts[0][2]
-        generated_text = insert_args[8]
+        assert len(insert_args) == 9
+        generated_text = insert_args[7]
         assert "TREND_CONT_BULL" in generated_text
         assert "XAUUSD" in generated_text
         assert "BUY" in generated_text
         assert "london" in generated_text
         assert "cisd_m15=1" in generated_text
+        assert "active_signals" not in generated_text
+        assert "cisd_bull" not in generated_text
         enqueue_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
