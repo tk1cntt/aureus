@@ -194,7 +194,7 @@ class TestFormatClose:
         assert "(N/A)" in result
 
     def test_pips_from_explicit_field(self):
-        """Khi EA gửi sẵn pips trong event → dùng giá trị đó."""
+        """Khi không có giá entry/exit hợp lệ → dùng pips event."""
         reporter = self._make_reporter()
         event = {
             "type": "ORDER_CLOSED",
@@ -210,6 +210,58 @@ class TestFormatClose:
         }
         result = reporter._format_close(event)
         assert "+50.0 pips" in result
+
+    def test_close_metrics_use_actual_exit_price_for_ethusd(self):
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "ETHUSD",
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 2364.45,
+            "close_price": 2365.44,
+            "profit": 0.99,
+            "commission": 0,
+            "swap": 0,
+            "pips": 9900.0,
+        }
+        journal = {
+            "strategy_name": "TEST_STRATEGY",
+            "entry_price": 2364.45,
+            "sl_initial": 2363.79,
+            "tp_initial": 2365.44,
+        }
+
+        result = reporter._format_close(event, journal)
+
+        assert "+99.0 pips" in result
+        assert "+9900.0 pips" not in result
+        assert "RR: 1:1.5" in result
+
+    def test_close_rr_uses_close_price_not_planned_tp(self):
+        reporter = self._make_reporter()
+        event = {
+            "type": "ORDER_CLOSED",
+            "symbol": "ETHUSD",
+            "direction": "BUY",
+            "volume": 0.01,
+            "open_price": 2364.45,
+            "close_price": 2365.44,
+            "profit": 0.99,
+            "commission": 0,
+            "swap": 0,
+        }
+        journal = {
+            "strategy_name": "TEST_STRATEGY",
+            "entry_price": 2364.45,
+            "sl_initial": 2363.79,
+            "tp_initial": 2366.43,
+        }
+
+        result = reporter._format_close(event, journal)
+
+        assert "RR: 1:1.5" in result
+        assert "RR: 1:3.0" not in result
 
 
 @pytest.mark.asyncio
