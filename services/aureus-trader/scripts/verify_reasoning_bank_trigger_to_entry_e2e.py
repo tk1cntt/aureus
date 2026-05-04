@@ -32,8 +32,32 @@ async def _ensure_schema(conn):
         "add_reasoning_entries.sql",
         "add_reasoning_entries_embeddings.sql",
         "add_reasoning_entries_join_indexes.sql",
+        "drop_reasoning_entries_active_signals.sql",
+        "drop_reasoning_entries_active_signals.sql",
     ):
         await conn.execute((migrations / name).read_text(encoding="utf-8"))
+
+
+async def _assert_active_signals_removed(conn):
+    column_count = await conn.fetchval(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_name = 'aureus_reasoning_entries'
+          AND column_name = 'active_signals'
+        """
+    )
+    index_count = await conn.fetchval(
+        """
+        SELECT COUNT(*)
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'aureus_reasoning_entries'
+          AND indexname = 'idx_reasoning_entries_active_signals'
+        """
+    )
+    assert column_count == 0
+    assert index_count == 0
 
 
 async def _cleanup(conn, trace_id):
@@ -57,6 +81,7 @@ async def run_e2e():
     try:
         async with pool.acquire() as conn:
             await _ensure_schema(conn)
+            await _assert_active_signals_removed(conn)
             await _cleanup(conn, trace_id)
             await conn.execute(
                 """
@@ -161,6 +186,8 @@ async def run_e2e():
             assert "BUY" in row["reasoning_text"]
             assert "london" in row["reasoning_text"]
             assert "cisd_m15=1" in row["reasoning_text"]
+            assert "active_signals" not in row["reasoning_text"]
+            assert "cisd_bull" not in row["reasoning_text"]
             assert row["prompt_text"] is None
             assert row["context_text"] is None
             assert row["strategy_name"] == "reasoning_trigger_to_entry"
