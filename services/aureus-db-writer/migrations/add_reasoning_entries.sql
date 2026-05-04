@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS aureus_reasoning_entries (
     reasoning_text     TEXT,
     decision_action    TEXT,
     confidence         DOUBLE PRECISION,
-    active_signals     JSONB,
     context_filters    JSONB,
     ticket             BIGINT,
     pending_order_id   BIGINT,
@@ -39,7 +38,6 @@ CREATE INDEX IF NOT EXISTS idx_reasoning_entries_strategy ON aureus_reasoning_en
 CREATE INDEX IF NOT EXISTS idx_reasoning_entries_symbol ON aureus_reasoning_entries(symbol);
 CREATE INDEX IF NOT EXISTS idx_reasoning_entries_created_at ON aureus_reasoning_entries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reasoning_entries_success ON aureus_reasoning_entries(success);
-CREATE INDEX IF NOT EXISTS idx_reasoning_entries_active_signals ON aureus_reasoning_entries USING GIN(active_signals);
 CREATE INDEX IF NOT EXISTS idx_reasoning_entries_context_filters ON aureus_reasoning_entries USING GIN(context_filters);
 
 COMMENT ON TABLE aureus_reasoning_entries IS 'Append-only Reasoning Bank decision rows linked to trade journal lifecycle';
