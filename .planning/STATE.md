@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-04 - Completed quick task 260504-pyn: Remove active_signals from Reasoning Bank persistence
+last_activity: 2026-05-04 - Completed quick task 260504-rhc: Fix Telegram close order pips and RR metrics
 progress:
   total_phases: 4
   completed_phases: 2
@@ -128,6 +128,7 @@ Last activity: 2026-05-02 - Completed quick task 260502-wur: Thực hiện imple
 | 260503-ul1 | Fix TPO shape classifier rules | 2026-05-03 | e082e0b | Verified | [260503-ul1-s-a-classify-shape-cu-a-tpo-py-nh-n-d-ng](./quick/260503-ul1-s-a-classify-shape-cu-a-tpo-py-nh-n-d-ng/) |
 | 260503-w57 | Threshold TPO shape classifier and disable B shape | 2026-05-03 | 17b7ade | Verified | [260503-w57-update-classify-shape-ch-x-c-nh-n-shape-](./quick/260503-w57-update-classify-shape-ch-x-c-nh-n-shape-/) |
 | 260504-pyn | Remove active_signals from Reasoning Bank persistence | 2026-05-04 | 55a5196 | Verified | [260504-pyn-remove-active-signals-from-reasoning-tex](./quick/260504-pyn-remove-active-signals-from-reasoning-tex/) |
+| 260504-rhc | Fix Telegram close order pips and RR metrics | 2026-05-04 | 61271b2 | Verified | [260504-rhc-fix-telegram-order-closed-metrics-to-use](./quick/260504-rhc-fix-telegram-order-closed-metrics-to-use/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
