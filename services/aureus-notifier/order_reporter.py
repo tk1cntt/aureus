@@ -348,31 +348,22 @@ class OrderStatusReporter:
         score = journal.get("score") if journal else None
 
         # Pips calculation
-        digits = event.get("digits", 5)
         pips = None
+        pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
 
-        # Check for explicit pips from gateway/EA (TRADE_HISTORY includes it)
-        if "pips" in event and event["pips"] is not None:
+        if entry > 0 and exit_p > 0 and pip > 0:
+            pips = (exit_p - entry) / pip if direction == "BUY" else (entry - exit_p) / pip
+        elif "pips" in event and event["pips"] is not None:
             pips = float(event["pips"])
-        elif entry > 0 and exit_p > 0:
-            # Calculate from price difference
-            if digits >= 4:
-                pips = (exit_p - entry) * 10000 if direction == "BUY" else (entry - exit_p) * 10000
-            else:
-                pips = (exit_p - entry) * 100 if direction == "BUY" else (entry - exit_p) * 100
 
-        # SL/TP from journal for RR calculation
+        # SL from journal for realized RR calculation
         sl = journal.get("sl_initial") if journal else None
-        tp = journal.get("tp_initial") if journal else None
 
-        # Calculate RR ratio from original SL/TP
         rr_ratio = None
-        if entry > 0 and sl and sl > 0:
-            pip = PIP_VALUES.get(symbol.upper(), PIP_VALUES["DEFAULT"])
-            sl_pips = abs(entry - sl) / pip
-            tp_pips = abs(tp - entry) / pip if tp and tp > 0 else None
-            if tp_pips and sl_pips > 0:
-                rr_ratio = round(tp_pips / sl_pips, 2)
+        if entry > 0 and exit_p > 0 and sl and sl > 0:
+            risk = abs(entry - sl)
+            if risk > 0:
+                rr_ratio = round(abs(exit_p - entry) / risk, 2)
 
         dir_emoji = "\U0001f7e2" if direction == "BUY" else "\U0001f534"
         result_emoji = "\u2705" if net >= 0 else "\u274c"
