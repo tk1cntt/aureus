@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-06 - Completed quick task 260506-qy2: Pivot SL time-order selection
+last_activity: 2026-05-06 - Completed quick task 260506-rkn: Pivot SL distance limits
 progress:
   total_phases: 4
   completed_phases: 2
@@ -130,6 +130,7 @@ Last activity: 2026-05-02 - Completed quick task 260502-wur: Thực hiện imple
 | 260504-pyn | Remove active_signals from Reasoning Bank persistence | 2026-05-04 | 55a5196 | Verified | [260504-pyn-remove-active-signals-from-reasoning-tex](./quick/260504-pyn-remove-active-signals-from-reasoning-tex/) |
 | 260504-rhc | Fix Telegram close order pips and RR metrics | 2026-05-04 | 61271b2 | Verified | [260504-rhc-fix-telegram-order-closed-metrics-to-use](./quick/260504-rhc-fix-telegram-order-closed-metrics-to-use/) |
 | 260506-qy2 | Pivot SL time-order selection | 2026-05-06 | c1e2e72 | Verified | [260506-qy2-pivot-sl-time-order](./quick/260506-qy2-pivot-sl-time-order/) |
+| 260506-rkn | Pivot SL distance limits | 2026-05-06 | 5b6743c | Verified | [260506-rkn-pivot-sl-distance-limits](./quick/260506-rkn-pivot-sl-distance-limits/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
