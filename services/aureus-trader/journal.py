@@ -493,9 +493,12 @@ class TradeJournalManager:
                     else:
                         signal_schema_version = "sig-v2.0.0"
 
-                    raw_signal_snapshot = event.get("signal_snapshot")
+                    event_data = event.get("data") if isinstance(event.get("data"), dict) else {}
+                    raw_signal_snapshot = event.get("signal_snapshot", event_data.get("signal_snapshot"))
                     signal_snapshot = dict(raw_signal_snapshot) if isinstance(raw_signal_snapshot, dict) else {}
                     snapshot_source = "event.signal_snapshot"
+                    if "session" not in signal_snapshot and event_data.get("session") is not None:
+                        signal_snapshot["session"] = event_data.get("session")
 
                     logger.info(
                         "on_order_opened: snapshot_source trace_id=%s ticket=%s raw_signal_snapshot_type=%s",

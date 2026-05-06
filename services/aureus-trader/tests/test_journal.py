@@ -399,6 +399,22 @@ class TestReasoningBank:
         assert args[1] == 1
 
     @pytest.mark.asyncio
+    async def test_on_order_opened_maps_nested_data_session_to_signal_snapshot(self, journal_manager, valid_order_opened_event, mock_db_pool):
+        valid_order_opened_event["data"] = {
+            "session": "new_york",
+            "signal_snapshot": {
+                "atr": 2.5,
+            },
+        }
+
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+
+        assert result is True
+        snapshot_inserts = [q for q in mock_db_pool._conn.queries if "INSERT INTO aureus_trade_signal_snapshots" in q[1]]
+        assert len(snapshot_inserts) == 1
+        args = snapshot_inserts[0][2]
+        assert args[15] == 3
+
     async def test_post_snapshot_generates_reasoning_text_without_prompt_context(self, journal_manager, mock_db_pool):
         strategy_event = {
             "type": "STRATEGY_MATCH",
