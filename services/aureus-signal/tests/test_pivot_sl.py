@@ -89,6 +89,7 @@ class TestCalculateSlTpPivotPoint:
 
     def test_pivot_point_buy_sl_below_pivot(self):
         """BUY: SL = pivot_price - offset."""
+        self.state.last_candle = {"t": 1000, "c": 2009.95, "h": 2020.0, "l": 2000.0}
         self.state.swing_points = [
             {"t": 900, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
         ]
@@ -103,6 +104,7 @@ class TestCalculateSlTpPivotPoint:
     def test_pivot_point_sell_sl_above_pivot(self):
         """SELL: SL = pivot_price + offset."""
         self.trigger["side"] = "SELL"
+        self.state.last_candle = {"t": 1000, "c": 2010.05, "h": 2020.0, "l": 2000.0}
         self.state.swing_points = [
             {"t": 900, "price": 2020.0, "is_high": True, "type": "HH", "broken": False},
         ]
@@ -135,7 +137,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2018, "l": 2003},
             {"h": 2019, "l": 2004},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=1990.0,
+            recent_candles=recent_candles,
+        )
         assert sl == 1980.0
         assert tp is not None
 
@@ -154,7 +162,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2018, "l": 2004},
             {"h": 2019, "l": 2005},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=2000.0,
+            recent_candles=recent_candles,
+        )
 
         assert sl == 1990.0
         assert tp is not None
@@ -175,7 +189,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2018, "l": 2004},
             {"h": 2019, "l": 2005},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=2020.0,
+            recent_candles=recent_candles,
+        )
 
         assert sl == 2030.0
         assert tp is not None
@@ -195,7 +215,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2018, "l": 2004},
             {"h": 2019, "l": 2005},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=1988.0,
+            recent_candles=recent_candles,
+        )
 
         assert sl == 1980.0
         assert tp is not None
@@ -236,7 +262,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2018, "l": 2003},
             {"h": 2019, "l": 2004},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=1999.0,
+            recent_candles=recent_candles,
+        )
 
         assert sl == 1990.0
         assert tp is not None
@@ -256,7 +288,13 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2023, "l": 2003},
             {"h": 2021, "l": 2004},
         ]
-        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
+        sl, tp = self.tm._calculate_sl_tp(
+            self.trigger,
+            self.state,
+            config,
+            entry_price_override=2021.0,
+            recent_candles=recent_candles,
+        )
 
         assert sl == 2030.0
         assert tp is not None
