@@ -96,12 +96,16 @@ class OrderClosedEvent(BaseModel):
     volume: float
     open_price: float
     close_price: float
+    exit_price: Optional[float] = None
     profit: float
     commission: float
     swap: float
     magic: int
     strategy_name: Optional[str] = None
     trace_id: Optional[str] = None
+    exit_reason: Optional[str] = None
+    close_reason: Optional[str] = None
+    reason: Optional[str] = None
     exit_time: Optional[int] = None
     t: int
 

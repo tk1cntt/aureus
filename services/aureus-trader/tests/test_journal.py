@@ -13,6 +13,43 @@ import reasoning_embeddings
 from journal import TradeJournalManager, VALID_EXIT_REASONS, VALID_DIRECTIONS, PIP_VALUES
 
 
+def test_order_closed_gateway_model_keeps_exit_reason_fields():
+    import importlib.util
+    import pathlib
+
+    gateway_path = pathlib.Path(__file__).parents[2] / "aureus-gateway" / "main.py"
+    spec = importlib.util.spec_from_file_location("aureus_gateway_main", gateway_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    event = module.OrderClosedEvent(
+        type="ORDER_CLOSED",
+        symbol="XAUUSD",
+        ticket=12345,
+        direction="BUY",
+        volume=0.01,
+        open_price=3250.50,
+        close_price=3260.50,
+        exit_price=3260.50,
+        profit=10.0,
+        commission=0.05,
+        swap=0.01,
+        magic=607000,
+        exit_time=1744102800000,
+        close_reason="DEAL_REASON_TP",
+        exit_reason="TP",
+        reason="TP",
+        t=1744102800000,
+    )
+
+    dumped = event.model_dump()
+    assert dumped["exit_price"] == 3260.50
+    assert dumped["exit_reason"] == "TP"
+    assert dumped["close_reason"] == "DEAL_REASON_TP"
+    assert dumped["reason"] == "TP"
+
+
+
 # =============================================================================
 # Pillar 1: Inbound Tests — Data Input Validation
 # =============================================================================
@@ -693,6 +730,42 @@ class TestExitReasonNormalization:
         assert journal_manager._normalize_exit_reason("MAGIC") == "MANUAL_CLOSE"
         assert journal_manager._normalize_exit_reason("") == "MANUAL_CLOSE"
         assert journal_manager._normalize_exit_reason(None) == "MANUAL_CLOSE"
+
+    def test_TJ_BB_mt5_provider_reason_aliases(self, journal_manager):
+        """MT5/provider close reasons normalize to canonical exit reasons."""
+        expected = {
+            "TP": "TP_HIT",
+            "DEAL_REASON_TP": "TP_HIT",
+            "SL": "SL_HIT",
+            "DEAL_REASON_SL": "SL_HIT",
+            "SO": "SL_HIT",
+            "STOP_OUT": "SL_HIT",
+            "CLIENT": "MANUAL_CLOSE",
+            "MOBILE": "MANUAL_CLOSE",
+            "WEB": "MANUAL_CLOSE",
+            "EXPERT": "MANUAL_CLOSE",
+        }
+        for reason, normalized in expected.items():
+            assert journal_manager._normalize_exit_reason(reason) == normalized
+
+    @pytest.mark.asyncio
+    async def test_TJ_BB_exit_reason_preferred_over_close_reason(self, journal_manager, valid_order_closed_event, mock_db_pool):
+        """ORDER_CLOSED consumes exit_reason before close_reason/reason."""
+        valid_order_closed_event["exit_reason"] = "DEAL_REASON_SL"
+        valid_order_closed_event["close_reason"] = "DEAL_REASON_TP"
+        valid_order_closed_event["reason"] = "TP"
+        mock_db_pool.set_result("fetchrow", {
+            "id": 1,
+            "trace_id": "trace-test-journal-001",
+            "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
+            "direction": "BUY",
+            "symbol": "XAUUSD"
+        })
+        mock_db_pool.set_result("fetchval", 1)
+
+        assert await journal_manager.on_order_closed(valid_order_closed_event) is True
+        query_args = mock_db_pool._conn.queries[1][2]
+        assert query_args[2] == "SL_HIT"
 
 
 # =============================================================================
