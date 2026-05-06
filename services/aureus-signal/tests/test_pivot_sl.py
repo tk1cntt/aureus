@@ -119,11 +119,11 @@ class TestCalculateSlTpPivotPoint:
         assert tp is None
 
     def test_pivot_point_pivot_index_applies_after_filter(self):
-        """pivot_index=2 chọn candidate hợp lệ thứ hai sau filter 5 nến."""
+        """pivot_index=2 chọn candidate hợp lệ thứ hai sau filter 5 nến và sort theo thời gian."""
         self.state.swing_points = [
             {"t": 700, "price": 1980.0, "is_high": False, "type": "LL", "broken": False},
-            {"t": 800, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 900, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
+            {"t": 800, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
         ]
         config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0, "pivot_index": 2}, "tp": {"type": "RR", "value": 2.0}}
         recent_candles = [
@@ -134,15 +134,15 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2019, "l": 2004},
         ]
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
-        assert sl == 1980.0
+        assert sl == 1990.0
         assert tp is not None
 
-    def test_pivot_point_buy_sorts_valid_pivots_descending_by_price(self):
-        """BUY: pivot_index=1 chọn LL hợp lệ cao nhất sau sort theo giá."""
+    def test_pivot_point_buy_selects_newest_valid_pivot_by_time(self):
+        """BUY: unordered swing_points, pivot_index=1 chọn LL mới nhất, không theo giá/list order."""
         self.state.swing_points = [
+            {"t": 900, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 700, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 800, "price": 1980.0, "is_high": False, "type": "LL", "broken": False},
-            {"t": 900, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
         ]
         config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0, "pivot_index": 1}, "tp": {"type": "RR", "value": 2.0}}
         recent_candles = [
@@ -154,16 +154,16 @@ class TestCalculateSlTpPivotPoint:
         ]
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
 
-        assert sl == 2000.0
+        assert sl == 1990.0
         assert tp is not None
 
-    def test_pivot_point_sell_sorts_valid_pivots_ascending_by_price(self):
-        """SELL: pivot_index=1 chọn HH hợp lệ thấp nhất sau sort theo giá."""
+    def test_pivot_point_sell_selects_newest_valid_pivot_by_time(self):
+        """SELL: unordered swing_points, pivot_index=1 chọn HH mới nhất, không theo giá/list order."""
         self.trigger["side"] = "SELL"
         self.state.swing_points = [
+            {"t": 900, "price": 2030.0, "is_high": True, "type": "HH", "broken": False},
             {"t": 700, "price": 2020.0, "is_high": True, "type": "HH", "broken": False},
             {"t": 800, "price": 2040.0, "is_high": True, "type": "HH", "broken": False},
-            {"t": 900, "price": 2030.0, "is_high": True, "type": "HH", "broken": False},
         ]
         config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0, "pivot_index": 1}, "tp": {"type": "RR", "value": 2.0}}
         recent_candles = [
@@ -175,14 +175,14 @@ class TestCalculateSlTpPivotPoint:
         ]
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
 
-        assert sl == 2020.0
+        assert sl == 2030.0
         assert tp is not None
 
-    def test_pivot_point_pivot_index_applies_after_price_sort(self):
-        """pivot_index=2 chọn candidate thứ hai sau sort theo giá, không theo thời gian."""
+    def test_pivot_point_pivot_index_applies_after_time_sort(self):
+        """pivot_index=2 chọn candidate thứ hai sau sort thời gian, không theo giá/list order."""
         self.state.swing_points = [
-            {"t": 700, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 800, "price": 1980.0, "is_high": False, "type": "LL", "broken": False},
+            {"t": 700, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
             {"t": 900, "price": 1990.0, "is_high": False, "type": "LL", "broken": False},
         ]
         config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0, "pivot_index": 2}, "tp": {"type": "RR", "value": 2.0}}
@@ -195,7 +195,7 @@ class TestCalculateSlTpPivotPoint:
         ]
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
 
-        assert sl == 1990.0
+        assert sl == 1980.0
         assert tp is not None
 
     def test_pivot_point_zero_offset(self):
