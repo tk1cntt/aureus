@@ -734,7 +734,7 @@ class TradeJournalManager:
                 return False
 
             # Extract exit data
-            close_price = event.get("close_price", event.get("price"))
+            close_price = event.get("exit_price", event.get("close_price", event.get("price")))
             if close_price is None:
                 logger.warning("on_order_closed: missing close_price")
                 return False
@@ -771,7 +771,7 @@ class TradeJournalManager:
                 exit_time = exit_time.replace(tzinfo=timezone.utc)
 
             # Exit reason
-            exit_reason = event.get("close_reason", event.get("reason", ""))
+            exit_reason = event.get("exit_reason", event.get("close_reason", event.get("reason", "")))
             # Normalize reason
             exit_reason = self._normalize_exit_reason(exit_reason)
 
@@ -860,10 +860,12 @@ class TradeJournalManager:
 
         reason_upper = reason.upper().strip()
 
-        if "TP" in reason_upper or "TAKE_PROFIT" in reason_upper:
+        if reason_upper in {"TP", "DEAL_REASON_TP"} or "TAKE_PROFIT" in reason_upper:
             return "TP_HIT"
-        if "SL" in reason_upper or "STOP_LOSS" in reason_upper:
+        if reason_upper in {"SL", "DEAL_REASON_SL", "SO", "DEAL_REASON_SO", "STOP_OUT"} or "STOP_LOSS" in reason_upper:
             return "SL_HIT"
+        if reason_upper in {"CLIENT", "MOBILE", "WEB", "EXPERT", "DEAL_REASON_CLIENT", "DEAL_REASON_MOBILE", "DEAL_REASON_WEB", "DEAL_REASON_EXPERT"}:
+            return "MANUAL_CLOSE"
         if "TRAIL" in reason_upper:
             return "TRAILING_STOP"
         if "SIGNAL" in reason_upper or "EXIT" in reason_upper:

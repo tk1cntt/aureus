@@ -118,6 +118,9 @@ const string PROFILE_BREAKOUT_PROTECT = "breakout_protect";
 const string PROFILE_BASKET_ESCAPE    = "basket_escape";
 const string PROFILE_LEGACY           = "legacy";
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 string TrimProfileToken(string value)
   {
    StringTrimLeft(value);
@@ -125,6 +128,9 @@ string TrimProfileToken(string value)
    return value;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsKnownManagementProfile(string profile)
   {
    return profile == PROFILE_CONSERVATIVE ||
@@ -133,6 +139,9 @@ bool IsKnownManagementProfile(string profile)
           profile == PROFILE_BASKET_ESCAPE;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 string ResolveManagementProfile(long magic, bool &fallback_used)
   {
    fallback_used = true;
@@ -160,13 +169,17 @@ string ResolveManagementProfile(long magic, bool &fallback_used)
          return profile;
         }
 
-      PrintFormat("[ManagePositionProfitBreakEvent] magic=%lld unknown_profile=%s fallback_profile=%s", magic, profile, PROFILE_CONSERVATIVE);
+      if(InpDebugMode)
+         PrintFormat("[ManagePositionProfitBreakEvent] magic=%lld unknown_profile=%s fallback_profile=%s", magic, profile, PROFILE_CONSERVATIVE);
       return PROFILE_CONSERVATIVE;
      }
 
    return PROFILE_LEGACY;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool ShouldSuppressRepeatedHoldDecisionLog(string symbol, long magic, string direction, string action, string reason)
   {
    if(action != "HOLD")
@@ -194,6 +207,9 @@ bool ShouldSuppressRepeatedHoldDecisionLog(string symbol, long magic, string dir
    return false;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void LogManagementDecision(string symbol,
                            long magic,
                            string direction,
@@ -217,8 +233,9 @@ void LogManagementDecision(string symbol,
    string target = (ticket > 0)
                    ? StringFormat(" ticket=%I64u target_sl=%.5f", ticket, target_sl)
                    : "";
-   PrintFormat("[ManagePositionDecision] symbol=%s magic=%lld direction=%s profile=%s action=%s reason=%s primitive=%s positions_count=%d net_profit=%.2f age_seconds=%d%s",
-               symbol, magic, direction, profile, action, reason, primitive, positions_count, net_profit, age_seconds, target);
+   if(InpDebugMode)
+      PrintFormat("[ManagePositionDecision] symbol=%s magic=%lld direction=%s profile=%s action=%s reason=%s primitive=%s positions_count=%d net_profit=%.2f age_seconds=%d%s",
+                  symbol, magic, direction, profile, action, reason, primitive, positions_count, net_profit, age_seconds, target);
   }
 //+------------------------------------------------------------------+
 //| Market-closed close guard helpers                                  |
@@ -235,6 +252,9 @@ int FindMarketClosedCloseGuardIndex(string symbol, long magic, string direction)
    return -1;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int EnsureMarketClosedCloseGuardState(string symbol, long magic, string direction)
   {
    int idx = FindMarketClosedCloseGuardIndex(symbol, magic, direction);
@@ -250,6 +270,9 @@ int EnsureMarketClosedCloseGuardState(string symbol, long magic, string directio
    return idx;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsMarketClosedCloseGuardActive(string symbol, long magic, string direction, datetime &guardUntil)
   {
    int idx = FindMarketClosedCloseGuardIndex(symbol, magic, direction);
@@ -259,6 +282,9 @@ bool IsMarketClosedCloseGuardActive(string symbol, long magic, string direction,
    return guardUntil > TimeCurrent();
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsSymbolMarketClosedCloseGuardActive(string symbol, datetime &guardUntil)
   {
    guardUntil = 0;
@@ -274,6 +300,9 @@ bool IsSymbolMarketClosedCloseGuardActive(string symbol, datetime &guardUntil)
    return guardUntil > 0;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void SetMarketClosedCloseGuard(string symbol, long magic, string direction)
   {
    int idx = EnsureMarketClosedCloseGuardState(symbol, magic, direction);
@@ -282,13 +311,17 @@ void SetMarketClosedCloseGuard(string symbol, long magic, string direction)
       return;
 
    g_marketClosedCloseGuards[idx].guard_until = guardUntil;
-   PrintFormat("[MarketClosedCloseGuard] Set guard symbol=%s magic=%lld direction=%s until=%s reason=MARKET_CLOSED",
-               symbol,
-               magic,
-               direction,
-               TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
+   if(InpDebugMode)
+      PrintFormat("[MarketClosedCloseGuard] Set guard symbol=%s magic=%lld direction=%s until=%s reason=MARKET_CLOSED",
+                  symbol,
+                  magic,
+                  direction,
+                  TimeToString(guardUntil, TIME_DATE | TIME_SECONDS));
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsSymbolCloseAvailableNow(string symbol, string &reason)
   {
    long trade_mode = SymbolInfoInteger(symbol, SYMBOL_TRADE_MODE);
@@ -320,8 +353,9 @@ bool IsSymbolCloseAvailableNow(string symbol, string &reason)
          if(now_seconds >= from_seconds && now_seconds <= to_seconds)
             return true;
         }
-      else if(now_seconds >= from_seconds || now_seconds <= to_seconds)
-         return true;
+      else
+         if(now_seconds >= from_seconds || now_seconds <= to_seconds)
+            return true;
      }
 
    if(has_sessions)
@@ -349,6 +383,9 @@ int FindHistoryCooldownIndex(string symbol, long magic, string direction)
    return -1;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int EnsureHistoryCooldownState(string symbol, long magic, string direction)
   {
    int idx = FindHistoryCooldownIndex(symbol, magic, direction);
@@ -367,6 +404,9 @@ int EnsureHistoryCooldownState(string symbol, long magic, string direction)
    return idx;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 string DirectionFromCloseDealType(long dealType)
   {
    if(dealType == DEAL_TYPE_BUY)
@@ -376,6 +416,9 @@ string DirectionFromCloseDealType(long dealType)
    return "";
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTicket)
   {
    for(int i = 0; i < ArraySize(state.processed_deals); i++)
@@ -386,6 +429,9 @@ bool IsHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTicke
    return false;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void MarkHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTicket)
   {
    int size = ArraySize(state.processed_deals);
@@ -393,6 +439,9 @@ void MarkHistoryCooldownDealProcessed(HistoryCooldownState &state, ulong dealTic
    state.processed_deals[size] = dealTicket;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void SetHistoryCooldown(int idx, datetime cooldownUntil, string reason, string source)
   {
    if(cooldownUntil <= TimeCurrent())
@@ -401,15 +450,19 @@ void SetHistoryCooldown(int idx, datetime cooldownUntil, string reason, string s
       return;
 
    g_historyCooldowns[idx].cooldown_until = cooldownUntil;
-   PrintFormat("[HistoryCooldown] Set cooldown symbol=%s magic=%lld direction=%s until=%s reason=%s source=%s",
-               g_historyCooldowns[idx].symbol,
-               g_historyCooldowns[idx].magic,
-               g_historyCooldowns[idx].direction,
-               TimeToString(cooldownUntil, TIME_DATE | TIME_SECONDS),
-               reason,
-               source);
+   if(InpDebugMode)
+      PrintFormat("[HistoryCooldown] Set cooldown symbol=%s magic=%lld direction=%s until=%s reason=%s source=%s",
+                  g_historyCooldowns[idx].symbol,
+                  g_historyCooldowns[idx].magic,
+                  g_historyCooldowns[idx].direction,
+                  TimeToString(cooldownUntil, TIME_DATE | TIME_SECONDS),
+                  reason,
+                  source);
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ApplyCloseDealToHistoryCooldown(ulong dealTicket, string source)
   {
    if(dealTicket == 0 || !HistoryDealSelect(dealTicket))
@@ -446,6 +499,9 @@ void ApplyCloseDealToHistoryCooldown(ulong dealTicket, string source)
    MarkHistoryCooldownDealProcessed(g_historyCooldowns[idx], dealTicket);
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsHistoryCooldownActive(string symbol, long magic, string direction, datetime &cooldownUntil)
   {
    int idx = FindHistoryCooldownIndex(symbol, magic, direction);
@@ -455,11 +511,15 @@ bool IsHistoryCooldownActive(string symbol, long magic, string direction, dateti
    return cooldownUntil > TimeCurrent();
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void BootstrapHistoryCooldowns()
   {
    datetime toTime = TimeCurrent();
    datetime fromTime = toTime - 24 * 60 * 60;
-   PrintFormat("[HistoryCooldown] Bootstrap start from=%s to=%s", TimeToString(fromTime, TIME_DATE | TIME_SECONDS), TimeToString(toTime, TIME_DATE | TIME_SECONDS));
+   if(InpDebugMode)
+      PrintFormat("[HistoryCooldown] Bootstrap start from=%s to=%s", TimeToString(fromTime, TIME_DATE | TIME_SECONDS), TimeToString(toTime, TIME_DATE | TIME_SECONDS));
    if(!HistorySelect(fromTime, toTime))
      {
       PrintFormat("[HistoryCooldown] Bootstrap HistorySelect failed: %d", GetLastError());
@@ -472,7 +532,8 @@ void BootstrapHistoryCooldowns()
       ulong dealTicket = HistoryDealGetTicket(i);
       ApplyCloseDealToHistoryCooldown(dealTicket, "bootstrap");
      }
-   PrintFormat("[HistoryCooldown] Bootstrap complete states=%d deals=%d", ArraySize(g_historyCooldowns), totalDeals);
+   if(InpDebugMode)
+      PrintFormat("[HistoryCooldown] Bootstrap complete states=%d deals=%d", ArraySize(g_historyCooldowns), totalDeals);
   }
 
 //+------------------------------------------------------------------+
@@ -1402,23 +1463,50 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode,
   }
 
 //+------------------------------------------------------------------+
+//| Map MT5 deal close reason to stable provider reason               |
+//+------------------------------------------------------------------+
+string DealReasonToCloseReason(long reason)
+  {
+   switch(reason)
+     {
+      case DEAL_REASON_TP:
+         return "TP";
+      case DEAL_REASON_SL:
+         return "SL";
+      case DEAL_REASON_SO:
+         return "SO";
+      case DEAL_REASON_CLIENT:
+         return "CLIENT";
+      case DEAL_REASON_MOBILE:
+         return "MOBILE";
+      case DEAL_REASON_WEB:
+         return "WEB";
+      case DEAL_REASON_EXPERT:
+         return "EXPERT";
+      default:
+         return StringFormat("DEAL_REASON_%lld", reason);
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Push ORDER_CLOSED event                                            |
 //+------------------------------------------------------------------+
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
                      double commission, double swap, long magic,
-                     string strategyName = "", string traceId = "")
+                     string strategyName = "", string traceId = "", string closeReason = "")
   {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
-                    "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,"
-                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"t\":%lld}",
-                    symbol, ticket, direction, volume, openPrice, closePrice, profit, commission, swap,
-                    magic, strategyName, traceId, timeMs);
+                    "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,\"exit_price\":%.5f,"
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\","
+                    "\"exit_reason\":\"%s\",\"close_reason\":\"%s\",\"exit_time\":%lld,\"t\":%lld}",
+                    symbol, ticket, direction, volume, openPrice, closePrice, closePrice, profit, commission, swap,
+                    magic, strategyName, traceId, closeReason, closeReason, timeMs, timeMs);
    g_socket.SendJSON(json);
    if(InpDebugMode)
-      PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s", ticket, profit, strategyName);
+      PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s reason=%s", ticket, profit, strategyName, closeReason);
   }
 
 
@@ -1629,6 +1717,9 @@ double GetPositionCommissionCostPerLot(string symbol)
    return commission_per_lot;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void CalculatePositionGroupCosts(string symbol,
                                  const ulong &tickets[],
                                  double total_profit,
@@ -1647,6 +1738,9 @@ void CalculatePositionGroupCosts(string symbol,
    net_profit = total_profit - total_commission + total_swap;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool ClosePositionTickets(string symbol,
                           long magic,
                           string pos_type_str,
@@ -1700,6 +1794,9 @@ bool ClosePositionTickets(string symbol,
    return success_count > 0;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool MovePositionsSL(string symbol,
                      long magic,
                      ENUM_POSITION_TYPE target_type,
@@ -1737,6 +1834,9 @@ bool MovePositionsSL(string symbol,
    return success_count > 0;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool FindStructureSLTarget(string symbol, ENUM_POSITION_TYPE target_type, double current_sl, double &proposed_sl_price)
   {
    if(target_type == POSITION_TYPE_BUY && IsImbalanceUp(symbol, PERIOD_CURRENT, 2))
@@ -1748,19 +1848,23 @@ bool FindStructureSLTarget(string symbol, ENUM_POSITION_TYPE target_type, double
          return true;
         }
      }
-   else if(target_type == POSITION_TYPE_SELL && IsImbalanceDown(symbol, PERIOD_CURRENT, 2))
-     {
-      double imbalance_sl_candidate = iHigh(symbol, PERIOD_CURRENT, 2);
-      if(imbalance_sl_candidate < current_sl || current_sl == 0)
+   else
+      if(target_type == POSITION_TYPE_SELL && IsImbalanceDown(symbol, PERIOD_CURRENT, 2))
         {
-         proposed_sl_price = imbalance_sl_candidate;
-         return true;
+         double imbalance_sl_candidate = iHigh(symbol, PERIOD_CURRENT, 2);
+         if(imbalance_sl_candidate < current_sl || current_sl == 0)
+           {
+            proposed_sl_price = imbalance_sl_candidate;
+            return true;
+           }
         }
-     }
 
    return false;
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool IsSLProfitable(string symbol,
                     ENUM_POSITION_TYPE target_type,
                     double proposed_sl_price,
@@ -1777,12 +1881,15 @@ bool IsSLProfitable(string symbol,
       cost_offset_in_price = ((total_commission + total_swap) / tick_value_for_total_volume) * point_size;
 
    double breakeven_price_with_costs = (target_type == POSITION_TYPE_BUY)
-                                      ? weighted_avg_open_price + cost_offset_in_price
-                                      : weighted_avg_open_price - cost_offset_in_price;
+                                       ? weighted_avg_open_price + cost_offset_in_price
+                                       : weighted_avg_open_price - cost_offset_in_price;
    return (target_type == POSITION_TYPE_BUY && proposed_sl_price > breakeven_price_with_costs) ||
           (target_type == POSITION_TYPE_SELL && proposed_sl_price < breakeven_price_with_costs);
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessLegacyPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
@@ -1815,6 +1922,9 @@ void ProcessLegacyPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE 
    LogManagementDecision(symbol, magic, pos_type_str, PROFILE_LEGACY, "HOLD", "legacy_no_rule_matched", positions_count, net_profit, age_seconds, "P-03");
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessConservativePositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
@@ -1837,6 +1947,9 @@ void ProcessConservativePositionsByType(string symbol, long magic, ENUM_POSITION
    LogManagementDecision(symbol, magic, pos_type_str, PROFILE_CONSERVATIVE, "HOLD", "conservative_hold_only", positions_count, net_profit, age_seconds, "P-08");
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessTrendRunnerPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
@@ -1882,6 +1995,9 @@ void ProcessTrendRunnerPositionsByType(string symbol, long magic, ENUM_POSITION_
    MovePositionsSL(symbol, magic, target_type, PROFILE_TREND_RUNNER, tickets, net_profit, age_seconds, proposed_sl_price, "TRAIL_SL", "trend_structure_trailing", "P-10/P-11/P-12/P-13");
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessBreakoutProtectPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
@@ -1932,6 +2048,9 @@ void ProcessBreakoutProtectPositionsByType(string symbol, long magic, ENUM_POSIT
    MovePositionsSL(symbol, magic, target_type, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, proposed_sl_price, "TRAIL_SL", "breakout_structure_protection", "P-10/P-11/P-12/P-13");
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessBasketEscapePositionsByType(string symbol, long magic, ENUM_POSITION_TYPE target_type, const ulong &tickets[], double total_profit, double total_volume, double weighted_price_sum, datetime earliest_open_time)
   {
    string pos_type_str = (target_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
@@ -1959,6 +2078,9 @@ void ProcessBasketEscapePositionsByType(string symbol, long magic, ENUM_POSITION
    LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BASKET_ESCAPE, "HOLD", "basket_wait_for_recovery", positions_count, net_profit, age_seconds, "P-07/P-08");
   }
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ProcessPositionsByType(string symbol,
                             long magic,
                             ENUM_POSITION_TYPE target_type,
@@ -1984,14 +2106,17 @@ void ProcessPositionsByType(string symbol,
 
    if(profile == PROFILE_CONSERVATIVE)
       ProcessConservativePositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
-   else if(profile == PROFILE_TREND_RUNNER)
-      ProcessTrendRunnerPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
-   else if(profile == PROFILE_BREAKOUT_PROTECT)
-      ProcessBreakoutProtectPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
-   else if(profile == PROFILE_BASKET_ESCAPE)
-      ProcessBasketEscapePositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
    else
-      ProcessLegacyPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+      if(profile == PROFILE_TREND_RUNNER)
+         ProcessTrendRunnerPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+      else
+         if(profile == PROFILE_BREAKOUT_PROTECT)
+            ProcessBreakoutProtectPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+         else
+            if(profile == PROFILE_BASKET_ESCAPE)
+               ProcessBasketEscapePositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
+            else
+               ProcessLegacyPositionsByType(symbol, magic, target_type, tickets, total_profit, total_volume, weighted_price_sum, earliest_open_time);
   }
 
 //+------------------------------------------------------------------+
