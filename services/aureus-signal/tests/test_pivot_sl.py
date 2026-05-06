@@ -261,6 +261,68 @@ class TestCalculateSlTpPivotPoint:
         assert sl == 2030.0
         assert tp is not None
 
+    def test_pivot_point_xau_rejects_sl_distance_greater_than_limit(self):
+        """XAU PIVOT_POINT reject khi distance > 10.0."""
+        self.state.swing_points = [
+            {"t": 900, "price": 1999.0, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
+
+        assert sl is None
+        assert tp is None
+
+    def test_pivot_point_xau_allows_sl_distance_equal_to_limit(self):
+        """XAU PIVOT_POINT allow khi distance == 10.0."""
+        self.state.swing_points = [
+            {"t": 900, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
+
+        assert sl is not None
+        assert tp is not None
+
+    def test_pivot_point_ustec_rejects_sl_distance_greater_than_limit(self):
+        """USTEC PIVOT_POINT reject khi distance > 50.0."""
+        self.state.symbol = "USTEC"
+        self.state.last_candle = {"t": 1000, "c": 15000.0, "h": 15020.0, "l": 14980.0}
+        self.trigger["side"] = "SELL"
+        self.state.swing_points = [
+            {"t": 900, "price": 15051.0, "is_high": True, "type": "HH", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
+
+        assert sl is None
+        assert tp is None
+
+    def test_pivot_point_btc_rejects_sl_distance_greater_than_limit(self):
+        """BTC PIVOT_POINT reject khi distance > 500.0."""
+        self.state.symbol = "BTCUSD"
+        self.state.last_candle = {"t": 1000, "c": 70000.0, "h": 70100.0, "l": 69900.0}
+        self.state.swing_points = [
+            {"t": 900, "price": 69499.0, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
+
+        assert sl is None
+        assert tp is None
+
+    def test_pivot_point_forex_rejects_sl_distance_greater_than_limit(self):
+        """Forex PIVOT_POINT reject khi distance > 20 * point_size."""
+        self.state.symbol = "EURUSD"
+        self.state.last_candle = {"t": 1000, "c": 1.10000, "h": 1.10100, "l": 1.09900}
+        self.state.swing_points = [
+            {"t": 900, "price": 1.09979, "is_high": False, "type": "LL", "broken": False},
+        ]
+        config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
+        sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
+
+        assert sl is None
+        assert tp is None
+
     def test_fixed_pips_unchanged(self):
         """FIXED_PIPS vẫn hoạt động bình thường (backward compatibility)."""
         self.state.swing_points = []  # Không có swing points
