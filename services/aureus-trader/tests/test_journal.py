@@ -415,6 +415,26 @@ class TestReasoningBank:
         args = snapshot_inserts[0][2]
         assert args[15] == 3
 
+    @pytest.mark.asyncio
+    async def test_on_order_opened_persists_d1_tpo_levels_to_signal_snapshot(self, journal_manager, valid_order_opened_event, mock_db_pool):
+        valid_order_opened_event["signal_snapshot"] = {
+            "tpo_d1": {"POC": 2010.1, "VAH": 2012.3, "VAL": 2008.7},
+        }
+
+        result = await journal_manager.on_order_opened(valid_order_opened_event)
+
+        assert result is True
+        snapshot_inserts = [q for q in mock_db_pool._conn.queries if "INSERT INTO aureus_trade_signal_snapshots" in q[1]]
+        assert len(snapshot_inserts) == 1
+        query = snapshot_inserts[0][1]
+        args = snapshot_inserts[0][2]
+        assert "d1_poc" in query
+        assert "d1_vah" in query
+        assert "d1_val" in query
+        assert args[35] == 2010.1
+        assert args[36] == 2012.3
+        assert args[37] == 2008.7
+
     async def test_post_snapshot_generates_reasoning_text_without_prompt_context(self, journal_manager, mock_db_pool):
         strategy_event = {
             "type": "STRATEGY_MATCH",

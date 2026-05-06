@@ -138,7 +138,16 @@ def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
         "cisd_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m15", "cisd_M15"))),
         "cisd_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m30", "cisd_M30"))),
         "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1", "cisd_H1"))),
+        "d1_poc": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_poc", "D1_POC"))),
+        "d1_vah": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_vah", "D1_VAH"))),
+        "d1_val": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_val", "D1_VAL"))),
     }
+
+    tpo_d1 = merged_snapshot.get("tpo_d1")
+    if isinstance(tpo_d1, dict):
+        columns["d1_poc"] = columns["d1_poc"] if columns["d1_poc"] is not None else _to_float_or_none(tpo_d1.get("POC", tpo_d1.get("poc")))
+        columns["d1_vah"] = columns["d1_vah"] if columns["d1_vah"] is not None else _to_float_or_none(tpo_d1.get("VAH", tpo_d1.get("vah")))
+        columns["d1_val"] = columns["d1_val"] if columns["d1_val"] is not None else _to_float_or_none(tpo_d1.get("VAL", tpo_d1.get("val")))
 
     return columns
 
@@ -533,6 +542,7 @@ class TradeJournalManager:
                                 bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
                                 bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
                                 cisd_m5, cisd_m15, cisd_m30, cisd_h1,
+                                d1_poc, d1_vah, d1_val,
                                 created_at
                             ) VALUES (
                                 $1, $2, $3, $4, $5, $6,
@@ -543,7 +553,8 @@ class TradeJournalManager:
                                 $22, $23, $24, $25, $26, $27,
                                 $28, $29, $30, $31,
                                 $32, $33, $34, $35,
-                                $36
+                                $36, $37, $38,
+                                $39
                             )
                             ON CONFLICT (trade_journal_id) DO NOTHING
                             RETURNING id
@@ -583,6 +594,9 @@ class TradeJournalManager:
                             snapshot_columns["cisd_m15"],
                             snapshot_columns["cisd_m30"],
                             snapshot_columns["cisd_h1"],
+                            snapshot_columns["d1_poc"],
+                            snapshot_columns["d1_vah"],
+                            snapshot_columns["d1_val"],
                             entry_time,
                         )
                         if snapshot_id is None:
