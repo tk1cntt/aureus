@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-06 - Completed quick task 260506-rkn: Pivot SL distance limits
+last_activity: 2026-05-06 - Completed quick task 260506-u8k: Exit reason normalize
 progress:
   total_phases: 4
   completed_phases: 2
@@ -131,6 +131,7 @@ Last activity: 2026-05-02 - Completed quick task 260502-wur: Thực hiện imple
 | 260504-rhc | Fix Telegram close order pips and RR metrics | 2026-05-04 | 61271b2 | Verified | [260504-rhc-fix-telegram-order-closed-metrics-to-use](./quick/260504-rhc-fix-telegram-order-closed-metrics-to-use/) |
 | 260506-qy2 | Pivot SL time-order selection | 2026-05-06 | c1e2e72 | Verified | [260506-qy2-pivot-sl-time-order](./quick/260506-qy2-pivot-sl-time-order/) |
 | 260506-rkn | Pivot SL distance limits | 2026-05-06 | 5b6743c | Verified | [260506-rkn-pivot-sl-distance-limits](./quick/260506-rkn-pivot-sl-distance-limits/) |
+| 260506-u8k | Exit reason normalize | 2026-05-06 | 2e71631 | Verified | [260506-u8k-exit-reason-normalize](./quick/260506-u8k-exit-reason-normalize/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
