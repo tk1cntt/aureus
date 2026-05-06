@@ -582,7 +582,7 @@ class SimulatedTradeManager:
         if len(state_obj.order_rejections) > 500:
             state_obj.order_rejections = state_obj.order_rejections[-500:]
 
-    def _find_pivot_for_sl_candidates(self, side: str, state_obj: Any) -> List[float]:
+    def _find_pivot_for_sl_candidates(self, side: str, state_obj: Any) -> List[Dict[str, float]]:
         """Trả về danh sách pivot candidates hợp lệ cho PIVOT_POINT SL.
 
         BUY → LL (Lower Low) gần nhất chưa broken.
@@ -593,9 +593,9 @@ class SimulatedTradeManager:
             return []
 
         is_high = ('SELL' in side)  # SELL cần HH, BUY cần LL
-        pivots: List[float] = []
+        pivots: List[Dict[str, float]] = []
 
-        for sp in reversed(swing_points):
+        for sp in swing_points:
             if sp.get('is_high') != is_high:
                 continue
             if sp.get('broken') is True:
@@ -606,7 +606,7 @@ class SimulatedTradeManager:
             if not is_high and sp_type != 'LL':
                 continue
             try:
-                pivots.append(float(sp['price']))
+                pivots.append({"price": float(sp['price']), "t": float(sp['t'])})
             except (TypeError, ValueError, KeyError):
                 continue
 
@@ -683,8 +683,9 @@ class SimulatedTradeManager:
 
             pivot_index = int(sl_cfg.get('pivot_index', 1) or 1)
             pivot_index = max(1, pivot_index)
-            valid_pivots: List[float] = []
-            for pivot_price in pivots:
+            valid_pivots: List[Dict[str, float]] = []
+            for pivot in pivots:
+                pivot_price = pivot["price"]
                 if len(lows) >= 5 and len(highs) >= 5:
                     if 'BUY' in side:
                         if min(lows) <= pivot_price:
@@ -700,11 +701,11 @@ class SimulatedTradeManager:
                                 f"because max(high_5)={max(highs)} >= pivot"
                             )
                             continue
-                valid_pivots.append(pivot_price)
+                valid_pivots.append(pivot)
 
-            valid_pivots.sort(reverse=('BUY' in side))
+            valid_pivots.sort(key=lambda pivot: pivot["t"], reverse=True)
             if len(valid_pivots) >= pivot_index:
-                selected_pivot = valid_pivots[pivot_index - 1]
+                selected_pivot = valid_pivots[pivot_index - 1]["price"]
 
             if selected_pivot is None:
                 logger.warning(

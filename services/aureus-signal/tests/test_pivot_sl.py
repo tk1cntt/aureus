@@ -29,7 +29,8 @@ class TestFindPivotForSl:
             {"t": 300, "price": 2005.0, "is_high": False, "type": "LL", "broken": False},
         ])
         result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
-        assert result and result[0] == 2005.0  # LL gần nhất (t=300)
+        assert result and result[0]["price"] == 2000.0
+        assert result[1]["price"] == 2005.0  # carries t metadata for caller-side time sort
 
     def test_sell_finds_nearest_hh(self):
         """SELL tìm HH gần nhất chưa broken."""
@@ -39,7 +40,8 @@ class TestFindPivotForSl:
             {"t": 300, "price": 2015.0, "is_high": True, "type": "HH", "broken": False},
         ])
         result = self.tm._find_pivot_for_sl_candidates("SELL", self.state)
-        assert result and result[0] == 2015.0  # HH gần nhất (t=300)
+        assert result and result[0]["price"] == 2000.0
+        assert result[1]["price"] == 2015.0  # carries t metadata for caller-side time sort
 
     def test_skips_broken_pivots(self):
         """Bỏ qua pivot đã broken, tìm pivot trước đó."""
@@ -48,7 +50,7 @@ class TestFindPivotForSl:
             {"t": 200, "price": 2005.0, "is_high": False, "type": "LL", "broken": True},
         ])
         result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
-        assert result and result[0] == 2000.0  # Pivot t=200 bị broken, lùi về t=100
+        assert result and result[0]["price"] == 2000.0  # Pivot t=200 bị broken, lùi về t=100
 
     def test_returns_empty_if_no_swing_points(self):
         """Return [] khi swing_points rỗng."""
@@ -72,7 +74,7 @@ class TestFindPivotForSl:
             {"t": 200, "price": 2000.0, "is_high": False, "type": "LL", "broken": False},
         ])
         result = self.tm._find_pivot_for_sl_candidates("BUY", self.state)
-        assert result and result[0] == 2000.0  # Bỏ qua LH, lấy LL
+        assert result and result[0]["price"] == 2000.0  # Bỏ qua LH, lấy LL
 
 
 class TestCalculateSlTpPivotPoint:
@@ -134,7 +136,7 @@ class TestCalculateSlTpPivotPoint:
             {"h": 2019, "l": 2004},
         ]
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config, recent_candles=recent_candles)
-        assert sl == 1990.0
+        assert sl == 1980.0
         assert tp is not None
 
     def test_pivot_point_buy_selects_newest_valid_pivot_by_time(self):
