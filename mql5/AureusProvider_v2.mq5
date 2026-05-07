@@ -11,10 +11,7 @@
 //--- Includes
 #include "AureusSocketLib.mqh"
 #include <Trade/Trade.mqh>
-#include "OpenAlgo/WinINet.mqh"
-#include "OpenAlgo/CommonDefs.mqh"
-#include "OpenAlgo/UrlParser.mqh"
-#include "OpenAlgo/ErrorHandler.mqh"
+#include "OpenAlgo/OpenAlgoApi.mqh"
 //+------------------------------------------------------------------+
 //| Input Parameters                                                   |
 //+------------------------------------------------------------------+
@@ -1535,83 +1532,6 @@ bool MapOpenAlgoPriceType(string orderType, PriceTypes &priceType, double price,
   }
 
 //+------------------------------------------------------------------+
-//| Send OpenAlgo order and return success/failure                    |
-//+------------------------------------------------------------------+
-bool SendOpenAlgoOrder(string actionParam, int quantityParam, string strategyParam, string symbolParam,
-                       PriceTypes priceTypeParam, double priceParam, double triggerPriceParam,
-                       int &statusCode, string &responseBody)
-  {
-   WininetRequest req;
-   WininetResponse res;
-
-   string host, path;
-   int port;
-   ParseUrl(InpOpenAlgoApiUrl, host, path, port);
-
-   string exchangeStr = "NSE";
-   switch(InpOpenAlgoExchange)
-     {
-      case NSE: exchangeStr = "NSE"; break;
-      case NFO: exchangeStr = "NFO"; break;
-      case CDS: exchangeStr = "CDS"; break;
-      case BSE: exchangeStr = "BSE"; break;
-      case BFO: exchangeStr = "BFO"; break;
-      case BCD: exchangeStr = "BCD"; break;
-      case MCX: exchangeStr = "MCX"; break;
-      case NCDEX: exchangeStr = "NCDEX"; break;
-     }
-
-   string productTypeStr = "MIS";
-   switch(InpOpenAlgoProduct)
-     {
-      case CNC: productTypeStr = "CNC"; break;
-      case NRML: productTypeStr = "NRML"; break;
-      case MIS: productTypeStr = "MIS"; break;
-     }
-
-   string priceTypeStr = "MARKET";
-   switch(priceTypeParam)
-     {
-      case MARKET: priceTypeStr = "MARKET"; break;
-      case LIMIT: priceTypeStr = "LIMIT"; break;
-      case SL: priceTypeStr = "SL"; break;
-      case SLM: priceTypeStr = "SL-M"; break;
-     }
-
-   req.method = "POST";
-   req.host = host;
-   req.path = path + "/api/v1/placeorder";
-   req.port = port;
-   req.headers = "Content-Type: application/json; charset=UTF-8\r\n";
-
-   string postData = StringFormat("{\"apikey\":\"%s\",\"strategy\":\"%s\",\"symbol\":\"%s\",\"action\":\"%s\",\"exchange\":\"%s\",\"pricetype\":\"%s\",\"product\":\"%s\",\"quantity\":%d",
-                                  InpOpenAlgoApiKey, strategyParam, symbolParam, actionParam, exchangeStr, priceTypeStr, productTypeStr, quantityParam);
-   if(priceParam > 0.0)
-      postData += StringFormat(",\"price\":%g", priceParam);
-   if(triggerPriceParam > 0.0)
-      postData += StringFormat(",\"trigger_price\":%g", triggerPriceParam);
-   postData += "}";
-
-   req.data_str = postData;
-   LogRequest("AureusOpenAlgoPlaceOrder", req);
-
-   bool ok = WebReqWithRetry(req, res, "AureusOpenAlgoPlaceOrder");
-   statusCode = res.status;
-   responseBody = res.GetDataStr();
-   if(ok)
-     {
-      LogResponse("AureusOpenAlgoPlaceOrder", res);
-      return true;
-     }
-
-   if(statusCode <= 0)
-      LogNetworkError("AureusOpenAlgoPlaceOrder", "Request failed");
-   else
-      LogApiError("AureusOpenAlgoPlaceOrder", statusCode, responseBody);
-   return false;
-  }
-
-//+------------------------------------------------------------------+
 //| Log native MT5 opened order to OpenAlgo best-effort               |
 //+------------------------------------------------------------------+
 void LogOpenAlgoOrderOpened(string cmdId, string symbol, string direction, string orderType,
@@ -1649,13 +1569,11 @@ void LogOpenAlgoOrderOpened(string cmdId, string symbol, string direction, strin
    if(openAlgoStrategy == "")
       openAlgoStrategy = InpOpenAlgoStrategy;
 
-   int statusCode = 0;
-   string responseBody = "";
-   bool sent = SendOpenAlgoOrder(action, quantity, openAlgoStrategy, openAlgoSymbol,
-                                 priceType, priceParam, triggerPriceParam,
-                                 statusCode, responseBody);
-   if(InpDebugMode || !sent)
-      PrintFormat("[OpenAlgoLog] cmd_id=%s symbol=%s sent=%s status=%d", cmdId, openAlgoSymbol, sent ? "true" : "false", statusCode);
+   PlaceOrder(action, quantity, InpOpenAlgoApiUrl, InpOpenAlgoApiKey,
+              openAlgoStrategy, openAlgoSymbol, InpOpenAlgoExchange,
+              InpOpenAlgoProduct, priceType, priceParam, triggerPriceParam);
+   if(InpDebugMode)
+      PrintFormat("[OpenAlgoLog] PlaceOrder sent cmd_id=%s symbol=%s action=%s quantity=%d", cmdId, openAlgoSymbol, action, quantity);
   }
 
 //+------------------------------------------------------------------+

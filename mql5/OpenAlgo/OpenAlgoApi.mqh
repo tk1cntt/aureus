@@ -5,10 +5,10 @@
 //+------------------------------------------------------------------+
 
 #include <Trade/Trade.mqh>
-#include <OpenAlgo/WinINet.mqh>
-#include <OpenAlgo/CommonDefs.mqh>
-#include <OpenAlgo/UrlParser.mqh>
-#include <OpenAlgo/ErrorHandler.mqh>
+#include "WinINet.mqh"
+#include "CommonDefs.mqh"
+#include "UrlParser.mqh"
+#include "ErrorHandler.mqh"
 
 #property copyright "Copyright 2024, OpenAlgo.in"
 #property link      "https://www.openalgo.in"
