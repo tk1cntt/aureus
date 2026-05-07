@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS aureus_trade_signal_snapshots (
     d1_poc DOUBLE PRECISION,
     d1_vah DOUBLE PRECISION,
     d1_val DOUBLE PRECISION,
+    d1_open DOUBLE PRECISION,
+    d1_high DOUBLE PRECISION,
+    d1_low DOUBLE PRECISION,
+    d1_close DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_trade_signal_snapshot_trade_schema UNIQUE (trade_journal_id, signal_schema_version)
 );
@@ -25,7 +29,11 @@ ALTER TABLE aureus_trade_signal_snapshots
     ADD COLUMN IF NOT EXISTS signal_schema_version TEXT,
     ADD COLUMN IF NOT EXISTS d1_poc DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS d1_vah DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS d1_val DOUBLE PRECISION;
+    ADD COLUMN IF NOT EXISTS d1_val DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_open DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_high DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_low DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_close DOUBLE PRECISION;
 
 ALTER TABLE aureus_trade_signal_snapshots
     DROP COLUMN IF EXISTS signal_snapshot,
@@ -87,7 +95,11 @@ CREATE INDEX IF NOT EXISTS idx_trade_signal_snapshot_archive_archived_at_brin
 ALTER TABLE aureus_trade_signal_snapshots_archive
     ADD COLUMN IF NOT EXISTS d1_poc DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS d1_vah DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS d1_val DOUBLE PRECISION;
+    ADD COLUMN IF NOT EXISTS d1_val DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_open DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_high DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_low DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS d1_close DOUBLE PRECISION;
 
 ALTER TABLE aureus_trade_signal_snapshots_archive
     DROP COLUMN IF EXISTS signal_snapshot,
@@ -113,11 +125,11 @@ BEGIN
     ), archived AS (
         INSERT INTO aureus_trade_signal_snapshots_archive (
             snapshot_id, trade_journal_id, trace_id, ticket, strategy_name, symbol,
-            timeframe, signal_schema_version, d1_poc, d1_vah, d1_val, created_at
+            timeframe, signal_schema_version, d1_poc, d1_vah, d1_val, d1_open, d1_high, d1_low, d1_close, created_at
         )
         SELECT
             s.id, s.trade_journal_id, s.trace_id, s.ticket, s.strategy_name, s.symbol,
-            s.timeframe, s.signal_schema_version, s.d1_poc, s.d1_vah, s.d1_val, s.created_at
+            s.timeframe, s.signal_schema_version, s.d1_poc, s.d1_vah, s.d1_val, s.d1_open, s.d1_high, s.d1_low, s.d1_close, s.created_at
         FROM aureus_trade_signal_snapshots s
         JOIN candidates c ON c.id = s.id
         ON CONFLICT DO NOTHING

@@ -462,6 +462,10 @@ async def test_signal_snapshot_mapping_supports_bullish_bearish_and_extra_column
             "atr_14": 12.34,
             "vol_sma20": 9876.5,
             "session": "LONDON",
+            "d1_open": 3310.1,
+            "d1_high": 3340.2,
+            "d1_low": 3300.3,
+            "d1_close": 3333.4,
             "candle_color_d1": "BULLISH",
             "candle_color_h1": "BEARISH",
             "candle_color_M30": "BULLISH",
@@ -494,6 +498,10 @@ async def test_signal_snapshot_mapping_supports_bullish_bearish_and_extra_column
     assert args[32] == -1                        # cisd_m15
     assert args[33] == 1                         # cisd_m30
     assert args[34] == -1                        # cisd_h1
+    assert args[38] == pytest.approx(3310.1)     # d1_open
+    assert args[39] == pytest.approx(3340.2)     # d1_high
+    assert args[40] == pytest.approx(3300.3)     # d1_low
+    assert args[41] == pytest.approx(3333.4)     # d1_close
 
 
 @pytest.mark.asyncio
