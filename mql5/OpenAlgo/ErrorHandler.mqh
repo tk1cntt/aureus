@@ -10,7 +10,7 @@
 #ifndef ERROR_HANDLER_MQH
 #define ERROR_HANDLER_MQH
 
-#include <OpenAlgo/WinINet.mqh>
+#include "WinINet.mqh"
 
 //+------------------------------------------------------------------+
 //| Error Handling Constants                                          |

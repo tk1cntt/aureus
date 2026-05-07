@@ -11,7 +11,10 @@
 //--- Includes
 #include "AureusSocketLib.mqh"
 #include <Trade/Trade.mqh>
-#include <OpenAlgo/OpenAlgoApi.mqh>
+#include "OpenAlgo/WinINet.mqh"
+#include "OpenAlgo/CommonDefs.mqh"
+#include "OpenAlgo/UrlParser.mqh"
+#include "OpenAlgo/ErrorHandler.mqh"
 //+------------------------------------------------------------------+
 //| Input Parameters                                                   |
 //+------------------------------------------------------------------+
@@ -30,7 +33,7 @@ input int      InpMaxCmdIdHistory    = 500;                      // Max command 
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
 input double   InpBEProfitTarget     = 20.0;                     // Profit target ($) to activate breakeven management
 input string   InpMagicManagementProfiles = "607000:breakout_protect;2603000:trend_runner;1391000:basket_escape"; // magic:profile pairs
-input bool     InpUseOpenAlgoBridge  = false;                    // Route OPEN_ORDER to OpenAlgo instead of native MT5
+input bool     InpLogOrdersToOpenAlgo = false;                    // Best-effort OpenAlgo order logging after native MT5 open
 input string   InpOpenAlgoApiUrl     = "http://127.0.0.1:5000"; // OpenAlgo API URL
 input string   InpOpenAlgoApiKey     = "your_app_apikey";       // OpenAlgo API key
 input string   InpOpenAlgoStrategy   = "AureusProvider_v2";     // OpenAlgo strategy name fallback
@@ -1609,17 +1612,20 @@ bool SendOpenAlgoOrder(string actionParam, int quantityParam, string strategyPar
   }
 
 //+------------------------------------------------------------------+
-//| Execute OPEN_ORDER through OpenAlgo bridge                        |
+//| Log native MT5 opened order to OpenAlgo best-effort               |
 //+------------------------------------------------------------------+
-bool TryExecuteOpenAlgoOrder(string cmdId, string symbol, string direction, string orderType,
-                             double volume, double price, double sl, double tp, long magic,
-                             string strategyName, string traceId)
+void LogOpenAlgoOrderOpened(string cmdId, string symbol, string direction, string orderType,
+                            double volume, double price, string strategyName)
   {
+   if(!InpLogOrdersToOpenAlgo)
+      return;
+
    string action = direction;
    if(action != "BUY" && action != "SELL")
      {
-      SendNACK(cmdId, "INVALID_COMMAND");
-      return true;
+      if(InpDebugMode)
+         PrintFormat("[OpenAlgoLog] skipped cmd_id=%s symbol=%s reason=INVALID_DIRECTION direction=%s", cmdId, symbol, direction);
+      return;
      }
 
    PriceTypes priceType;
@@ -1627,8 +1633,8 @@ bool TryExecuteOpenAlgoOrder(string cmdId, string symbol, string direction, stri
    double triggerPriceParam = 0.0;
    if(!MapOpenAlgoPriceType(orderType, priceType, price, priceParam, triggerPriceParam))
      {
-      PushOrderFailed(cmdId, symbol, "OPENALGO_UNSUPPORTED_ORDER_TYPE", 0, price, 0.0, 0.0);
-      return true;
+      PrintFormat("[OpenAlgoLog] skipped cmd_id=%s symbol=%s reason=UNSUPPORTED_ORDER_TYPE order_type=%s", cmdId, symbol, orderType);
+      return;
      }
 
    int quantity = (int)MathRound(volume);
@@ -1643,26 +1649,13 @@ bool TryExecuteOpenAlgoOrder(string cmdId, string symbol, string direction, stri
    if(openAlgoStrategy == "")
       openAlgoStrategy = InpOpenAlgoStrategy;
 
-   SendACK(cmdId);
-   RecordCmdId(cmdId);
-
    int statusCode = 0;
    string responseBody = "";
    bool sent = SendOpenAlgoOrder(action, quantity, openAlgoStrategy, openAlgoSymbol,
                                  priceType, priceParam, triggerPriceParam,
                                  statusCode, responseBody);
-   if(sent)
-     {
-      PushOrderOpened(cmdId, symbol, 0, direction, orderType, volume, price, sl, tp, magic, strategyName, traceId);
-      g_ordersExecuted++;
-      if(InpDebugMode)
-         PrintFormat("[OpenAlgoBridge] ORDER_OPENED accepted cmd_id=%s symbol=%s status=%d", cmdId, openAlgoSymbol, statusCode);
-      return true;
-     }
-
-   PushOrderFailed(cmdId, symbol, "OPENALGO_PLACEORDER_FAILED", statusCode, price, 0.0, 0.0);
-   g_ordersFailed++;
-   return true;
+   if(InpDebugMode || !sent)
+      PrintFormat("[OpenAlgoLog] cmd_id=%s symbol=%s sent=%s status=%d", cmdId, openAlgoSymbol, sent ? "true" : "false", statusCode);
   }
 
 //+------------------------------------------------------------------+
@@ -1670,7 +1663,7 @@ bool TryExecuteOpenAlgoOrder(string cmdId, string symbol, string direction, stri
 //+------------------------------------------------------------------+
 string DealReasonToCloseReason(long reason)
   {
-   switch(reason)
+   switch((int)reason)
      {
       case DEAL_REASON_TP:
          return "TP";
@@ -2948,15 +2941,6 @@ void ExecuteOpenOrder(const string &raw)
       return;
      }
 
-// Optional OpenAlgo bridge before native MT5 side effects
-   if(InpUseOpenAlgoBridge)
-     {
-      TryExecuteOpenAlgoOrder(cmdId, symbol, direction, orderType,
-                              volume, price, sl, tp, magic,
-                              strategyName, traceId);
-      return;
-     }
-
 // ACK — command accepted
    SendACK(cmdId);
    RecordCmdId(cmdId);
@@ -3189,6 +3173,7 @@ void ExecuteOpenOrder(const string &raw)
               {
                PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
                                volume, result.price, request.sl, request.tp, magic, strategyName, traceId);
+               LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, result.price, strategyName);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -3240,6 +3225,7 @@ void ExecuteOpenOrder(const string &raw)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
                                volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
+               LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, filledEntry, strategyName);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -3272,6 +3258,7 @@ void ExecuteOpenOrder(const string &raw)
               {
                PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
                                volume, filledEntry, slFinal, tpBefore, magic, strategyName, traceId);
+               LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, filledEntry, strategyName);
                terminalEventSent = true;
                g_ordersExecuted++;
               }
@@ -3282,6 +3269,7 @@ void ExecuteOpenOrder(const string &raw)
            {
             PushOrderOpened(cmdId, symbol, (long)positionTicket, direction, orderType,
                             volume, filledEntry, slFinal, tpAfter, magic, strategyName, traceId);
+            LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, filledEntry, strategyName);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
@@ -3294,6 +3282,7 @@ void ExecuteOpenOrder(const string &raw)
            {
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
                             volume, result.price, sl, tp, magic, strategyName, traceId);
+            LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, result.price, strategyName);
             terminalEventSent = true;
             g_ordersExecuted++;
            }
