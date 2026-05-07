@@ -11,6 +11,7 @@
 //--- Includes
 #include "AureusSocketLib.mqh"
 #include <Trade/Trade.mqh>
+#include <OpenAlgo/OpenAlgoApi.mqh>
 //+------------------------------------------------------------------+
 //| Input Parameters                                                   |
 //+------------------------------------------------------------------+
@@ -29,6 +30,13 @@ input int      InpMaxCmdIdHistory    = 500;                      // Max command 
 input double   InpRiskFixedAmountBudget = 50.0;                  // Default budget for RISK_FIXED_AMOUNT mode ($)
 input double   InpBEProfitTarget     = 20.0;                     // Profit target ($) to activate breakeven management
 input string   InpMagicManagementProfiles = "607000:breakout_protect;2603000:trend_runner;1391000:basket_escape"; // magic:profile pairs
+input bool     InpUseOpenAlgoBridge  = false;                    // Route OPEN_ORDER to OpenAlgo instead of native MT5
+input string   InpOpenAlgoApiUrl     = "http://127.0.0.1:5000"; // OpenAlgo API URL
+input string   InpOpenAlgoApiKey     = "your_app_apikey";       // OpenAlgo API key
+input string   InpOpenAlgoStrategy   = "AureusProvider_v2";     // OpenAlgo strategy name fallback
+input string   InpOpenAlgoSymbol     = "";                      // Optional OpenAlgo symbol override
+input Exchanges InpOpenAlgoExchange  = NSE;                     // OpenAlgo exchange
+input ProductTypes InpOpenAlgoProduct = MIS;                    // OpenAlgo product
 input bool     InpDebugMode          = false;
 //+------------------------------------------------------------------+
 //| Per-Symbol State                                                   |
@@ -1489,6 +1497,175 @@ void PushOrderFailed(string cmdId, string symbol, string reason, int retcode,
   }
 
 //+------------------------------------------------------------------+
+//| Map Aureus order type to OpenAlgo price type                      |
+//+------------------------------------------------------------------+
+bool MapOpenAlgoPriceType(string orderType, PriceTypes &priceType, double price, double &priceParam, double &triggerPriceParam)
+  {
+   priceParam = 0.0;
+   triggerPriceParam = 0.0;
+
+   if(orderType == "MARKET")
+     {
+      priceType = MARKET;
+      return true;
+     }
+
+   if(orderType == "LIMIT")
+     {
+      if(price <= 0.0)
+         return false;
+      priceType = LIMIT;
+      priceParam = price;
+      return true;
+     }
+
+   if(orderType == "STOP")
+     {
+      if(price <= 0.0)
+         return false;
+      priceType = SLM;
+      triggerPriceParam = price;
+      return true;
+     }
+
+   return false;
+  }
+
+//+------------------------------------------------------------------+
+//| Send OpenAlgo order and return success/failure                    |
+//+------------------------------------------------------------------+
+bool SendOpenAlgoOrder(string actionParam, int quantityParam, string strategyParam, string symbolParam,
+                       PriceTypes priceTypeParam, double priceParam, double triggerPriceParam,
+                       int &statusCode, string &responseBody)
+  {
+   WininetRequest req;
+   WininetResponse res;
+
+   string host, path;
+   int port;
+   ParseUrl(InpOpenAlgoApiUrl, host, path, port);
+
+   string exchangeStr = "NSE";
+   switch(InpOpenAlgoExchange)
+     {
+      case NSE: exchangeStr = "NSE"; break;
+      case NFO: exchangeStr = "NFO"; break;
+      case CDS: exchangeStr = "CDS"; break;
+      case BSE: exchangeStr = "BSE"; break;
+      case BFO: exchangeStr = "BFO"; break;
+      case BCD: exchangeStr = "BCD"; break;
+      case MCX: exchangeStr = "MCX"; break;
+      case NCDEX: exchangeStr = "NCDEX"; break;
+     }
+
+   string productTypeStr = "MIS";
+   switch(InpOpenAlgoProduct)
+     {
+      case CNC: productTypeStr = "CNC"; break;
+      case NRML: productTypeStr = "NRML"; break;
+      case MIS: productTypeStr = "MIS"; break;
+     }
+
+   string priceTypeStr = "MARKET";
+   switch(priceTypeParam)
+     {
+      case MARKET: priceTypeStr = "MARKET"; break;
+      case LIMIT: priceTypeStr = "LIMIT"; break;
+      case SL: priceTypeStr = "SL"; break;
+      case SLM: priceTypeStr = "SL-M"; break;
+     }
+
+   req.method = "POST";
+   req.host = host;
+   req.path = path + "/api/v1/placeorder";
+   req.port = port;
+   req.headers = "Content-Type: application/json; charset=UTF-8\r\n";
+
+   string postData = StringFormat("{\"apikey\":\"%s\",\"strategy\":\"%s\",\"symbol\":\"%s\",\"action\":\"%s\",\"exchange\":\"%s\",\"pricetype\":\"%s\",\"product\":\"%s\",\"quantity\":%d",
+                                  InpOpenAlgoApiKey, strategyParam, symbolParam, actionParam, exchangeStr, priceTypeStr, productTypeStr, quantityParam);
+   if(priceParam > 0.0)
+      postData += StringFormat(",\"price\":%g", priceParam);
+   if(triggerPriceParam > 0.0)
+      postData += StringFormat(",\"trigger_price\":%g", triggerPriceParam);
+   postData += "}";
+
+   req.data_str = postData;
+   LogRequest("AureusOpenAlgoPlaceOrder", req);
+
+   bool ok = WebReqWithRetry(req, res, "AureusOpenAlgoPlaceOrder");
+   statusCode = res.status;
+   responseBody = res.GetDataStr();
+   if(ok)
+     {
+      LogResponse("AureusOpenAlgoPlaceOrder", res);
+      return true;
+     }
+
+   if(statusCode <= 0)
+      LogNetworkError("AureusOpenAlgoPlaceOrder", "Request failed");
+   else
+      LogApiError("AureusOpenAlgoPlaceOrder", statusCode, responseBody);
+   return false;
+  }
+
+//+------------------------------------------------------------------+
+//| Execute OPEN_ORDER through OpenAlgo bridge                        |
+//+------------------------------------------------------------------+
+bool TryExecuteOpenAlgoOrder(string cmdId, string symbol, string direction, string orderType,
+                             double volume, double price, double sl, double tp, long magic,
+                             string strategyName, string traceId)
+  {
+   string action = direction;
+   if(action != "BUY" && action != "SELL")
+     {
+      SendNACK(cmdId, "INVALID_COMMAND");
+      return true;
+     }
+
+   PriceTypes priceType;
+   double priceParam = 0.0;
+   double triggerPriceParam = 0.0;
+   if(!MapOpenAlgoPriceType(orderType, priceType, price, priceParam, triggerPriceParam))
+     {
+      PushOrderFailed(cmdId, symbol, "OPENALGO_UNSUPPORTED_ORDER_TYPE", 0, price, 0.0, 0.0);
+      return true;
+     }
+
+   int quantity = (int)MathRound(volume);
+   if(quantity <= 0)
+      quantity = 1;
+
+   string openAlgoSymbol = InpOpenAlgoSymbol;
+   if(openAlgoSymbol == "")
+      openAlgoSymbol = symbol;
+
+   string openAlgoStrategy = strategyName;
+   if(openAlgoStrategy == "")
+      openAlgoStrategy = InpOpenAlgoStrategy;
+
+   SendACK(cmdId);
+   RecordCmdId(cmdId);
+
+   int statusCode = 0;
+   string responseBody = "";
+   bool sent = SendOpenAlgoOrder(action, quantity, openAlgoStrategy, openAlgoSymbol,
+                                 priceType, priceParam, triggerPriceParam,
+                                 statusCode, responseBody);
+   if(sent)
+     {
+      PushOrderOpened(cmdId, symbol, 0, direction, orderType, volume, price, sl, tp, magic, strategyName, traceId);
+      g_ordersExecuted++;
+      if(InpDebugMode)
+         PrintFormat("[OpenAlgoBridge] ORDER_OPENED accepted cmd_id=%s symbol=%s status=%d", cmdId, openAlgoSymbol, statusCode);
+      return true;
+     }
+
+   PushOrderFailed(cmdId, symbol, "OPENALGO_PLACEORDER_FAILED", statusCode, price, 0.0, 0.0);
+   g_ordersFailed++;
+   return true;
+  }
+
+//+------------------------------------------------------------------+
 //| Map MT5 deal close reason to stable provider reason               |
 //+------------------------------------------------------------------+
 string DealReasonToCloseReason(long reason)
@@ -2768,6 +2945,15 @@ void ExecuteOpenOrder(const string &raw)
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
      {
       SendNACK(cmdId, "TRADE_DISABLED");
+      return;
+     }
+
+// Optional OpenAlgo bridge before native MT5 side effects
+   if(InpUseOpenAlgoBridge)
+     {
+      TryExecuteOpenAlgoOrder(cmdId, symbol, direction, orderType,
+                              volume, price, sl, tp, magic,
+                              strategyName, traceId);
       return;
      }
 
