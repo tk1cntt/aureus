@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-07 - Completed quick task 260507-tau: Pending fill notification DB linkage
+Last activity: 2026-05-07 - Completed quick task 260507-u2b: INVALID_STOPS root-cause analysis
 
 ## Architecture Decision
 
@@ -138,7 +138,8 @@ Last activity: 2026-05-07 - Completed quick task 260507-tau: Pending fill notifi
 | 260507-qqh | Lưu thêm thông tin O H L C của D1 tại thời điểm vào lệnh vào aureus_trade_signal_snapshots | 2026-05-07 | (pending commit) | Verified | [260507-qqh-persist-d1-ohlc-snapshot](./quick/260507-qqh-persist-d1-ohlc-snapshot/) |
 | 260507-rrs | Kiểm tra xem tại sao dữ liệu POC VAL VAH của D1 chưa được lưu vào bảng snapshots. Dữ liệu đầu vào đã có hay chưa | 2026-05-07 | (pending commit) | Verified | [260507-rrs-d1-tpo-snapshot-check](./quick/260507-rrs-d1-tpo-snapshot-check/) |
 | 260507-s1s | Thực hiện fix lỗi theo như report đi | 2026-05-07 | (pending commit) | Verified | [260507-s1s-fix-d1-tpo-snapshot](./quick/260507-s1s-fix-d1-tpo-snapshot/) |
-| 260507-tau | Kiểm tra và fix pending order fill notification/update DB linkage | 2026-05-07 | (pending commit) | Verified | [260507-tau-pending-fill-update](./quick/260507-tau-pending-fill-update/) |
+| 260507-tau | Kiểm tra và fix pending order fill notification/update DB linkage | 2026-05-07 | c43467d | Verified | [260507-tau-pending-fill-update](./quick/260507-tau-pending-fill-update/) |
+| 260507-u2b | Phân tích nguyên nhân lỗi INVALID_STOPS retcode 10016 BTCUSD market SELL AureusProvider_v2 | 2026-05-07 | (pending commit) | Verified | [260507-u2b-invalid-stops-analysis](./quick/260507-u2b-invalid-stops-analysis/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
