@@ -6,6 +6,7 @@ command schema and generates deterministic idempotency keys.
 """
 import hashlib
 import os
+from numbers import Real
 
 
 # RISK_FIXED_AMOUNT default budget (configurable via .env)
@@ -20,6 +21,12 @@ def _get_default_risk_budget() -> float:
         except (ValueError, TypeError):
             pass
     return 50.0
+
+
+def _require_numeric_stop(value, field_name: str):
+    if not isinstance(value, Real) or isinstance(value, bool):
+        raise ValueError(f"{field_name} must be numeric before MT5 dispatch")
+    return value
 
 
 def generate_cmd_id(event: dict) -> str:
@@ -49,8 +56,8 @@ def build_order_command(match_event: dict) -> dict:
 
     # Accept both naming conventions
     direction = data.get("direction") or data.get("side")
-    sl = data.get("sl_absolute") or data.get("sl")
-    tp = data.get("tp_absolute") or data.get("tp")
+    sl = _require_numeric_stop(data.get("sl_absolute") or data.get("sl"), "sl")
+    tp = _require_numeric_stop(data.get("tp_absolute") or data.get("tp"), "tp")
 
     size_mode = data.get("size_mode", "FIXED_UNITS")
     risk_amount = data.get("risk_amount")

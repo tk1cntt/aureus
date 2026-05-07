@@ -156,6 +156,26 @@ class TestBuildOrderCommand:
 
         assert "tp_rr_ratio" not in cmd
 
+    def test_reject_object_sl_before_mt5_dispatch(self):
+        event = _make_match_event({"data": {"sl_absolute": None, "sl": {"type": "PIVOT_POINT", "offset_pips": 1}}})
+
+        with pytest.raises(ValueError, match="sl must be numeric"):
+            build_order_command(event)
+
+    def test_reject_object_tp_before_mt5_dispatch(self):
+        event = _make_match_event({"data": {"tp_absolute": None, "tp": {"type": "RR_RATIO", "value": 1.5}}})
+
+        with pytest.raises(ValueError, match="tp must be numeric"):
+            build_order_command(event)
+
+    def test_numeric_absolute_sl_tp_still_pass_through(self):
+        event = _make_match_event({"data": {"sl_absolute": 80590.94, "tp_absolute": 79377.85}})
+
+        cmd = build_order_command(event)
+
+        assert cmd["sl"] == 80590.94
+        assert cmd["tp"] == 79377.85
+
     def test_build_limit_order(self):
         event = _make_match_event(
             {
