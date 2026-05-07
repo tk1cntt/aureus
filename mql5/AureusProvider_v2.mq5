@@ -1447,6 +1447,32 @@ void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
   }
 
 //+------------------------------------------------------------------+
+//| Push ORDER_FILLED event for pending-order execution                |
+//+------------------------------------------------------------------+
+void PushOrderFilled(string symbol, long dealTicket, long positionTicket,
+                     long pendingOrderId, string direction, double volume,
+                     double openPrice, double sl, double tp, long magic,
+                     string strategyName = "", string traceId = "", string comment = "",
+                     long fillTime = 0)
+  {
+   long timeSec = (fillTime > 0) ? fillTime : (long)TimeCurrent();
+   long timeMs = timeSec * 1000;
+   string json = StringFormat(
+                    "{\"type\":\"ORDER_FILLED\",\"symbol\":\"%s\",\"deal_ticket\":%lld,"
+                    "\"position_ticket\":%lld,\"pending_order_id\":%lld,\"direction\":\"%s\","
+                    "\"volume\":%.2f,\"open_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,"
+                    "\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"comment\":\"%s\","
+                    "\"time\":%lld,\"t\":%lld}",
+                    symbol, dealTicket, positionTicket, pendingOrderId, direction,
+                    volume, openPrice, sl, tp, magic, strategyName, traceId, comment,
+                    timeSec, timeMs);
+   g_socket.SendJSON(json);
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] ORDER_FILLED pushed: pending_order_id=%lld position=%lld deal=%lld symbol=%s strategy=%s",
+                  pendingOrderId, positionTicket, dealTicket, symbol, strategyName);
+  }
+
+//+------------------------------------------------------------------+
 //| Push ORDER_FAILED event                                            |
 //+------------------------------------------------------------------+
 void PushOrderFailed(string cmdId, string symbol, string reason, int retcode,
@@ -3529,9 +3555,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(!HistoryDealSelect(trans.deal))
       return;
 
-// Only process position close/reduce deals
+// Only process position entry/close/reduce deals
    long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
-   if(entry != DEAL_ENTRY_OUT)
+   if(entry != DEAL_ENTRY_IN && entry != DEAL_ENTRY_OUT)
       return;
 
 // Filter by magic number — only report bot-managed positions
@@ -3548,25 +3574,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    double commission  = HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
    double swap        = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
    long   dealType    = HistoryDealGetInteger(trans.deal, DEAL_TYPE);
-
-// Determine original direction (close deal is opposite direction)
-   string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
-
-   ApplyCloseDealToHistoryCooldown(trans.deal, "realtime");
-
-// Must be connected to push events
-   if(!g_socket.IsConnected())
-      return;
-
-// Get open price from position info (if still available)
-   double openPrice = 0.0;
-   if(PositionSelectByTicket(ticket))
-      openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-
-   if(InpDebugMode)
-      PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
-                  "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
-                  symbol, ticket, direction, profit, magic);
+   long   orderTicket = HistoryDealGetInteger(trans.deal, DEAL_ORDER);
 
    string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
    string strategyName = dealComment;
@@ -3577,6 +3585,58 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       strategyName = StringSubstr(dealComment, 0, commentSep);
       traceId = StringSubstr(dealComment, commentSep + 1);
      }
+
+// Must be connected to push events
+   if(!g_socket.IsConnected())
+      return;
+
+   if(entry == DEAL_ENTRY_IN)
+     {
+      long orderType = -1;
+      if(orderTicket > 0 && HistoryOrderSelect((ulong)orderTicket))
+         orderType = HistoryOrderGetInteger((ulong)orderTicket, ORDER_TYPE);
+
+      bool isPendingFill = (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_SELL_LIMIT ||
+                            orderType == ORDER_TYPE_BUY_STOP || orderType == ORDER_TYPE_SELL_STOP ||
+                            orderType == ORDER_TYPE_BUY_STOP_LIMIT || orderType == ORDER_TYPE_SELL_STOP_LIMIT);
+      if(!isPendingFill)
+         return;
+
+      string openDirection = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
+      double sl = 0.0;
+      double tp = 0.0;
+      if(PositionSelectByTicket(ticket))
+        {
+         sl = PositionGetDouble(POSITION_SL);
+         tp = PositionGetDouble(POSITION_TP);
+        }
+
+      long fillTime = HistoryDealGetInteger(trans.deal, DEAL_TIME);
+      if(InpDebugMode)
+         PrintFormat("[AureusProvider] OnTradeTransaction: pending DEAL_ENTRY_IN detected — "
+                     "symbol=%s pending_order_id=%lld position=%lld deal=%lld direction=%s magic=%lld",
+                     symbol, orderTicket, ticket, trans.deal, openDirection, magic);
+
+      PushOrderFilled(symbol, (long)trans.deal, ticket, orderTicket, openDirection,
+                      volume, closePrice, sl, tp, magic, strategyName, traceId,
+                      dealComment, fillTime);
+      return;
+     }
+
+// Determine original direction (close deal is opposite direction)
+   string direction = (dealType == DEAL_TYPE_BUY) ? "SELL" : "BUY";
+
+   ApplyCloseDealToHistoryCooldown(trans.deal, "realtime");
+
+// Get open price from position info (if still available)
+   double openPrice = 0.0;
+   if(PositionSelectByTicket(ticket))
+      openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+
+   if(InpDebugMode)
+      PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
+                  "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
+                  symbol, ticket, direction, profit, magic);
 
    PushOrderClosed(symbol, ticket, direction, volume,
                    openPrice, closePrice, profit, commission, swap, magic,
