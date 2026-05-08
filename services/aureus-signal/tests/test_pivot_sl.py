@@ -348,8 +348,8 @@ class TestCalculateSlTpPivotPoint:
         assert sl is None
         assert tp is None
 
-    def test_pivot_point_forex_rejects_sl_distance_greater_than_limit(self):
-        """Forex PIVOT_POINT reject khi distance > 20 * point_size."""
+    def test_pivot_point_forex_uses_pivot_without_distance_limit(self):
+        """Forex PIVOT_POINT vẫn dùng pivot bình thường, không áp dụng guard 20 * point_size."""
         self.state.symbol = "EURUSD"
         self.state.last_candle = {"t": 1000, "c": 1.10000, "h": 1.10100, "l": 1.09900}
         self.state.swing_points = [
@@ -358,8 +358,8 @@ class TestCalculateSlTpPivotPoint:
         config = {"sl": {"type": "PIVOT_POINT", "offset_pips": 0}, "tp": {"type": "RR", "value": 2.0}}
         sl, tp = self.tm._calculate_sl_tp(self.trigger, self.state, config)
 
-        assert sl is None
-        assert tp is None
+        assert sl == 1.09979
+        assert tp is not None
 
     def test_fixed_pips_unchanged(self):
         """FIXED_PIPS vẫn hoạt động bình thường (backward compatibility)."""

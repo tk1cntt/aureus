@@ -79,8 +79,8 @@ def get_default_sl_pips(symbol: str) -> int:
     return 100
 
 
-def _get_pivot_sl_max_distance(symbol: str) -> float:
-    """Return max allowed PIVOT_POINT entry-to-SL price distance."""
+def _get_pivot_sl_max_distance(symbol: str) -> Optional[float]:
+    """Return max allowed PIVOT_POINT entry-to-SL price distance for guarded symbols."""
     sym = symbol.upper()
     if 'XAU' in sym:
         return 10.0
@@ -88,7 +88,7 @@ def _get_pivot_sl_max_distance(symbol: str) -> float:
         return 50.0
     if 'BTC' in sym:
         return 500.0
-    return 20 * get_point_size(symbol)
+    return None
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -732,7 +732,7 @@ class SimulatedTradeManager:
                     sl = selected_pivot + offset_distance
                 sl_distance = abs(entry - sl)
                 max_distance = _get_pivot_sl_max_distance(symbol)
-                if sl_distance > max_distance:
+                if max_distance is not None and sl_distance > max_distance:
                     logger.warning(
                         f"[{strategy_name}] [{symbol}] PIVOT_POINT SL rejected: entry={entry}, sl={sl}, "
                         f"distance={sl_distance}, threshold={max_distance}, reason=SL_DISTANCE_TOO_FAR"
