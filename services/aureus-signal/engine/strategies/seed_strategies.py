@@ -63,6 +63,54 @@ async def seed_system_strategies(pool=None, conn=None):
                 }
             }
         },
+        {
+            "name": "TREND_CONT_FVG_BULL",
+            "is_active": True,
+            "description": "Trend continuation BUY LIMIT at first bullish FVG after CHOCH LL pivot. No FVG means no order.",
+            "min_score": 3.0,
+            "config": {
+                "min_score_threshold": 0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30 }
+                ],
+                "trade_execution": {
+                    "direction": "BUY",
+                    "entry_type": "LIMIT",
+                    "entry_method": "ENTRY_FVG_FROM_CHOCH_PIVOT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_LOW", "activation_pips": 300},
+                    "early_exits": ["choch_down"]
+                }
+            }
+        },
+        {
+            "name": "TREND_CONT_FVG_BEAR",
+            "is_active": True,
+            "description": "Trend continuation SELL LIMIT at first bearish FVG after CHOCH HH pivot. No FVG means no order.",
+            "min_score": 3.0,
+            "config": {
+                "min_score_threshold": 0,
+                "context_filters": [],
+                "sequence": [
+                    {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30 }
+                ],
+                "trade_execution": {
+                    "direction": "SELL",
+                    "entry_type": "LIMIT",
+                    "entry_method": "ENTRY_FVG_FROM_CHOCH_PIVOT",
+                    "size_mode": "RISK_FIXED_AMOUNT",
+                    "size_value": 50.0,
+                    "sl": {"type": "PIVOT_POINT", "offset_pips": 1},
+                    "tp": {"type": "RR_RATIO", "value": 1.5},
+                    "trailing": {"type": "SWING_HIGH", "activation_pips": 300},
+                    "early_exits": ["choch_up"]
+                }
+            }
+        },
                 {
             "name": "TREND_CONT_LIMIT_BULL",
             "is_active": True,

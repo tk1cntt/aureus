@@ -315,6 +315,8 @@ class SimulatedTradeManager:
             return self._entry_ema_touch(side, state_obj, entry_value, current_price)
         elif method == "FIXED_OFFSET":
             return self._entry_fixed_offset(side, state_obj, entry_value, current_price)
+        elif method == "ENTRY_FVG_FROM_CHOCH_PIVOT":
+            return self._entry_fvg_from_choch_pivot(side, state_obj, current_price)
 
         return current_price
 
@@ -367,6 +369,48 @@ class SimulatedTradeManager:
         point_size = get_point_size(state_obj.symbol)
         offset = pips * point_size
         return fallback - offset if side == 'BUY' else fallback + offset
+
+    def _entry_fvg_from_choch_pivot(self, side: str, state_obj: Any, fallback: float) -> Optional[float]:
+        is_buy = side == 'BUY'
+        pivot_type = 'LL' if is_buy else 'HH'
+        pivot_is_high = not is_buy
+        pivot_t = None
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            try:
+                pivot_t = float(sp['t'])
+                break
+            except (TypeError, ValueError, KeyError):
+                continue
+        if pivot_t is None:
+            return None
+
+        wanted = 'BULLISH' if is_buy else 'BEARISH'
+        candidates: List[Dict[str, Any]] = []
+        for fvg in getattr(state_obj, 'fvgs', []):
+            if str(fvg.get('direction', '')).upper() != wanted:
+                continue
+            if str(fvg.get('state', '')).upper() == 'BROKEN' or fvg.get('broken') is True:
+                continue
+            raw_t = fvg.get('t', fvg.get('t_start'))
+            try:
+                fvg_t = float(raw_t)
+                top = float(fvg['top'])
+                bottom = float(fvg['bottom'])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if fvg_t < pivot_t:
+                continue
+            candidates.append({'t': fvg_t, 'top': top, 'bottom': bottom})
+
+        if not candidates:
+            return None
+
+        selected = sorted(candidates, key=lambda item: item['t'])[0]
+        return (selected['top'] + selected['bottom']) / 2
 
     def check_sl_tp(self, order: Dict[str, Any], candle: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """

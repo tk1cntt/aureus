@@ -503,6 +503,42 @@ async def test_trend_cont_limit_seed_declarations_match_runtime_contract(monkeyp
         assert exit_tag in execution["early_exits"]
 
 
+@pytest.mark.asyncio
+async def test_trend_cont_fvg_seed_declarations_match_runtime_contract(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    await seed_system_strategies(pool)
+
+    for name, direction, required_tag, exit_tag in (
+        ("TREND_CONT_FVG_BULL", "BUY", "choch_up", "choch_down"),
+        ("TREND_CONT_FVG_BEAR", "SELL", "choch_down", "choch_up"),
+    ):
+        assert name in conn.templates
+        assert conn.templates[name]["description"]
+        assert "FVG" in conn.templates[name]["description"]
+        config = conn.templates[name]["config"]
+        execution = config["trade_execution"]
+        sequence_tags = {step["tag"] for step in config["sequence"] if step.get("required")}
+
+        assert execution["direction"] == direction
+        assert execution["entry_type"] == "LIMIT"
+        assert execution["entry_method"] == "ENTRY_FVG_FROM_CHOCH_PIVOT"
+        assert execution["size_mode"] == "RISK_FIXED_AMOUNT"
+        assert execution["size_value"] > 0
+        assert execution["sl"]["type"] == "PIVOT_POINT"
+        assert execution["tp"]["type"] == "RR_RATIO"
+        assert execution["trailing"]["type"] in {"SWING_LOW", "SWING_HIGH"}
+        assert required_tag in sequence_tags
+        assert exit_tag in execution["early_exits"]
+
+    assert conn.templates["TREND_CONT_BULL"]["config"]["trade_execution"]["entry_type"] == "MARKET"
+    assert conn.templates["TREND_CONT_BULL"]["config"]["trade_execution"]["entry_method"] == "CURRENT"
+    assert conn.templates["TREND_CONT_BEAR"]["config"]["trade_execution"]["entry_type"] == "MARKET"
+    assert conn.templates["TREND_CONT_BEAR"]["config"]["trade_execution"]["entry_method"] == "CURRENT"
+
+
 def test_trend_cont_bull_and_limit_bull_match_same_snapshot_before_executor(monkeypatch):
     monkeypatch.setenv("SYMBOLS", "XAUUSD")
     conn = FakeConn()
