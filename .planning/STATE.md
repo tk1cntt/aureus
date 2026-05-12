@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-12 - Completed quick task 260512-ojj: Khi đặt lệnh limit thì id của lệnh limit là một số nhưng khi lệnh limit đó khớp thì id của nó sẽ là id khác. Phải có cơ chế mapping thì mới update thông tin vào bảng journal chính xác được. Cơ chế hiện tại như nào
+Last activity: 2026-05-12 - Completed quick task 260512-q15: Thực hiện plan lưu trace_id/cmd_id cho MT5 pending limit order, persist mapping pending_order_id -> trace_id/cmd_id, gửi ORDER_FILLED có mapping, và backend journal fallback update bằng pending_order_id/cmd_id khi thiếu trace_id
 
 ## Architecture Decision
 
@@ -148,6 +148,7 @@ Last activity: 2026-05-12 - Completed quick task 260512-ojj: Khi đặt lệnh l
 | 260509-02x | Update PIVOT_POINT SL guard chỉ áp dụng cho XAU USTEC BTC | 2026-05-08 | (pending commit) | Verified | [260509-02x-update-la-i-ph-n-x-ly-sl-v-i-povit-point](./quick/260509-02x-update-la-i-ph-n-x-ly-sl-v-i-povit-point/) |
 | 260512-9xw | Tạo 2 strategy clone từ TREND_CONT_BULL và TREND_CONT_BEAR. Vào lệnh limit tại FVG đầu tiên được tìm thấy tính từ điểm pivot point HH hoặc LL tương ứng. Khi không có FVG thì k vào lệnh. Tóm lại strategy là vào lệnh khi giá xảy ra CHOCH và phải tạo FVG | 2026-05-12 | 02b559f | Verified | [260512-9xw-ta-o-2-strategy-clone-t-trend-cont-bull-](./quick/260512-9xw-ta-o-2-strategy-clone-t-trend-cont-bull-/) |
 | 260512-ojj | Khi đặt lệnh limit thì id của lệnh limit là một số nhưng khi lệnh limit đó khớp thì id của nó sẽ là id khác. Phải có cơ chế mapping thì mới update thông tin vào bảng journal chính xác được. Cơ chế hiện tại như nào | 2026-05-12 | (report-only) | Verified | [260512-ojj-khi-t-l-nh-limit-th-id-c-a-l-nh-limit-l-](./quick/260512-ojj-khi-t-l-nh-limit-th-id-c-a-l-nh-limit-l-/) |
+| 260512-q15 | Thực hiện plan lưu trace_id/cmd_id cho MT5 pending limit order, persist mapping pending_order_id -> trace_id/cmd_id, gửi ORDER_FILLED có mapping, và backend journal fallback update bằng pending_order_id/cmd_id khi thiếu trace_id | 2026-05-12 | 5ccf0eb | Needs Review | [260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m](./quick/260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
