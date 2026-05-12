@@ -474,7 +474,7 @@ class TradeJournalManager:
                     OR ($8::text IS NULL AND $9::bigint IS NOT NULL AND pending_order_id = $9)
                     OR ($8::text IS NULL AND $11::text IS NOT NULL AND cmd_id = $11)
                   )
-                RETURNING id, strategy_name, symbol, direction, active_signals, context_filters
+                RETURNING id, trace_id, strategy_name, symbol, direction, active_signals, context_filters
             """
 
             updated = False
@@ -491,11 +491,13 @@ class TradeJournalManager:
                     if journal_row:
                         updated = True
                         trade_journal_id = journal_row.get("id")
+                        row_trace_id = journal_row.get("trace_id")
                         strategy_name = event.get("strategy_name", journal_row.get("strategy_name", ""))
                         symbol = event.get("symbol", journal_row.get("symbol", ""))
                         timeframe = event.get("timeframe", "")
                     else:
                         trade_journal_id = None
+                        row_trace_id = trace_id
                         strategy_name = event.get("strategy_name", "")
                         symbol = event.get("symbol", "")
                         timeframe = event.get("timeframe", "")
@@ -570,7 +572,7 @@ class TradeJournalManager:
                             RETURNING id
                             """,
                             trade_journal_id,
-                            trace_id,
+                            row_trace_id,
                             ticket,
                             strategy_name,
                             symbol,
@@ -647,7 +649,7 @@ class TradeJournalManager:
                                     payload = aureus_trades.payload || EXCLUDED.payload,
                                     updated_at = now()
                                 """,
-                                trace_id,
+                                row_trace_id,
                                 symbol,
                                 journal_row.get("direction"),
                                 entry_type,
@@ -669,7 +671,7 @@ class TradeJournalManager:
                                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                                 RETURNING id
                                 """,
-                                trace_id,
+                                row_trace_id,
                                 trade_journal_id,
                                 snapshot_id,
                                 strategy_name,

@@ -110,6 +110,14 @@ datetime      g_disconnectTime;        // When we lost connection
 string        g_processedCmdIds[];     // Dedup: processed command IDs
 int           g_cmdIdCount;            // Count of stored cmd IDs
 
+// Pending order correlation
+long          g_pendingOrderIds[];
+string        g_pendingTraceIds[];
+string        g_pendingCmdIds[];
+string        g_pendingComments[];
+string        g_pendingStrategyNames[];
+int           g_pendingMapCount;
+
 // Order execution stats
 int           g_ordersExecuted;        // Successful order count
 int           g_ordersFailed;          // Failed order count
@@ -609,6 +617,12 @@ int OnInit()
 //--- Initialize command dedup
    ArrayResize(g_processedCmdIds, InpMaxCmdIdHistory);
    g_cmdIdCount = 0;
+   ArrayResize(g_pendingOrderIds, InpMaxCmdIdHistory);
+   ArrayResize(g_pendingTraceIds, InpMaxCmdIdHistory);
+   ArrayResize(g_pendingCmdIds, InpMaxCmdIdHistory);
+   ArrayResize(g_pendingComments, InpMaxCmdIdHistory);
+   ArrayResize(g_pendingStrategyNames, InpMaxCmdIdHistory);
+   g_pendingMapCount = 0;
 
 //--- Initialize order stats
    g_ordersExecuted = 0;
@@ -1315,6 +1329,75 @@ void RecordCmdId(string cmdId)
   }
 
 //+------------------------------------------------------------------+
+//| Store pending order correlation                                    |
+//+------------------------------------------------------------------+
+void StorePendingOrderMapping(long pendingOrderId, string traceId, string cmdId,
+                              string comment, string strategyName)
+  {
+   if(pendingOrderId <= 0)
+      return;
+
+   for(int i = 0; i < g_pendingMapCount; i++)
+     {
+      if(g_pendingOrderIds[i] == pendingOrderId)
+        {
+         g_pendingTraceIds[i] = traceId;
+         g_pendingCmdIds[i] = cmdId;
+         g_pendingComments[i] = comment;
+         g_pendingStrategyNames[i] = strategyName;
+         return;
+        }
+     }
+
+   if(g_pendingMapCount >= InpMaxCmdIdHistory)
+     {
+      for(int i = 0; i < g_pendingMapCount - 1; i++)
+        {
+         g_pendingOrderIds[i] = g_pendingOrderIds[i + 1];
+         g_pendingTraceIds[i] = g_pendingTraceIds[i + 1];
+         g_pendingCmdIds[i] = g_pendingCmdIds[i + 1];
+         g_pendingComments[i] = g_pendingComments[i + 1];
+         g_pendingStrategyNames[i] = g_pendingStrategyNames[i + 1];
+        }
+      g_pendingMapCount--;
+     }
+
+   g_pendingOrderIds[g_pendingMapCount] = pendingOrderId;
+   g_pendingTraceIds[g_pendingMapCount] = traceId;
+   g_pendingCmdIds[g_pendingMapCount] = cmdId;
+   g_pendingComments[g_pendingMapCount] = comment;
+   g_pendingStrategyNames[g_pendingMapCount] = strategyName;
+   g_pendingMapCount++;
+  }
+
+bool PopPendingOrderMapping(long pendingOrderId, string &traceId, string &cmdId,
+                            string &comment, string &strategyName)
+  {
+   for(int i = 0; i < g_pendingMapCount; i++)
+     {
+      if(g_pendingOrderIds[i] != pendingOrderId)
+         continue;
+
+      traceId = g_pendingTraceIds[i];
+      cmdId = g_pendingCmdIds[i];
+      comment = g_pendingComments[i];
+      strategyName = g_pendingStrategyNames[i];
+
+      for(int j = i; j < g_pendingMapCount - 1; j++)
+        {
+         g_pendingOrderIds[j] = g_pendingOrderIds[j + 1];
+         g_pendingTraceIds[j] = g_pendingTraceIds[j + 1];
+         g_pendingCmdIds[j] = g_pendingCmdIds[j + 1];
+         g_pendingComments[j] = g_pendingComments[j + 1];
+         g_pendingStrategyNames[j] = g_pendingStrategyNames[j + 1];
+        }
+      g_pendingMapCount--;
+      return true;
+     }
+   return false;
+  }
+
+//+------------------------------------------------------------------+
 //| Send ACK response                                                  |
 //+------------------------------------------------------------------+
 void SendACK(string cmdId)
@@ -1461,7 +1544,7 @@ void PushOrderFilled(string symbol, long dealTicket, long positionTicket,
                      long pendingOrderId, string direction, double volume,
                      double openPrice, double sl, double tp, long magic,
                      string strategyName = "", string traceId = "", string comment = "",
-                     long fillTime = 0)
+                     long fillTime = 0, string cmdId = "")
   {
    long timeSec = (fillTime > 0) ? fillTime : (long)TimeCurrent();
    long timeMs = timeSec * 1000;
@@ -1469,10 +1552,10 @@ void PushOrderFilled(string symbol, long dealTicket, long positionTicket,
                     "{\"type\":\"ORDER_FILLED\",\"symbol\":\"%s\",\"deal_ticket\":%lld,"
                     "\"position_ticket\":%lld,\"pending_order_id\":%lld,\"direction\":\"%s\","
                     "\"volume\":%.2f,\"open_price\":%.5f,\"sl\":%.5f,\"tp\":%.5f,"
-                    "\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"comment\":\"%s\","
+                    "\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"cmd_id\":\"%s\",\"comment\":\"%s\","
                     "\"time\":%lld,\"t\":%lld}",
                     symbol, dealTicket, positionTicket, pendingOrderId, direction,
-                    volume, openPrice, sl, tp, magic, strategyName, traceId, comment,
+                    volume, openPrice, sl, tp, magic, strategyName, traceId, cmdId, comment,
                     timeSec, timeMs);
    g_socket.SendJSON(json);
    if(InpDebugMode)
@@ -3198,6 +3281,7 @@ void ExecuteOpenOrder(const string &raw)
         {
          if(!terminalEventSent)
            {
+            StorePendingOrderMapping((long)result.order, traceId, cmdId, comment, strategyName);
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
                             volume, result.price, sl, tp, magic, strategyName, traceId);
             LogOpenAlgoOrderOpened(cmdId, symbol, direction, orderType, volume, result.price, strategyName);
@@ -3704,6 +3788,18 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
          tp = PositionGetDouble(POSITION_TP);
         }
 
+      string mappedTraceId = "";
+      string mappedCmdId = "";
+      string mappedComment = "";
+      string mappedStrategyName = "";
+      bool hasPendingMapping = PopPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
+      if(traceId == "" && hasPendingMapping)
+         traceId = mappedTraceId;
+      if(dealComment == "" && hasPendingMapping)
+         dealComment = mappedComment;
+      if((strategyName == "" || strategyName == dealComment) && mappedStrategyName != "")
+         strategyName = mappedStrategyName;
+
       long fillTime = HistoryDealGetInteger(trans.deal, DEAL_TIME);
       if(InpDebugMode)
          PrintFormat("[AureusProvider] OnTradeTransaction: pending DEAL_ENTRY_IN detected — "
@@ -3712,7 +3808,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
 
       PushOrderFilled(symbol, (long)trans.deal, ticket, orderTicket, openDirection,
                       volume, closePrice, sl, tp, magic, strategyName, traceId,
-                      dealComment, fillTime);
+                      dealComment, fillTime, mappedCmdId);
       return;
      }
 
