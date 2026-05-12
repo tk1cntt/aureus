@@ -36,9 +36,14 @@ async def main():
     )
     trace_id = f"e2e-limit-{uuid.uuid4().hex[:12]}"
     cmd_id = f"ord-e2e-{uuid.uuid4().hex[:8]}"
+    fallback_trace_id = f"e2e-limit-fallback-{uuid.uuid4().hex[:12]}"
+    fallback_cmd_id = f"ord-e2e-fb-{uuid.uuid4().hex[:8]}"
     pending_order_id = 9100000001
     deal_ticket = 9200000001
     position_ticket = 9300000001
+    fallback_pending_order_id = 9100000002
+    fallback_deal_ticket = 9200000002
+    fallback_position_ticket = 9300000002
     pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=2)
     journal = TradeJournalManager(pool)
 
@@ -122,11 +127,57 @@ async def main():
             row = await conn.fetchrow("SELECT * FROM aureus_trade_journal WHERE trace_id=$1", trace_id)
         assert row["status"] == "CLOSED"
         assert row["ticket"] == position_ticket
-        print(f"PASS limit lifecycle DB E2E trace_id={trace_id} cmd_id={cmd_id}")
+
+        fallback_strategy_event = {
+            "type": "STRATEGY_MATCH",
+            "trace_id": fallback_trace_id,
+            "data": {
+                "trace_id": fallback_trace_id,
+                "strategy_name": "limit_lifecycle_fallback_e2e",
+                "strategy_id": 26051215,
+                "direction": "BUY",
+                "symbol": "XAUUSD",
+                "score": 0.92,
+                "active_signals": [],
+                "context_filters": {},
+            },
+        }
+        assert await journal.on_strategy_match(fallback_strategy_event)
+        assert await journal.on_order_pending_placed({
+            "type": "ORDER_PENDING_PLACED",
+            "trace_id": fallback_trace_id,
+            "cmd_id": fallback_cmd_id,
+            "pending_order_id": fallback_pending_order_id,
+            "price": 2321.5,
+            "sl": 2311.0,
+            "tp": 2341.0,
+            "comment": "limit_lifecycle_fallback_e2e|e2e",
+        })
+        assert await journal.on_order_filled({
+            "type": "ORDER_FILLED",
+            "trace_id": None,
+            "cmd_id": fallback_cmd_id,
+            "pending_order_id": fallback_pending_order_id,
+            "deal_ticket": fallback_deal_ticket,
+            "position_ticket": fallback_position_ticket,
+            "open_price": 2323.0,
+            "volume": 0.1,
+            "time": 1775642500,
+            "comment": "limit_lifecycle_fallback_e2e|e2e",
+        })
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM aureus_trade_journal WHERE trace_id=$1", fallback_trace_id)
+        assert row["status"] == "EXECUTED"
+        assert row["ticket"] == fallback_position_ticket
+        assert row["position_id"] == fallback_position_ticket
+        assert row["entry_deal_ticket"] == fallback_deal_ticket
+        assert row["pending_order_id"] == fallback_pending_order_id
+        assert row["cmd_id"] == fallback_cmd_id
+        print(f"PASS limit lifecycle DB E2E trace_id={trace_id} fallback_trace_id={fallback_trace_id} cmd_id={cmd_id} fallback_cmd_id={fallback_cmd_id}")
     finally:
         async with pool.acquire() as conn:
-            await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id=$1", trace_id)
-            await conn.execute("DELETE FROM aureus_trades WHERE trace_id=$1", trace_id)
+            await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id=ANY($1::text[])", [trace_id, fallback_trace_id])
+            await conn.execute("DELETE FROM aureus_trades WHERE trace_id=ANY($1::text[])", [trace_id, fallback_trace_id])
         await pool.close()
 
 

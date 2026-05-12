@@ -233,6 +233,45 @@ class TestPendingOrderLifecycle:
         assert args[8] == 9001
         assert args[9] == 7001
 
+    @pytest.mark.asyncio
+    async def test_order_filled_without_trace_id_uses_pending_or_cmd_fallback(self, journal_manager, mock_db_pool):
+        result = await journal_manager.on_order_filled({
+            "type": "ORDER_FILLED",
+            "cmd_id": "ord-fill-no-trace",
+            "pending_order_id": 9002,
+            "deal_ticket": 7002,
+            "position_ticket": 8002,
+            "open_price": 3252.0,
+            "volume": 0.2,
+            "time": 1775642500,
+        })
+
+        assert result is True
+        query = mock_db_pool._conn.queries[0][1]
+        args = mock_db_pool._conn.queries[0][2]
+        assert "pending_order_id = $9" in query
+        assert "cmd_id = $11" in query
+        assert args[0] == 8002
+        assert args[3] == 8002
+        assert args[7] is None
+        assert args[8] == 9002
+        assert args[9] == 7002
+        assert args[10] == "ord-fill-no-trace"
+
+    @pytest.mark.asyncio
+    async def test_order_filled_without_trace_id_and_without_fallback_keys_returns_false(self, journal_manager, mock_db_pool):
+        result = await journal_manager.on_order_filled({
+            "type": "ORDER_FILLED",
+            "deal_ticket": 7003,
+            "position_ticket": 8003,
+            "open_price": 3253.0,
+            "volume": 0.2,
+            "time": 1775642600,
+        })
+
+        assert result is False
+        assert mock_db_pool._conn.queries == []
+
 
 class TestReasoningBank:
     @pytest.mark.asyncio
