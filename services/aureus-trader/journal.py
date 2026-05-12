@@ -413,8 +413,10 @@ class TradeJournalManager:
                 sorted(list(event.keys())) if isinstance(event, dict) else [],
             )
 
-            if not trace_id:
-                logger.warning("on_order_opened: missing trace_id in event")
+            pending_order_id = event.get("pending_order_id")
+            cmd_id = event.get("cmd_id")
+            if not trace_id and not pending_order_id and not cmd_id:
+                logger.warning("on_order_opened: missing correlation key (trace_id/pending_order_id/cmd_id) in event")
                 return False
 
             if not ticket:
@@ -482,8 +484,8 @@ class TradeJournalManager:
                         query,
                         ticket, entry_price, entry_time, position_id,
                         volume, sl, tp, trace_id,
-                        event.get("pending_order_id"), event.get("deal_ticket"),
-                        event.get("cmd_id"), event.get("mt5_comment", event.get("comment"))
+                        pending_order_id, event.get("deal_ticket"),
+                        cmd_id, event.get("mt5_comment", event.get("comment"))
                     )
 
                     if journal_row:
