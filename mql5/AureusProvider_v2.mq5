@@ -3739,22 +3739,44 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeResult& result)
   {
 // Only process deal additions
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_TRACE] trans.type=%d trans.deal=%lld", (int)trans.type, trans.deal);
    if(trans.type != TRADE_TRANSACTION_DEAL_ADD)
+     {
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] skip non-DEAL_ADD trans.type=%d deal=%lld", (int)trans.type, trans.deal);
       return;
+     }
 
 // Select the deal from history
    if(!HistoryDealSelect(trans.deal))
+     {
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] HistoryDealSelect(trans.deal) failed deal=%lld", trans.deal);
       return;
+     }
 
 // Only process position entry/close/reduce deals
    long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_TRACE] DEAL_ENTRY=%lld deal=%lld", entry, trans.deal);
    if(entry != DEAL_ENTRY_IN && entry != DEAL_ENTRY_OUT)
+     {
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] skip unsupported DEAL_ENTRY=%lld deal=%lld", entry, trans.deal);
       return;
+     }
 
 // Filter by magic number — only report bot-managed positions
    long magic = HistoryDealGetInteger(trans.deal, DEAL_MAGIC);
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_TRACE] DEAL_MAGIC=%lld deal=%lld", magic, trans.deal);
    if(magic == 0)
+     {
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] skip DEAL_MAGIC=0 deal=%lld", trans.deal);
       return;  // Manual trade, skip
+     }
 
 // Extract deal properties
    string symbol      = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
@@ -3766,6 +3788,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    double swap        = HistoryDealGetDouble(trans.deal, DEAL_SWAP);
    long   dealType    = HistoryDealGetInteger(trans.deal, DEAL_TYPE);
    long   orderTicket = HistoryDealGetInteger(trans.deal, DEAL_ORDER);
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_TRACE] DEAL_ORDER=%lld DEAL_TYPE=%lld symbol=%s deal=%lld position=%lld",
+                  orderTicket, dealType, symbol, trans.deal, ticket);
 
    string dealComment = HistoryDealGetString(trans.deal, DEAL_COMMENT);
    string strategyName = dealComment;
@@ -3778,20 +3803,40 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
      }
 
 // Must be connected to push events
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_TRACE] g_socket.IsConnected()=%s deal=%lld order=%lld", g_socket.IsConnected() ? "true" : "false", trans.deal, orderTicket);
    if(!g_socket.IsConnected())
+     {
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] socket disconnected deal=%lld order=%lld", trans.deal, orderTicket);
       return;
+     }
 
    if(entry == DEAL_ENTRY_IN)
      {
       long orderType = -1;
-      if(orderTicket > 0 && HistoryOrderSelect((ulong)orderTicket))
+      bool historyOrderSelected = false;
+      if(orderTicket > 0)
+         historyOrderSelected = HistoryOrderSelect((ulong)orderTicket);
+      if(historyOrderSelected)
          orderType = HistoryOrderGetInteger((ulong)orderTicket, ORDER_TYPE);
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_TRACE] HistoryOrderSelect(orderTicket)=%s ORDER_TYPE=%lld deal=%lld order=%lld",
+                     historyOrderSelected ? "true" : "false", orderType, trans.deal, orderTicket);
 
       bool isPendingFill = (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_SELL_LIMIT ||
                             orderType == ORDER_TYPE_BUY_STOP || orderType == ORDER_TYPE_SELL_STOP ||
                             orderType == ORDER_TYPE_BUY_STOP_LIMIT || orderType == ORDER_TYPE_SELL_STOP_LIMIT);
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_TRACE] isPendingFill=%s deal=%lld order=%lld ORDER_TYPE=%lld",
+                     isPendingFill ? "true" : "false", trans.deal, orderTicket, orderType);
       if(!isPendingFill)
+        {
+         if(InpDebugMode)
+            PrintFormat("[PENDING_FILL_GATE] not pending fill deal=%lld order=%lld ORDER_TYPE=%lld HistoryOrderSelect=%s",
+                        trans.deal, orderTicket, orderType, historyOrderSelected ? "true" : "false");
          return;
+        }
 
       string openDirection = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
       double sl = 0.0;
@@ -3807,6 +3852,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       string mappedComment = "";
       string mappedStrategyName = "";
       bool hasPendingMapping = PopPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] PopPendingOrderMapping result=%s order=%lld mapped_cmd_id=%s mapped_trace_id=%s",
+                     hasPendingMapping ? "true" : "false", orderTicket, mappedCmdId, mappedTraceId);
       if(traceId == "" && hasPendingMapping)
          traceId = mappedTraceId;
       if(dealComment == "" && hasPendingMapping)
