@@ -3281,6 +3281,20 @@ void ExecuteOpenOrder(const string &raw)
         {
          if(!terminalEventSent)
            {
+            if(InpDebugMode)
+               PrintFormat("[PENDING_PLACEMENT_TRACE] cmd_id=%s symbol=%s direction=%s orderType=%s request.action=%d request.type=%d request.price=%.5f request.sl=%.5f request.tp=%.5f result.retcode=%d result.order=%lld result.price=%.5f",
+                           cmdId, symbol, direction, orderType, (int)request.action, (int)request.type, request.price, request.sl, request.tp, (int)result.retcode, result.order, result.price);
+            bool pendingOrderExists = false;
+            long selectedOrderType = -1;
+            if(result.order > 0)
+              {
+               pendingOrderExists = OrderSelect((ulong)result.order);
+               if(pendingOrderExists)
+                  selectedOrderType = OrderGetInteger(ORDER_TYPE);
+              }
+            if(InpDebugMode)
+               PrintFormat("[PENDING_PLACEMENT_GATE] cmd_id=%s symbol=%s result.order=%lld order_exists=%s selected_ORDER_TYPE=%lld",
+                           cmdId, symbol, result.order, pendingOrderExists ? "true" : "false", selectedOrderType);
             StorePendingOrderMapping((long)result.order, traceId, cmdId, comment, strategyName);
             PushOrderOpened(cmdId, symbol, result.order, direction, orderType,
                             volume, result.price, sl, tp, magic, strategyName, traceId);
