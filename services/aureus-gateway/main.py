@@ -435,6 +435,9 @@ async def handle_tcp_client(reader: asyncio.StreamReader, writer: asyncio.Stream
                 text = line.decode('utf-8').strip()
                 if not text:
                     continue
+                if text[0] not in "[{":
+                    logger.debug(f"[GLOBAL] [handle_tcp_client] Non-JSON TCP probe/ignored from {addr}: first_char={text[0]!r} length={len(text)}")
+                    continue
                 data = json.loads(text)
 
                 # Inject writer into data for process_message to register it
