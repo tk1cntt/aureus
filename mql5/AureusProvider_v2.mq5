@@ -1539,6 +1539,7 @@ void PushOrderOpened(string cmdId, string symbol, long ticket, string direction,
 
 //+------------------------------------------------------------------+
 //| Push ORDER_FILLED event for pending-order execution                |
+//| JSON event type: "type":"ORDER_FILLED"                             |
 //+------------------------------------------------------------------+
 void PushOrderFilled(string symbol, long dealTicket, long positionTicket,
                      long pendingOrderId, string direction, double volume,
