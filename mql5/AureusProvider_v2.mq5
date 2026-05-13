@@ -1557,7 +1557,10 @@ void PushOrderFilled(string symbol, long dealTicket, long positionTicket,
                     symbol, dealTicket, positionTicket, pendingOrderId, direction,
                     volume, openPrice, sl, tp, magic, strategyName, traceId, cmdId, comment,
                     timeSec, timeMs);
-   g_socket.SendJSON(json);
+   bool sendOk = g_socket.SendJSON(json);
+   if(InpDebugMode)
+      PrintFormat("[PENDING_FILL_SEND] send=%s pending_order_id=%lld position_ticket=%lld deal_ticket=%lld symbol=%s",
+                  sendOk ? "success" : "fail", pendingOrderId, positionTicket, dealTicket, symbol);
    if(InpDebugMode)
       PrintFormat("[AureusProvider] ORDER_FILLED pushed: pending_order_id=%lld position=%lld deal=%lld symbol=%s strategy=%s",
                   pendingOrderId, positionTicket, dealTicket, symbol, strategyName);
