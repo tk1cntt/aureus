@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-13 - Completed quick task 260513-9x3: Tự review lại plan pending order fill với vai trò chuyên gia tư vấn kiến trúc độc lập theo quy trình 4 bước
+Last activity: 2026-05-13 - Completed quick task 260513-ccy: Thực hiện observability pending placement/fill theo advisory 260513-9x3; Needs Review do MetaEditor/MT5 smoke cần chạy thủ công
 
 ## Architecture Decision
 
@@ -151,6 +151,7 @@ Last activity: 2026-05-13 - Completed quick task 260513-9x3: Tự review lại p
 | 260512-q15 | Thực hiện plan lưu trace_id/cmd_id cho MT5 pending limit order, persist mapping pending_order_id -> trace_id/cmd_id, gửi ORDER_FILLED có mapping, và backend journal fallback update bằng pending_order_id/cmd_id khi thiếu trace_id | 2026-05-12 | 5ccf0eb | Needs Review | [260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m](./quick/260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m/) |
 | 260513-8z8 | Phân tích lại mql5\AureusProvider_v2.mq5 xem tại sao khớp lệnh pending order rồi mà lại k gửi thông tin về cho gateway | 2026-05-12 | (report-only) | Verified | [260513-8z8-ph-n-ti-ch-la-i-mql5-aureusprovider-v2-m](./quick/260513-8z8-ph-n-ti-ch-la-i-mql5-aureusprovider-v2-m/) |
 | 260513-9x3 | Tự review lại plan pending order fill với vai trò chuyên gia tư vấn kiến trúc độc lập theo quy trình 4 bước: neutral listing, attribute mapping, contextual recommendation, adversarial mode; cập nhật tài liệu yêu cầu làm cơ sở thực thi và kiểm thử | 2026-05-13 | (report-only) | Verified | [260513-9x3-t-review-l-i-plan-pending-order-fill-v-i](./quick/260513-9x3-t-review-l-i-plan-pending-order-fill-v-i/) |
+| 260513-ccy | Thực hiện theo advisory plan 260513-9x3: thêm observability tối thiểu cho pending placement và pending fill gates trong AureusProvider_v2, giữ market path nguyên, phục vụ kiểm thử pending ORDER_FILLED | 2026-05-13 | cb42dee | Needs Review | [260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-](./quick/260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
