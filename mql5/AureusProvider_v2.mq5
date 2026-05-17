@@ -2240,7 +2240,31 @@ void ProcessBreakoutProtectPositionsByType(string symbol, long magic, ENUM_POSIT
    double weighted_avg_open_price = weighted_price_sum / total_volume;
    if(positions_count == 1 && age_seconds > 1800 && net_profit > 0)
      {
-      MovePositionsSL(symbol, magic, target_type, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, weighted_avg_open_price, "MOVE_SL", "breakout_time_stop_tighten", "P-13/P-15");
+      if(net_profit >= InpBEProfitTarget)
+        {
+         LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_stale_profit_target_reached", positions_count, net_profit, age_seconds, "P-13/P-15");
+         return;
+        }
+
+      double current_sl = 0;
+      if(PositionSelectByTicket(tickets[0]))
+         current_sl = PositionGetDouble(POSITION_SL);
+
+      bool sl_protective = (target_type == POSITION_TYPE_BUY && current_sl >= weighted_avg_open_price) ||
+                           (target_type == POSITION_TYPE_SELL && current_sl <= weighted_avg_open_price && current_sl > 0);
+      if(sl_protective)
+        {
+         LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_stale_single_sl_already_protective", positions_count, net_profit, age_seconds, "P-13/P-15");
+         return;
+        }
+
+      if(!IsSLProfitable(symbol, target_type, weighted_avg_open_price, weighted_avg_open_price, total_volume, total_commission, total_swap))
+        {
+         LogManagementDecision(symbol, magic, pos_type_str, PROFILE_BREAKOUT_PROTECT, "HOLD", "breakout_stale_breakeven_not_cost_profitable", positions_count, net_profit, age_seconds, "P-12/P-13/P-15");
+         return;
+        }
+
+      MovePositionsSL(symbol, magic, target_type, PROFILE_BREAKOUT_PROTECT, tickets, net_profit, age_seconds, weighted_avg_open_price, "MOVE_SL", "breakout_stale_single_breakeven_protect", "P-12/P-13/P-15");
       return;
      }
    if(net_profit <= positions_count * InpBEProfitTarget / 2)
