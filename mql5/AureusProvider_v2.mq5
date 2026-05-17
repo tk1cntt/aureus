@@ -2116,7 +2116,26 @@ void ProcessLegacyPositionsByType(string symbol, long magic, ENUM_POSITION_TYPE 
      }
    if(positions_count == 1 && age_seconds > 1800 && net_profit > 0)
      {
-      ClosePositionTickets(symbol, magic, pos_type_str, PROFILE_LEGACY, tickets, net_profit, age_seconds, "legacy_stale_profitable_single", "P-08");
+      double weighted_avg_open_price = weighted_price_sum / total_volume;
+      if(net_profit >= InpBEProfitTarget)
+        {
+         LogManagementDecision(symbol, magic, pos_type_str, PROFILE_LEGACY, "HOLD", "legacy_stale_profit_target_reached", positions_count, net_profit, age_seconds, "P-08");
+         return;
+        }
+
+      double current_sl = 0;
+      if(PositionSelectByTicket(tickets[0]))
+         current_sl = PositionGetDouble(POSITION_SL);
+
+      bool sl_protective = (target_type == POSITION_TYPE_BUY && current_sl >= weighted_avg_open_price) ||
+                           (target_type == POSITION_TYPE_SELL && current_sl <= weighted_avg_open_price && current_sl > 0);
+      if(sl_protective)
+        {
+         LogManagementDecision(symbol, magic, pos_type_str, PROFILE_LEGACY, "HOLD", "legacy_stale_single_sl_already_protective", positions_count, net_profit, age_seconds, "P-08");
+         return;
+        }
+
+      MovePositionsSL(symbol, magic, target_type, PROFILE_LEGACY, tickets, net_profit, age_seconds, weighted_avg_open_price, "MOVE_SL", "legacy_stale_single_breakeven_protect", "P-08");
       return;
      }
 
