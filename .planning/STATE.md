@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-13 - Completed quick task 260513-s4k: Kiểm tra log aureus-gateway-dev, fix Invalid JSON noise từ TCP healthcheck/probe
+Last activity: 2026-05-17 - Completed quick task 260517-sf2: Phân tích ProcessLegacyPositionsByType stale profitable single close behavior
 
 ## Architecture Decision
 
@@ -153,6 +153,7 @@ Last activity: 2026-05-13 - Completed quick task 260513-s4k: Kiểm tra log aure
 | 260513-9x3 | Tự review lại plan pending order fill với vai trò chuyên gia tư vấn kiến trúc độc lập theo quy trình 4 bước: neutral listing, attribute mapping, contextual recommendation, adversarial mode; cập nhật tài liệu yêu cầu làm cơ sở thực thi và kiểm thử | 2026-05-13 | (report-only) | Verified | [260513-9x3-t-review-l-i-plan-pending-order-fill-v-i](./quick/260513-9x3-t-review-l-i-plan-pending-order-fill-v-i/) |
 | 260513-ccy | Thực hiện theo advisory plan 260513-9x3: thêm observability tối thiểu cho pending placement và pending fill gates trong AureusProvider_v2, giữ market path nguyên, phục vụ kiểm thử pending ORDER_FILLED | 2026-05-13 | cb42dee | Needs Review | [260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-](./quick/260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-/) |
 | 260513-s4k | Kiểm tra lại log aureus-gateway-dev và phân tích nguyên nhân Invalid JSON và fix | 2026-05-13 | 5897851 | Verified | [260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph](./quick/260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph/) |
+| 260517-sf2 | Phân tích ProcessLegacyPositionsByType stale profitable single close behavior | 2026-05-17 | (pending commit) | Verified | [260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby](./quick/260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
