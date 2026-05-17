@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-17 - Completed quick task 260517-tne: Implement safe stale single handling trong ProcessLegacyPositionsByType theo report 260517-sf2
+last_activity: 2026-05-17 - Completed quick task 260518-91x: Breakout Protect SL safety
 progress:
   total_phases: 4
   completed_phases: 2
@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-17 - Completed quick task 260517-tne: Implement safe stale single handling trong ProcessLegacyPositionsByType theo report 260517-sf2
+Last activity: 2026-05-17 - Completed quick task 260518-91x: Breakout Protect SL safety
 
 ## Architecture Decision
 
@@ -155,6 +155,7 @@ Last activity: 2026-05-17 - Completed quick task 260517-tne: Implement safe stal
 | 260513-s4k | Kiểm tra lại log aureus-gateway-dev và phân tích nguyên nhân Invalid JSON và fix | 2026-05-13 | 5897851 | Verified | [260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph](./quick/260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph/) |
 | 260517-sf2 | Phân tích ProcessLegacyPositionsByType stale profitable single close behavior | 2026-05-17 | (pending commit) | Verified | [260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby](./quick/260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby/) |
 | 260517-tne | Implement safe stale single handling trong ProcessLegacyPositionsByType theo report 260517-sf2. Dùng mặc định: net_profit >= InpBEProfitTarget thì HOLD/không close; 0 < net_profit < InpBEProfitTarget thì MovePositionsSL về breakeven nếu SL chưa bảo vệ, không close market; giữ logic âm hiện tại. Build/verify MQL5 theo mql5\Build_Rules.md | 2026-05-17 | 77b088b | Verified | [260517-tne-implement-safe-stale-single-handling-tro](./quick/260517-tne-implement-safe-stale-single-handling-tro/) |
+| 260518-91x | Lên plan tối ưu các phần cần thiết và thực hiện cho tôi. Tối ưu việc HOLD/move SL theo rule mới cho các strategy | 2026-05-17 | 27ad8ec | Verified | [260518-91x-breakout-sl-safety](./quick/260518-91x-breakout-sl-safety/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
