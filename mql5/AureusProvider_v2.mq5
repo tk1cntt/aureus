@@ -2017,18 +2017,60 @@ bool MovePositionsSL(string symbol,
    proposed_sl_price = NormalizeDouble(proposed_sl_price, symbol_digits);
    int success_count = 0;
 
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   long stops_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   long freeze_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+   long required_points = MathMax(stops_level, freeze_level);
+   double required_distance = required_points * point;
+
    for(int i = 0; i < positions_count; i++)
      {
-      double tp_for_this_pos = 0;
-      if(PositionSelectByTicket(tickets[i]))
-         tp_for_this_pos = PositionGetDouble(POSITION_TP);
+      if(!PositionSelectByTicket(tickets[i]))
+         continue;
+
+      double current_sl = PositionGetDouble(POSITION_SL);
+      double tp_for_this_pos = PositionGetDouble(POSITION_TP);
+      if(target_type == POSITION_TYPE_BUY && current_sl > 0 && proposed_sl_price <= current_sl)
+        {
+         if(InpDebugMode)
+            PrintFormat("%sSL modify skipped for ticket %I64u: no downgrade BUY current_sl=%.5f proposed_sl=%.5f", log_prefix, tickets[i], current_sl, proposed_sl_price);
+         continue;
+        }
+      if(target_type == POSITION_TYPE_SELL && current_sl > 0 && proposed_sl_price >= current_sl)
+        {
+         if(InpDebugMode)
+            PrintFormat("%sSL modify skipped for ticket %I64u: no downgrade SELL current_sl=%.5f proposed_sl=%.5f", log_prefix, tickets[i], current_sl, proposed_sl_price);
+         continue;
+        }
+
+      double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+      bool distance_invalid = (target_type == POSITION_TYPE_BUY && bid > 0 && proposed_sl_price >= bid - required_distance) ||
+                              (target_type == POSITION_TYPE_SELL && ask > 0 && proposed_sl_price <= ask + required_distance);
+      if(distance_invalid)
+        {
+         if(InpDebugMode)
+            PrintFormat("%sSL modify skipped for ticket %I64u: stop/freeze distance current_sl=%.5f proposed_sl=%.5f bid=%.5f ask=%.5f required_points=%lld", log_prefix, tickets[i], current_sl, proposed_sl_price, bid, ask, required_points);
+         continue;
+        }
+
       if(trade.PositionModify(tickets[i], proposed_sl_price, tp_for_this_pos))
         {
          success_count++;
          LogManagementDecision(symbol, magic, pos_type_str, profile, action, reason, positions_count, net_profit, age_seconds, primitive, tickets[i], proposed_sl_price);
         }
       else
-         Print(log_prefix, "SL modify failed for ticket ", tickets[i], ": ", trade.ResultComment());
+        {
+         int retcode = (int)trade.ResultRetcode();
+         string retcode_reason = RetcodeToReason(retcode);
+         if(retcode == TRADE_RETCODE_NO_CHANGES || retcode == 10025)
+           {
+            if(InpDebugMode)
+               PrintFormat("%sSL modify no changes for ticket %I64u retcode=%d reason=%s comment=%s", log_prefix, tickets[i], retcode, retcode_reason, trade.ResultComment());
+            continue;
+           }
+         PrintFormat("%sSL modify failed for ticket %I64u retcode=%d reason=%s comment=%s", log_prefix, tickets[i], retcode, retcode_reason, trade.ResultComment());
+        }
      }
 
    Print(log_prefix, StringFormat("Moved SL to %.*f for %d/%d positions.", symbol_digits, proposed_sl_price, success_count, positions_count));
