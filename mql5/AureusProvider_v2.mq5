@@ -3913,19 +3913,28 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
          PrintFormat("[PENDING_FILL_TRACE] HistoryOrderSelect(orderTicket)=%s ORDER_TYPE=%lld deal=%lld order=%lld",
                      historyOrderSelected ? "true" : "false", orderType, trans.deal, orderTicket);
 
+      string mappedTraceId = "";
+      string mappedCmdId = "";
+      string mappedComment = "";
+      string mappedStrategyName = "";
+      bool hasPendingMapping = PopPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
       bool isPendingFill = (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_SELL_LIMIT ||
                             orderType == ORDER_TYPE_BUY_STOP || orderType == ORDER_TYPE_SELL_STOP ||
-                            orderType == ORDER_TYPE_BUY_STOP_LIMIT || orderType == ORDER_TYPE_SELL_STOP_LIMIT);
+                            orderType == ORDER_TYPE_BUY_STOP_LIMIT || orderType == ORDER_TYPE_SELL_STOP_LIMIT ||
+                            hasPendingMapping);
       if(InpDebugMode)
-         PrintFormat("[PENDING_FILL_TRACE] isPendingFill=%s deal=%lld order=%lld ORDER_TYPE=%lld",
-                     isPendingFill ? "true" : "false", trans.deal, orderTicket, orderType);
+         PrintFormat("[PENDING_FILL_TRACE] isPendingFill=%s deal=%lld order=%lld ORDER_TYPE=%lld mapped=%s",
+                     isPendingFill ? "true" : "false", trans.deal, orderTicket, orderType, hasPendingMapping ? "true" : "false");
       if(!isPendingFill)
         {
          if(InpDebugMode)
-            PrintFormat("[PENDING_FILL_GATE] not pending fill deal=%lld order=%lld ORDER_TYPE=%lld HistoryOrderSelect=%s",
-                        trans.deal, orderTicket, orderType, historyOrderSelected ? "true" : "false");
+            PrintFormat("[PENDING_FILL_GATE] not pending fill deal=%lld order=%lld ORDER_TYPE=%lld HistoryOrderSelect=%s mapped=%s",
+                        trans.deal, orderTicket, orderType, historyOrderSelected ? "true" : "false", hasPendingMapping ? "true" : "false");
          return;
         }
+      if(InpDebugMode)
+         PrintFormat("[PENDING_FILL_GATE] PopPendingOrderMapping result=%s order=%lld mapped_cmd_id=%s mapped_trace_id=%s",
+                     hasPendingMapping ? "true" : "false", orderTicket, mappedCmdId, mappedTraceId);
 
       string openDirection = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
       double sl = 0.0;
@@ -3935,15 +3944,6 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
          sl = PositionGetDouble(POSITION_SL);
          tp = PositionGetDouble(POSITION_TP);
         }
-
-      string mappedTraceId = "";
-      string mappedCmdId = "";
-      string mappedComment = "";
-      string mappedStrategyName = "";
-      bool hasPendingMapping = PopPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
-      if(InpDebugMode)
-         PrintFormat("[PENDING_FILL_GATE] PopPendingOrderMapping result=%s order=%lld mapped_cmd_id=%s mapped_trace_id=%s",
-                     hasPendingMapping ? "true" : "false", orderTicket, mappedCmdId, mappedTraceId);
       if(traceId == "" && hasPendingMapping)
          traceId = mappedTraceId;
       if(dealComment == "" && hasPendingMapping)
