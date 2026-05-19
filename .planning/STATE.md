@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-18 - Completed quick task 260518-9yd: Move SL safety
+last_activity: 2026-05-19 - Completed quick task 260519-w3p: Phân tích lại file mql5\AureusProvider_v2.mq5 và log của git và review xem đã sửa những gì ở file mql5\AureusProvider_v2.mq5 gây ra lỗi này rồi fix đi
 progress:
   total_phases: 4
   completed_phases: 2
@@ -157,6 +157,7 @@ Last activity: 2026-05-18 - Completed quick task 260518-9yd: Move SL safety
 | 260517-tne | Implement safe stale single handling trong ProcessLegacyPositionsByType theo report 260517-sf2. Dùng mặc định: net_profit >= InpBEProfitTarget thì HOLD/không close; 0 < net_profit < InpBEProfitTarget thì MovePositionsSL về breakeven nếu SL chưa bảo vệ, không close market; giữ logic âm hiện tại. Build/verify MQL5 theo mql5\Build_Rules.md | 2026-05-17 | 77b088b | Verified | [260517-tne-implement-safe-stale-single-handling-tro](./quick/260517-tne-implement-safe-stale-single-handling-tro/) |
 | 260518-91x | Lên plan tối ưu các phần cần thiết và thực hiện cho tôi. Tối ưu việc HOLD/move SL theo rule mới cho các strategy | 2026-05-17 | 27ad8ec | Verified | [260518-91x-breakout-sl-safety](./quick/260518-91x-breakout-sl-safety/) |
 | 260518-9yd | Tối ưu các tồn đọng cần thiết trong move SL thuộc ProcessPositionsByType: per-ticket no-downgrade guard trong MovePositionsSL, stop/freeze precheck nếu phù hợp, cost/breakeven safety nếu cần; giữ surgical, build MQL5 theo mql5\Build_Rules.md | 2026-05-18 | eb164e8 | Verified | [260518-9yd-move-sl-safety](./quick/260518-9yd-move-sl-safety/) |
+| 260519-w3p | Phân tích lại file mql5\AureusProvider_v2.mq5 và log của git và review xem đã sửa những gì ở file mql5\AureusProvider_v2.mq5 gây ra lỗi này rồi fix đi | 2026-05-19 | add3910 | Needs Review | [260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider](./quick/260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
