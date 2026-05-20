@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-19 - Completed quick task 260520-9kx: Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh
+last_activity: 2026-05-20 - Completed quick task 260520-wy4: Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh
 progress:
   total_phases: 4
   completed_phases: 2
@@ -159,6 +159,7 @@ Last activity: 2026-05-19 - Completed quick task 260520-9kx: Phân tích lại 
 | 260518-9yd | Tối ưu các tồn đọng cần thiết trong move SL thuộc ProcessPositionsByType: per-ticket no-downgrade guard trong MovePositionsSL, stop/freeze precheck nếu phù hợp, cost/breakeven safety nếu cần; giữ surgical, build MQL5 theo mql5\Build_Rules.md | 2026-05-18 | eb164e8 | Verified | [260518-9yd-move-sl-safety](./quick/260518-9yd-move-sl-safety/) |
 | 260519-w3p | Phân tích lại file mql5\AureusProvider_v2.mq5 và log của git và review xem đã sửa những gì ở file mql5\AureusProvider_v2.mq5 gây ra lỗi này rồi fix đi | 2026-05-19 | add3910 | Needs Review | [260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider](./quick/260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider/) |
 | 260520-9kx | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-19 | 4fe9793 | Needs Review | [260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
+| 260520-wy4 | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-20 | 75a7ec6 | Needs Review | [260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
