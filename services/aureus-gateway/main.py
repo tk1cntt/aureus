@@ -90,6 +90,7 @@ class OrderOpenedEvent(BaseModel):
 
 class OrderClosedEvent(BaseModel):
     type: Literal['ORDER_CLOSED']
+    cmd_id: Optional[str] = None
     symbol: str
     ticket: int
     direction: str

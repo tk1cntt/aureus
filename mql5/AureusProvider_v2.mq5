@@ -1370,6 +1370,23 @@ void StorePendingOrderMapping(long pendingOrderId, string traceId, string cmdId,
    g_pendingMapCount++;
   }
 
+bool GetPendingOrderMapping(long pendingOrderId, string &traceId, string &cmdId,
+                            string &comment, string &strategyName)
+  {
+   for(int i = 0; i < g_pendingMapCount; i++)
+     {
+      if(g_pendingOrderIds[i] != pendingOrderId)
+         continue;
+
+      traceId = g_pendingTraceIds[i];
+      cmdId = g_pendingCmdIds[i];
+      comment = g_pendingComments[i];
+      strategyName = g_pendingStrategyNames[i];
+      return true;
+     }
+   return false;
+  }
+
 bool PopPendingOrderMapping(long pendingOrderId, string &traceId, string &cmdId,
                             string &comment, string &strategyName)
   {
@@ -3917,7 +3934,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
       string mappedCmdId = "";
       string mappedComment = "";
       string mappedStrategyName = "";
-      bool hasPendingMapping = PopPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
+      bool hasPendingMapping = GetPendingOrderMapping(orderTicket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
       bool isPendingFill = (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_SELL_LIMIT ||
                             orderType == ORDER_TYPE_BUY_STOP || orderType == ORDER_TYPE_SELL_STOP ||
                             orderType == ORDER_TYPE_BUY_STOP_LIMIT || orderType == ORDER_TYPE_SELL_STOP_LIMIT ||
@@ -3933,8 +3950,11 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
          return;
         }
       if(InpDebugMode)
-         PrintFormat("[PENDING_FILL_GATE] PopPendingOrderMapping result=%s order=%lld mapped_cmd_id=%s mapped_trace_id=%s",
+         PrintFormat("[PENDING_FILL_GATE] GetPendingOrderMapping result=%s order=%lld mapped_cmd_id=%s mapped_trace_id=%s",
                      hasPendingMapping ? "true" : "false", orderTicket, mappedCmdId, mappedTraceId);
+
+      if(hasPendingMapping && ticket > 0)
+         StorePendingOrderMapping(ticket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
 
       string openDirection = (dealType == DEAL_TYPE_BUY) ? "BUY" : "SELL";
       double sl = 0.0;

@@ -255,7 +255,7 @@ async def test_order_opened_event(mock_redis):
 @pytest.mark.asyncio
 async def test_order_closed_event(mock_redis):
     data = {
-        "type": "ORDER_CLOSED", "symbol": "XAUUSD", "ticket": 12345678,
+        "type": "ORDER_CLOSED", "cmd_id": "ord-close-001", "symbol": "XAUUSD", "ticket": 12345678,
         "direction": "BUY", "volume": 0.1, "open_price": 1960.25,
         "close_price": 1968.50, "profit": 82.50, "commission": -0.70,
         "swap": 0.00, "magic": 10001, "t": 1712379600000
@@ -263,6 +263,8 @@ async def test_order_closed_event(mock_redis):
     result = await process_message(mock_redis, data, source="TCP")
     assert result is True
     mock_redis.publish.assert_called_once()
+    parsed = json.loads(mock_redis.publish.call_args[0][1])
+    assert parsed["cmd_id"] == "ord-close-001"
 
 @pytest.mark.asyncio
 async def test_order_failed_event(mock_redis):
