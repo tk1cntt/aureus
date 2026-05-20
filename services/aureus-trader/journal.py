@@ -647,6 +647,8 @@ class TradeJournalManager:
                                     volume = COALESCE(EXCLUDED.volume, aureus_trades.volume),
                                     strategy_name = COALESCE(EXCLUDED.strategy_name, aureus_trades.strategy_name),
                                     payload = aureus_trades.payload || EXCLUDED.payload,
+                                    status = 'OPEN',
+                                    filled_at = COALESCE(aureus_trades.filled_at, now()),
                                     updated_at = now()
                                 """,
                                 row_trace_id,

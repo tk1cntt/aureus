@@ -33,9 +33,10 @@ class MockDBConnection:
             execute_result = self.results.get("execute", "UPDATE 1")
             if execute_result != "UPDATE 1":
                 return None
+        trace_arg = args[7] if "UPDATE aureus_trade_journal" in query and len(args) > 7 else args[0]
         return self.results.get("fetchrow", {
             "id": 1,
-            "trace_id": args[0],
+            "trace_id": trace_arg,
             "entry_time": datetime(2026, 4, 8, 10, 0, 0, tzinfo=timezone.utc),
             "direction": "BUY",
             "symbol": "XAUUSD",

@@ -334,7 +334,7 @@ class TestReasoningBank:
 
         assert result is True
         queries = mock_db_pool._conn.queries
-        parent_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_trades" in q[1])
+        parent_insert_index = next(i for i, q in enumerate(queries) if q[0] == "execute" and "INSERT INTO aureus_trades" in q[1])
         reasoning_insert_index = next(i for i, q in enumerate(queries) if "INSERT INTO aureus_reasoning_entries" in q[1])
         assert parent_insert_index < reasoning_insert_index
         parent_query = queries[parent_insert_index][1]
@@ -346,6 +346,8 @@ class TestReasoningBank:
         assert "volume" in parent_query
         assert "strategy_name" in parent_query
         assert "payload" in parent_query
+        assert "status = 'OPEN'" in parent_query
+        assert "filled_at = COALESCE(aureus_trades.filled_at, now())" in parent_query
         assert parent_args[0] == "trace-test-journal-001"
         assert parent_args[1] == "XAUUSD"
         assert parent_args[2] == "BUY"
