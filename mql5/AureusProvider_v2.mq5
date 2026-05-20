@@ -1695,19 +1695,19 @@ string DealReasonToCloseReason(long reason)
 void PushOrderClosed(string symbol, long ticket, string direction, double volume,
                      double openPrice, double closePrice, double profit,
                      double commission, double swap, long magic,
-                     string strategyName = "", string traceId = "", string closeReason = "")
+                     string strategyName = "", string traceId = "", string closeReason = "", string cmdId = "")
   {
    long timeMs = (long)TimeCurrent() * 1000;
    string json = StringFormat(
                     "{\"type\":\"ORDER_CLOSED\",\"symbol\":\"%s\",\"ticket\":%lld,"
                     "\"direction\":\"%s\",\"volume\":%.2f,\"open_price\":%.5f,\"close_price\":%.5f,\"exit_price\":%.5f,"
-                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\","
+                    "\"profit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,\"magic\":%lld,\"strategy_name\":\"%s\",\"trace_id\":\"%s\",\"cmd_id\":\"%s\","
                     "\"exit_reason\":\"%s\",\"close_reason\":\"%s\",\"exit_time\":%lld,\"t\":%lld}",
                     symbol, ticket, direction, volume, openPrice, closePrice, closePrice, profit, commission, swap,
-                    magic, strategyName, traceId, closeReason, closeReason, timeMs, timeMs);
+                    magic, strategyName, traceId, cmdId, closeReason, closeReason, timeMs, timeMs);
    g_socket.SendJSON(json);
    if(InpDebugMode)
-      PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s reason=%s", ticket, profit, strategyName, closeReason);
+      PrintFormat("[AureusProvider] ORDER_CLOSED pushed: ticket=%lld profit=%.2f strategy=%s trace_id=%s cmd_id=%s reason=%s", ticket, profit, strategyName, traceId, cmdId, closeReason);
   }
 
 
@@ -3973,14 +3973,26 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
    if(PositionSelectByTicket(ticket))
       openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
 
+   string mappedTraceId = "";
+   string mappedCmdId = "";
+   string mappedComment = "";
+   string mappedStrategyName = "";
+   bool hasCloseMapping = PopPendingOrderMapping(ticket, mappedTraceId, mappedCmdId, mappedComment, mappedStrategyName);
+   if(traceId == "" && hasCloseMapping)
+      traceId = mappedTraceId;
+   if(dealComment == "" && hasCloseMapping)
+      dealComment = mappedComment;
+   if((strategyName == "" || strategyName == dealComment) && mappedStrategyName != "")
+      strategyName = mappedStrategyName;
+
    if(InpDebugMode)
       PrintFormat("[AureusProvider] OnTradeTransaction: DEAL_ENTRY_OUT detected — "
-                  "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld",
-                  symbol, ticket, direction, profit, magic);
+                  "symbol=%s ticket=%lld direction=%s profit=%.2f magic=%lld mapped=%s mapped_cmd_id=%s mapped_trace_id=%s",
+                  symbol, ticket, direction, profit, magic, hasCloseMapping ? "true" : "false", mappedCmdId, mappedTraceId);
 
    PushOrderClosed(symbol, ticket, direction, volume,
                    openPrice, closePrice, profit, commission, swap, magic,
-                   strategyName, traceId);
+                   strategyName, traceId, "", mappedCmdId);
   }
 
 //+------------------------------------------------------------------+
