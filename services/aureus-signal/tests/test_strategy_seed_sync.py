@@ -366,6 +366,24 @@ async def test_seed_sync_empty_symbols_env_defaults_to_xauusd(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_trend_cont_market_filters_db_backed_seed_path(monkeypatch):
+    monkeypatch.setenv("SYMBOLS", "XAUUSD")
+    conn = FakeConn()
+    pool = FakePool(conn)
+
+    await seed_system_strategies(pool)
+
+    assert conn.templates["TREND_CONT_BULL"]["config"]["context_filters"] == [
+        {"type": "trend_cont_poc_cisd", "direction": "bullish"}
+    ]
+    assert conn.templates["TREND_CONT_BEAR"]["config"]["context_filters"] == [
+        {"type": "trend_cont_poc_cisd", "direction": "bearish"}
+    ]
+    for name in ("TREND_CONT_LIMIT_BULL", "TREND_CONT_LIMIT_BEAR", "TREND_CONT_FVG_BULL", "TREND_CONT_FVG_BEAR"):
+        assert conn.templates[name]["config"]["context_filters"] == []
+
+
+@pytest.mark.asyncio
 async def test_limit_ema_touch_bull_filters_normal_case(monkeypatch):
     monkeypatch.setenv("SYMBOLS", "XAUUSD")
     conn = FakeConn()
@@ -555,6 +573,10 @@ def test_trend_cont_bull_and_limit_bull_match_same_snapshot_before_executor(monk
         assert registry.register(TemplateStrategy(config))
 
     state = SymbolState("XAUUSD")
+    state.last_candle = {"c": 110.0}
+    state.prev_candle = {"c": 105.0}
+    state.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0}}
+    state.transient_signals = {"cisd_h1_bullish": True}
     state.log_signal_normalize.append(
         {
             "t": 1000,

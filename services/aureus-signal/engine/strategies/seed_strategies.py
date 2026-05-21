@@ -22,7 +22,9 @@ async def seed_system_strategies(pool=None, conn=None):
             "min_score": 3.0,
             "config": {
                 "min_score_threshold": 0,
-                "context_filters": [],
+                "context_filters": [
+                    {"type": "trend_cont_poc_cisd", "direction": "bullish"}
+                ],
                 "sequence": [
                     {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30 }
                 ],
@@ -46,7 +48,9 @@ async def seed_system_strategies(pool=None, conn=None):
             "min_score": 3.0,
             "config": {
                 "min_score_threshold": 0,
-                "context_filters": [],
+                "context_filters": [
+                    {"type": "trend_cont_poc_cisd", "direction": "bearish"}
+                ],
                 "sequence": [
                     {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30 }
                 ],
