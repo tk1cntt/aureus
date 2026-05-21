@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-20 - Completed quick task 260520-wy4: Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh
+last_activity: 2026-05-21 - Completed quick task 260521-u20: Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại.
 progress:
   total_phases: 4
   completed_phases: 2
@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-19 - Completed quick task 260520-9kx: Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh
+Last activity: 2026-05-21 - Completed quick task 260521-u20: Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại.
 
 ## Architecture Decision
 
@@ -160,6 +160,7 @@ Last activity: 2026-05-19 - Completed quick task 260520-9kx: Phân tích lại 
 | 260519-w3p | Phân tích lại file mql5\AureusProvider_v2.mq5 và log của git và review xem đã sửa những gì ở file mql5\AureusProvider_v2.mq5 gây ra lỗi này rồi fix đi | 2026-05-19 | add3910 | Needs Review | [260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider](./quick/260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider/) |
 | 260520-9kx | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-19 | 4fe9793 | Needs Review | [260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
 | 260520-wy4 | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-20 | 75a7ec6 | Needs Review | [260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
+| 260521-u20 | Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại. | 2026-05-21 | 026290c | Verified | [260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-](./quick/260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
