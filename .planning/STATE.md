@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-21 - Completed quick task 260521-u20: Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại.
+last_activity: 2026-05-21 - Completed quick task 260521-wma: Update 2 strategy TREND_CONT_BULL và TREND_CONT_BEAR bổ sung context_filters POC/CISD
 progress:
   total_phases: 4
   completed_phases: 2
@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-21 - Completed quick task 260521-u20: Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại.
+Last activity: 2026-05-21 - Completed quick task 260521-wma: Update 2 strategy TREND_CONT_BULL và TREND_CONT_BEAR bổ sung context_filters POC/CISD
 
 ## Architecture Decision
 
@@ -161,6 +161,7 @@ Last activity: 2026-05-21 - Completed quick task 260521-u20: Update bổ sung th
 | 260520-9kx | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-19 | 4fe9793 | Needs Review | [260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
 | 260520-wy4 | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-20 | 75a7ec6 | Needs Review | [260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
 | 260521-u20 | Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại. | 2026-05-21 | 026290c | Verified | [260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-](./quick/260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-/) |
+| 260521-wma | Update 2 strategy TREND_CONT_BULL và TREND_CONT_BEAR bổ sung context_filters POC/CISD | 2026-05-21 | 672794e | Verified | [260521-wma-update-2-strategy-trend-cont-bull-va-tre](./quick/260521-wma-update-2-strategy-trend-cont-bull-va-tre/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
