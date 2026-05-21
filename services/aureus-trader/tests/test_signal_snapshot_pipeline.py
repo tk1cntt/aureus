@@ -5,6 +5,8 @@ import uuid
 import asyncpg
 import pytest
 
+from journal import _build_signal_snapshot_columns
+
 
 @pytest.mark.asyncio
 async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_manager, valid_strategy_match_event, mock_db_pool):
@@ -354,6 +356,63 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
         assert row["cisd_m30"] == 1
         assert row["cisd_h1"] == -1
 
+    finally:
+        await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
+        await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
+        await conn.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_tpo_d0_d3_db_e2e_journal_columns_persist_fixed_trace_id():
+    dsn = os.getenv("AUREUS_TEST_DB_DSN", "postgresql://aureus:aureus_password@localhost:5433/aureus")
+    conn = await asyncpg.connect(dsn)
+    trace_id = "tpo-d0-d3-e2e-plan-u20-fixed"
+    ticket = 260521020
+    tpo_payload = {
+        "tpo_d0": {"POC": 1010.1, "VAH": 1012.1, "VAL": 1008.1, "OPEN": 1009.1, "HIGH": 1013.1, "LOW": 1007.1, "CLOSE": 1011.1},
+        "tpo_d1": {"POC": 1020.2, "VAH": 1022.2, "VAL": 1018.2, "OPEN": 1019.2, "HIGH": 1023.2, "LOW": 1017.2, "CLOSE": 1021.2},
+        "tpo_d2": {"POC": 1030.3, "VAH": 1032.3, "VAL": 1028.3, "OPEN": 1029.3, "HIGH": 1033.3, "LOW": 1027.3, "CLOSE": 1031.3},
+        "tpo_d3": {"POC": 1040.4, "VAH": 1042.4, "VAL": 1038.4, "OPEN": 1039.4, "HIGH": 1043.4, "LOW": 1037.4, "CLOSE": 1041.4},
+    }
+    columns = _build_signal_snapshot_columns(tpo_payload, {})
+    names = [f"d{day}_{field}" for day in range(4) for field in ("poc", "vah", "val", "open", "high", "low", "close")]
+
+    try:
+        await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
+        await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
+        journal_id = await conn.fetchval(
+            """
+            INSERT INTO aureus_trade_journal (
+                trace_id, strategy_name, strategy_id, direction, symbol, score,
+                active_signals, context_filters, origin_timestamp, status
+            ) VALUES ($1, 'TPO_D0_D3_E2E', 260521020, 'BUY', 'XAUUSD', 0.92, '[]'::jsonb, '{}'::jsonb, now(), 'EXECUTED')
+            RETURNING id
+            """,
+            trace_id,
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO aureus_trade_signal_snapshots (
+                trade_journal_id, trace_id, ticket, strategy_name, symbol, timeframe,
+                signal_schema_version, {', '.join(names)}, created_at
+            ) VALUES (
+                $1, $2, $3, 'TPO_D0_D3_E2E', 'XAUUSD', 'M1', 'sig-v2.0.0',
+                {', '.join(f'${idx}' for idx in range(4, 32))}, now()
+            )
+            """,
+            journal_id,
+            trace_id,
+            ticket,
+            *[columns[name] for name in names],
+        )
+        row = await conn.fetchrow(
+            f"SELECT {', '.join(names)} FROM aureus_trade_signal_snapshots WHERE trace_id = $1",
+            trace_id,
+        )
+        assert row is not None
+        for name in names:
+            assert row[name] == pytest.approx(columns[name])
     finally:
         await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
         await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
