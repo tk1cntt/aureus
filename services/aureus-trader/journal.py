@@ -138,24 +138,20 @@ def _build_signal_snapshot_columns(signal_snapshot: dict, event: dict) -> dict:
         "cisd_m15": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m15", "cisd_M15"))),
         "cisd_m30": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_m30", "cisd_M30"))),
         "cisd_h1": _normalize_polarity_code(_first_present(merged_snapshot, src_event, ("cisd_h1", "cisd_H1"))),
-        "d1_poc": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_poc", "D1_POC"))),
-        "d1_vah": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_vah", "D1_VAH"))),
-        "d1_val": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_val", "D1_VAL"))),
-        "d1_open": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_open", "D1_OPEN", "open_D1"))),
-        "d1_high": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_high", "D1_HIGH", "high_D1"))),
-        "d1_low": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_low", "D1_LOW", "low_D1"))),
-        "d1_close": _to_float_or_none(_first_present(merged_snapshot, src_event, ("d1_close", "D1_CLOSE", "close_D1"))),
     }
 
-    tpo_d1 = merged_snapshot.get("tpo_d1")
-    if isinstance(tpo_d1, dict):
-        columns["d1_poc"] = columns["d1_poc"] if columns["d1_poc"] is not None else _to_float_or_none(tpo_d1.get("POC", tpo_d1.get("poc")))
-        columns["d1_vah"] = columns["d1_vah"] if columns["d1_vah"] is not None else _to_float_or_none(tpo_d1.get("VAH", tpo_d1.get("vah")))
-        columns["d1_val"] = columns["d1_val"] if columns["d1_val"] is not None else _to_float_or_none(tpo_d1.get("VAL", tpo_d1.get("val")))
-        columns["d1_open"] = columns["d1_open"] if columns["d1_open"] is not None else _to_float_or_none(tpo_d1.get("OPEN", tpo_d1.get("open")))
-        columns["d1_high"] = columns["d1_high"] if columns["d1_high"] is not None else _to_float_or_none(tpo_d1.get("HIGH", tpo_d1.get("high")))
-        columns["d1_low"] = columns["d1_low"] if columns["d1_low"] is not None else _to_float_or_none(tpo_d1.get("LOW", tpo_d1.get("low")))
-        columns["d1_close"] = columns["d1_close"] if columns["d1_close"] is not None else _to_float_or_none(tpo_d1.get("CLOSE", tpo_d1.get("close")))
+    for day in range(4):
+        prefix = f"d{day}"
+        tpo_block = merged_snapshot.get(f"tpo_{prefix}")
+        for field in ("poc", "vah", "val", "open", "high", "low", "close"):
+            key = f"{prefix}_{field}"
+            columns[key] = _to_float_or_none(_first_present(
+                merged_snapshot,
+                src_event,
+                (key, key.upper(), f"{field}_{prefix.upper()}"),
+            ))
+            if columns[key] is None and isinstance(tpo_block, dict):
+                columns[key] = _to_float_or_none(tpo_block.get(field.upper(), tpo_block.get(field)))
 
     return columns
 
@@ -554,7 +550,10 @@ class TradeJournalManager:
                                 bb_m1_up, bb_m1_dn, bb_m5_up, bb_m5_dn, bb_m15_up, bb_m15_dn,
                                 bb_m30_up, bb_m30_dn, bb_h1_up, bb_h1_dn,
                                 cisd_m5, cisd_m15, cisd_m30, cisd_h1,
+                                d0_poc, d0_vah, d0_val, d0_open, d0_high, d0_low, d0_close,
                                 d1_poc, d1_vah, d1_val, d1_open, d1_high, d1_low, d1_close,
+                                d2_poc, d2_vah, d2_val, d2_open, d2_high, d2_low, d2_close,
+                                d3_poc, d3_vah, d3_val, d3_open, d3_high, d3_low, d3_close,
                                 created_at
                             ) VALUES (
                                 $1, $2, $3, $4, $5, $6,
@@ -566,7 +565,10 @@ class TradeJournalManager:
                                 $28, $29, $30, $31,
                                 $32, $33, $34, $35,
                                 $36, $37, $38, $39, $40, $41, $42,
-                                $43
+                                $43, $44, $45, $46, $47, $48, $49,
+                                $50, $51, $52, $53, $54, $55, $56,
+                                $57, $58, $59, $60, $61, $62, $63,
+                                $64
                             )
                             ON CONFLICT (trade_journal_id) DO NOTHING
                             RETURNING id
@@ -606,6 +608,13 @@ class TradeJournalManager:
                             snapshot_columns["cisd_m15"],
                             snapshot_columns["cisd_m30"],
                             snapshot_columns["cisd_h1"],
+                            snapshot_columns["d0_poc"],
+                            snapshot_columns["d0_vah"],
+                            snapshot_columns["d0_val"],
+                            snapshot_columns["d0_open"],
+                            snapshot_columns["d0_high"],
+                            snapshot_columns["d0_low"],
+                            snapshot_columns["d0_close"],
                             snapshot_columns["d1_poc"],
                             snapshot_columns["d1_vah"],
                             snapshot_columns["d1_val"],
@@ -613,6 +622,20 @@ class TradeJournalManager:
                             snapshot_columns["d1_high"],
                             snapshot_columns["d1_low"],
                             snapshot_columns["d1_close"],
+                            snapshot_columns["d2_poc"],
+                            snapshot_columns["d2_vah"],
+                            snapshot_columns["d2_val"],
+                            snapshot_columns["d2_open"],
+                            snapshot_columns["d2_high"],
+                            snapshot_columns["d2_low"],
+                            snapshot_columns["d2_close"],
+                            snapshot_columns["d3_poc"],
+                            snapshot_columns["d3_vah"],
+                            snapshot_columns["d3_val"],
+                            snapshot_columns["d3_open"],
+                            snapshot_columns["d3_high"],
+                            snapshot_columns["d3_low"],
+                            snapshot_columns["d3_close"],
                             entry_time,
                         )
                         if snapshot_id is None:

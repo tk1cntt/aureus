@@ -457,9 +457,12 @@ class TestReasoningBank:
         assert args[15] == 3
 
     @pytest.mark.asyncio
-    async def test_on_order_opened_persists_d1_tpo_levels_to_signal_snapshot(self, journal_manager, valid_order_opened_event, mock_db_pool):
+    async def test_on_order_opened_persists_d0_d3_tpo_levels_to_signal_snapshot(self, journal_manager, valid_order_opened_event, mock_db_pool):
         valid_order_opened_event["signal_snapshot"] = {
-            "tpo_d1": {"POC": 2010.1, "VAH": 2012.3, "VAL": 2008.7},
+            "tpo_d0": {"POC": 2010.1, "VAH": 2012.1, "VAL": 2008.1, "OPEN": 2009.1, "HIGH": 2013.1, "LOW": 2007.1, "CLOSE": 2011.1},
+            "tpo_d1": {"POC": 2020.2, "VAH": 2022.2, "VAL": 2018.2, "OPEN": 2019.2, "HIGH": 2023.2, "LOW": 2017.2, "CLOSE": 2021.2},
+            "tpo_d2": {"POC": 2030.3, "VAH": 2032.3, "VAL": 2028.3, "OPEN": 2029.3, "HIGH": 2033.3, "LOW": 2027.3, "CLOSE": 2031.3},
+            "tpo_d3": {"POC": 2040.4, "VAH": 2042.4, "VAL": 2038.4, "OPEN": 2039.4, "HIGH": 2043.4, "LOW": 2037.4, "CLOSE": 2041.4},
         }
 
         result = await journal_manager.on_order_opened(valid_order_opened_event)
@@ -469,12 +472,15 @@ class TestReasoningBank:
         assert len(snapshot_inserts) == 1
         query = snapshot_inserts[0][1]
         args = snapshot_inserts[0][2]
-        assert "d1_poc" in query
-        assert "d1_vah" in query
-        assert "d1_val" in query
-        assert args[35] == 2010.1
-        assert args[36] == 2012.3
-        assert args[37] == 2008.7
+        for day in range(4):
+            for field in ("poc", "vah", "val", "open", "high", "low", "close"):
+                assert f"d{day}_{field}" in query
+        assert args[35:63] == (
+            2010.1, 2012.1, 2008.1, 2009.1, 2013.1, 2007.1, 2011.1,
+            2020.2, 2022.2, 2018.2, 2019.2, 2023.2, 2017.2, 2021.2,
+            2030.3, 2032.3, 2028.3, 2029.3, 2033.3, 2027.3, 2031.3,
+            2040.4, 2042.4, 2038.4, 2039.4, 2043.4, 2037.4, 2041.4,
+        )
 
     async def test_post_snapshot_generates_reasoning_text_without_prompt_context(self, journal_manager, mock_db_pool):
         strategy_event = {
