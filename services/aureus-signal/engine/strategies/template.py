@@ -163,6 +163,125 @@ class TemplateStrategy(BaseStrategy):
                             f"EMA relation OK: EMA({fast_period})={fast_val} {operator} EMA({slow_period})={slow_val}"
                         )
 
+            elif f_type == "trend_cont_poc_cisd":
+                direction = str(f.get("direction", "")).strip().lower()
+                if direction not in {"bullish", "bearish"}:
+                    failed.append(f"trend_cont_poc_cisd:{direction or 'missing'}")
+                    details.append(f"Trend-cont POC/CISD unsupported direction: {direction!r}")
+                    continue
+
+                def _to_float(value: Any) -> float | None:
+                    try:
+                        return float(value) if value is not None else None
+                    except (TypeError, ValueError):
+                        return None
+
+                def _read_key(obj: Any, keys: List[str]) -> Any:
+                    for key in keys:
+                        if isinstance(obj, dict) and key in obj:
+                            return obj.get(key)
+                        if hasattr(obj, key):
+                            return getattr(obj, key)
+                    return None
+
+                def _candle_close(candle: Any) -> float | None:
+                    return _to_float(_read_key(candle, ["c", "close", "price"]))
+
+                def _log_close(offset_from_end: int) -> float | None:
+                    records = getattr(state_obj, "log_signal_normalize", []) or []
+                    if not isinstance(records, list):
+                        return None
+                    found = []
+                    for rec in records:
+                        if not isinstance(rec, dict):
+                            continue
+                        close = _to_float(rec.get("price", rec.get("close")))
+                        if close is not None:
+                            found.append(close)
+                    if len(found) < offset_from_end:
+                        return None
+                    return found[-offset_from_end]
+
+                def _snapshot_sources() -> List[Any]:
+                    current_signal = getattr(state_obj, "current_signal", None)
+                    sources: List[Any] = [
+                        getattr(state_obj, "tpo_profile", None),
+                        current_signal.get("indicator_snapshot") if isinstance(current_signal, dict) else None,
+                        getattr(state_obj, "indicator_snapshot", None),
+                    ]
+                    return [source for source in sources if source is not None]
+
+                def _poc(day_key: str) -> float | None:
+                    for source in _snapshot_sources():
+                        day = _read_key(source, [day_key])
+                        if day is None and isinstance(source, dict):
+                            day = source.get(day_key.upper())
+                        value = _read_key(day, ["POC", "poc"])
+                        poc = _to_float(value)
+                        if poc is not None:
+                            return poc
+                    return None
+
+                def _h1_cisd_matches() -> bool:
+                    transient = getattr(state_obj, "transient_signals", {}) or {}
+                    if not isinstance(transient, dict):
+                        return False
+                    if direction == "bullish" and "cisd_h1_bullish" in transient:
+                        return True
+                    if direction == "bearish" and "cisd_h1_bearish" in transient:
+                        return True
+                    cisd = transient.get("cisd_h1")
+                    raw = cisd
+                    if isinstance(cisd, dict):
+                        raw = cisd.get("direction", cisd.get("status", cisd.get("value")))
+                    raw = str(raw).strip().lower() if raw is not None else ""
+                    allowed = {"bullish", "up"} if direction == "bullish" else {"bearish", "down"}
+                    return raw in allowed
+
+                current_signal = getattr(state_obj, "current_signal", None)
+                current_close = _candle_close(getattr(state_obj, "last_candle", None))
+                if current_close is None:
+                    current_close = _log_close(1)
+                if current_close is None and isinstance(current_signal, dict):
+                    current_close = _to_float(current_signal.get("close"))
+
+                previous_close = _candle_close(getattr(state_obj, "prev_candle", None))
+                if previous_close is None:
+                    previous_close = _log_close(2)
+
+                current_poc = _poc("tpo_d0")
+                previous_poc = _poc("tpo_d1")
+                cisd_ok = _h1_cisd_matches()
+
+                if None in (current_close, previous_close, current_poc, previous_poc) or not cisd_ok:
+                    failed.append(f"trend_cont_poc_cisd:{direction}")
+                    details.append(
+                        f"Trend-cont POC/CISD unavailable: direction={direction}, "
+                        f"previous_close={previous_close}, previous_poc={previous_poc}, "
+                        f"current_close={current_close}, current_poc={current_poc}, cisd_h1_ok={cisd_ok}"
+                    )
+                else:
+                    if direction == "bullish":
+                        ok = previous_close > previous_poc and current_close > current_poc
+                        sign = ">"
+                    else:
+                        ok = previous_close < previous_poc and current_close < current_poc
+                        sign = "<"
+                    if not ok:
+                        failed.append(f"trend_cont_poc_cisd:{direction}")
+                        details.append(
+                            f"Trend-cont POC/CISD mismatch: need previous_close {sign} previous_poc "
+                            f"and current_close {sign} current_poc with H1 CISD {direction}; "
+                            f"previous_close={previous_close}, previous_poc={previous_poc}, "
+                            f"current_close={current_close}, current_poc={current_poc}"
+                        )
+                    else:
+                        details.append(
+                            f"Trend-cont POC/CISD OK: direction={direction}, "
+                            f"previous_close={previous_close}, previous_poc={previous_poc}, "
+                            f"current_close={current_close}, current_poc={current_poc}"
+                        )
+
             elif f_type == "cisd_consensus":
                 required_direction = f.get("required_direction", "bullish").lower()
                 required_tfs = f.get("required_tfs", ["m30", "m15", "m5"])

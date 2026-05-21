@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-Mọi trao đổi phải dùng tiếng Việt. Nội dung trao đổi phải dùng format là markdown và không được dùng các thẻ HTML.
+Mọi trao đổi phải dùng tiếng Việt và không được dùng các thẻ HTML.
 
 Khi chạy command mà bị lỗi hãy tham khảo các chạy hệ thống từ file RUN_SERVICES.md.
 

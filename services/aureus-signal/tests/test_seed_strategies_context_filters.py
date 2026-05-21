@@ -21,7 +21,11 @@ class MockStateWithContext:
         self.log_signal_normalize = []
         self.strategy_progress = {}
         self.symbol = "XAUUSD"
-        
+        self.last_candle = {"c": 110.0}
+        self.prev_candle = {"c": 105.0}
+        self.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0}}
+        self.transient_signals = {"cisd_h1_bullish": True}
+
         # Context cho filters
         self.htf_trend = trend
         self.current_session = session
@@ -40,6 +44,65 @@ def append_events(state, t_val, events):
             "events": events
         }
     })
+
+
+def _trend_cont_strategy(direction="bullish"):
+    return TemplateStrategy(
+        {
+            "name": f"TEST_TREND_CONT_{direction.upper()}",
+            "min_score_threshold": 0,
+            "context_filters": [{"type": "trend_cont_poc_cisd", "direction": direction}],
+            "sequence": [{"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30}],
+            "trade_execution": {"direction": "BUY" if direction == "bullish" else "SELL"},
+        }
+    )
+
+
+class TestTrendContPocCisdFilter:
+    def test_bull_passes_with_closes_above_poc_and_h1_cisd_bullish(self):
+        result = _trend_cont_strategy("bullish")._evaluate_context(MockStateWithContext())
+
+        assert result["passed"] is True
+        assert result["failed_filters"] == []
+
+    def test_bear_passes_with_closes_below_poc_and_h1_cisd_bearish(self):
+        state = MockStateWithContext()
+        state.last_candle = {"c": 90.0}
+        state.prev_candle = {"c": 95.0}
+        state.transient_signals = {"cisd_h1_bearish": True}
+
+        result = _trend_cont_strategy("bearish")._evaluate_context(state)
+
+        assert result["passed"] is True
+        assert result["failed_filters"] == []
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("last_candle", {"c": 100.0}),
+            ("prev_candle", {"c": 100.0}),
+            ("transient_signals", {"cisd_h1_bearish": True}),
+            ("tpo_profile", {"tpo_d0": {"POC": 120.0}, "tpo_d1": {"POC": 100.0}}),
+        ],
+    )
+    def test_bull_fails_on_equal_or_wrong_poc_or_wrong_cisd(self, field, value):
+        state = MockStateWithContext()
+        setattr(state, field, value)
+
+        result = _trend_cont_strategy("bullish")._evaluate_context(state)
+
+        assert result["passed"] is False
+        assert "trend_cont_poc_cisd:bullish" in result["failed_filters"]
+
+    def test_missing_data_fails_closed_with_detail(self):
+        state = MockStateWithContext()
+        state.tpo_profile = {}
+
+        result = _trend_cont_strategy("bullish")._evaluate_context(state)
+
+        assert result["passed"] is False
+        assert "trend_cont_poc_cisd:bullish" in result["failed_filters"]
+        assert any("unavailable" in detail for detail in result["details"])
 
 
 class TestContextFiltersBlockingTriggers:
@@ -142,18 +205,15 @@ class TestContextFiltersBlockingTriggers:
         # BUG FIX: evaluate() BÂY GIỜ check context filters (trước đây bỏ qua)
         assert intent_wrong_ema is None, "evaluate() PHẢI check context filters - bug đã được fix"
 
-    def test_seed_strategies_have_no_context_filters(self):
-        """Xác nhận rằng các strategies trong seed_strategies.py KHÔNG có context filters.
-        
-        Đây là lý do tại sao chúng CÓ THỂ trigger trong thực tế.
-        """
+    def test_seed_strategies_have_expected_context_filters(self):
+        """Xác nhận chỉ TREND_CONT_BULL/BEAR có trend_cont_poc_cisd filters."""
         # Kiểm tra lại configs từ seed_strategies.py
         strategies = [
             {
                 "name": "TREND_CONT_BULL",
                 "config": {
                     "min_score_threshold": 0,
-                    "context_filters": [],  # KHÔNG có filters
+                    "context_filters": [{"type": "trend_cont_poc_cisd", "direction": "bullish"}],
                     "sequence": [
                         {"tag": "choch_up", "weight": 4.0, "required": True, "max_wait": 30}
                     ],
@@ -164,7 +224,7 @@ class TestContextFiltersBlockingTriggers:
                 "name": "TREND_CONT_BEAR",
                 "config": {
                     "min_score_threshold": 0,
-                    "context_filters": [],  # KHÔNG có filters
+                    "context_filters": [{"type": "trend_cont_poc_cisd", "direction": "bearish"}],
                     "sequence": [
                         {"tag": "choch_down", "weight": 4.0, "required": True, "max_wait": 30}
                     ],
@@ -223,12 +283,16 @@ class TestContextFiltersBlockingTriggers:
         print("KIỂM TRA CONTEXT FILTERS TRONG SEED STRATEGIES:")
         print("="*80)
         
+        expected = {
+            "TREND_CONT_BULL": [{"type": "trend_cont_poc_cisd", "direction": "bullish"}],
+            "TREND_CONT_BEAR": [{"type": "trend_cont_poc_cisd", "direction": "bearish"}],
+        }
         for strat in strategies:
-            has_filters = len(strat["config"]["context_filters"]) > 0
-            print(f"{strat['name']}: context_filters = {strat['config']['context_filters']}")
-            assert not has_filters, f"{strat['name']} CÓ context filters! Điều này có thể blocking triggers."
-        
-        print("\n✅ Tất cả seed strategies KHÔNG có context filters.")
+            filters = strat["config"]["context_filters"]
+            print(f"{strat['name']}: context_filters = {filters}")
+            assert filters == expected.get(strat["name"], [])
+
+        print("\nSeed strategies context filters đúng contract.")
 
     def test_on_bar_close_path_with_context(self):
         """Kiểm tra on_bar_close path - đây là path được dùng trong thực tế.
