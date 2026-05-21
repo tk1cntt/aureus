@@ -23,7 +23,7 @@ class MockStateWithContext:
         self.symbol = "XAUUSD"
         self.last_candle = {"c": 110.0}
         self.prev_candle = {"c": 105.0}
-        self.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0}}
+        self.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0, "CLOSE": 105.0}}
         self.transient_signals = {"cisd_h1_bullish": True}
 
         # Context cho filters
@@ -68,7 +68,7 @@ class TestTrendContPocCisdFilter:
     def test_bear_passes_with_closes_below_poc_and_h1_cisd_bearish(self):
         state = MockStateWithContext()
         state.last_candle = {"c": 90.0}
-        state.prev_candle = {"c": 95.0}
+        state.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0, "CLOSE": 95.0}}
         state.transient_signals = {"cisd_h1_bearish": True}
 
         result = _trend_cont_strategy("bearish")._evaluate_context(state)
@@ -80,9 +80,9 @@ class TestTrendContPocCisdFilter:
         "field,value",
         [
             ("last_candle", {"c": 100.0}),
-            ("prev_candle", {"c": 100.0}),
+            ("tpo_profile", {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0, "CLOSE": 100.0}}),
             ("transient_signals", {"cisd_h1_bearish": True}),
-            ("tpo_profile", {"tpo_d0": {"POC": 120.0}, "tpo_d1": {"POC": 100.0}}),
+            ("tpo_profile", {"tpo_d0": {"POC": 120.0}, "tpo_d1": {"POC": 100.0, "CLOSE": 105.0}}),
         ],
     )
     def test_bull_fails_on_equal_or_wrong_poc_or_wrong_cisd(self, field, value):
@@ -93,6 +93,15 @@ class TestTrendContPocCisdFilter:
 
         assert result["passed"] is False
         assert "trend_cont_poc_cisd:bullish" in result["failed_filters"]
+
+    def test_uses_previous_daily_close_not_previous_candle_close(self):
+        state = MockStateWithContext()
+        state.prev_candle = {"c": 80.0}
+        state.tpo_profile = {"tpo_d0": {"POC": 100.0}, "tpo_d1": {"POC": 100.0, "CLOSE": 105.0}}
+
+        result = _trend_cont_strategy("bullish")._evaluate_context(state)
+
+        assert result["passed"] is True
 
     def test_missing_data_fails_closed_with_detail(self):
         state = MockStateWithContext()

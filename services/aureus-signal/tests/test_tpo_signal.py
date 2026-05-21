@@ -38,6 +38,10 @@ def _assert_tpo_block_contract(block):
         "POC",
         "VAH",
         "VAL",
+        "OPEN",
+        "HIGH",
+        "LOW",
+        "CLOSE",
         "shape",
         "shape_confidence_pct",
         "shape_scores_pct",
@@ -45,6 +49,7 @@ def _assert_tpo_block_contract(block):
         "distribution_regime",
     }
     assert block["VAL"] <= block["POC"] <= block["VAH"]
+    assert all(block[key] is not None for key in ("OPEN", "HIGH", "LOW", "CLOSE"))
     assert block["shape"] in {"D", "p", "b", None}
     assert 0.0 <= block["shape_confidence_pct"] <= 100.0
     assert set(block["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}

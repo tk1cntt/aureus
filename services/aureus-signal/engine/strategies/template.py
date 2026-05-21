@@ -211,15 +211,15 @@ class TemplateStrategy(BaseStrategy):
                     ]
                     return [source for source in sources if source is not None]
 
-                def _poc(day_key: str) -> float | None:
+                def _tpo_value(day_key: str, value_keys: List[str]) -> float | None:
                     for source in _snapshot_sources():
                         day = _read_key(source, [day_key])
                         if day is None and isinstance(source, dict):
                             day = source.get(day_key.upper())
-                        value = _read_key(day, ["POC", "poc"])
-                        poc = _to_float(value)
-                        if poc is not None:
-                            return poc
+                        value = _read_key(day, value_keys)
+                        parsed = _to_float(value)
+                        if parsed is not None:
+                            return parsed
                     return None
 
                 def _h1_cisd_matches() -> bool:
@@ -245,12 +245,10 @@ class TemplateStrategy(BaseStrategy):
                 if current_close is None and isinstance(current_signal, dict):
                     current_close = _to_float(current_signal.get("close"))
 
-                previous_close = _candle_close(getattr(state_obj, "prev_candle", None))
-                if previous_close is None:
-                    previous_close = _log_close(2)
+                previous_close = _tpo_value("tpo_d1", ["CLOSE", "close"])
 
-                current_poc = _poc("tpo_d0")
-                previous_poc = _poc("tpo_d1")
+                current_poc = _tpo_value("tpo_d0", ["POC", "poc"])
+                previous_poc = _tpo_value("tpo_d1", ["POC", "poc"])
                 cisd_ok = _h1_cisd_matches()
 
                 if None in (current_close, previous_close, current_poc, previous_poc) or not cisd_ok:
