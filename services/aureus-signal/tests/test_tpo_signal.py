@@ -62,7 +62,7 @@ def test_tpo_signal_returns_required_blocks_and_fields():
 
     assert res is not None
     assert res["tag"] == "tpo"
-    for key in ("tpo_d1", "tpo_h1", "tpo_m30"):
+    for key in ("tpo_d0", "tpo_d1", "tpo_d2", "tpo_d3", "tpo_h1", "tpo_m30"):
         assert key in res["value"]
         block = res["value"][key]
         assert block is not None
@@ -77,7 +77,10 @@ def test_tpo_signal_short_data_still_returns_realtime_blocks():
     res = sig.calculate(df, state)
 
     assert res is not None
-    assert res["value"]["tpo_d1"] is not None
+    assert res["value"]["tpo_d0"] is not None
+    assert res["value"]["tpo_d1"] is None
+    assert res["value"]["tpo_d2"] is None
+    assert res["value"]["tpo_d3"] is None
     assert res["value"]["tpo_h1"] is not None
     assert res["value"]["tpo_m30"] is not None
 
@@ -167,18 +170,40 @@ def test_tpo_block_build_uses_counts_once(monkeypatch):
     _assert_tpo_block_contract(block)
 
 
-def test_tpo_signal_uses_today_only_for_d1():
-    # two days of data; D1 should only use current day window
-    start = 1700000000
-    df = _build_m1_df(minutes=3000, start_ts=start)
+def test_tpo_signal_uses_utc_day_buckets_d0_d3():
+    start = 1704067200  # 2024-01-01 00:00:00 UTC
+    df = _build_m1_df(minutes=4 * 24 * 60, start_ts=start)
     sig = TPOSignal(value_area_pct=0.7, tick_size=0.1)
     state = MockState()
 
+    seen_windows = []
+
+    def fake_block(session_df, **kwargs):
+        seen_windows.append((int(session_df["t"].min()), int(session_df["t"].max())))
+        return {
+            "POC": float(session_df["c"].iloc[-1]),
+            "VAH": float(session_df["h"].max()),
+            "VAL": float(session_df["l"].min()),
+            "shape": None,
+            "shape_confidence_pct": 0.0,
+            "shape_scores_pct": {"D": 0.0, "B": 0.0, "p": 0.0, "b": 0.0},
+            "distr": 0.0,
+            "distribution_regime": "UNKNOWN",
+        }
+
+    sig._build_tpo_block = fake_block
+
     res = sig.calculate(df, state)
     assert res is not None
-    d1 = res["value"]["tpo_d1"]
-    assert d1 is not None
-    _assert_tpo_block_contract(d1)
+    now_ts = int(df.iloc[-1]["t"])
+    day_start = now_ts - (now_ts % 86400)
+    assert seen_windows[:4] == [
+        (day_start, now_ts),
+        (day_start - 86400, day_start - 60),
+        (day_start - (2 * 86400), day_start - 86400 - 60),
+        (day_start - (3 * 86400), day_start - (2 * 86400) - 60),
+    ]
+    assert all(res["value"][key] is not None for key in ("tpo_d0", "tpo_d1", "tpo_d2", "tpo_d3"))
 
 
 def test_tpo_poc_tiebreak_is_deterministic():
@@ -212,10 +237,7 @@ def test_tpo_block_includes_shape_confidence_and_scores():
     assert res is not None
     d1 = res["value"]["tpo_d1"]
     assert d1 is not None
-    assert d1["shape"] in {"D", "p", "b", None}
-    assert 0.0 <= d1["shape_confidence_pct"] <= 100.0
-    assert set(d1["shape_scores_pct"].keys()) == {"D", "B", "p", "b"}
-    assert d1["shape_scores_pct"]["B"] == 0.0
+    _assert_tpo_block_contract(d1)
 
     total_scores = round(sum(d1["shape_scores_pct"].values()), 2)
     assert 99.0 <= total_scores <= 101.0

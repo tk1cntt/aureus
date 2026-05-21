@@ -129,7 +129,10 @@ class TestPublishStrategyMatch:
                 "bb_m15": {"upper": 3352.55, "middle": 3342.0, "lower": 3331.12},
                 "bb_m5": {"upper": 3350.55, "middle": 3341.0, "lower": 3332.12},
                 "cisd_mtf": {"M15": "bearish", "M5": "bullish"},
+                "tpo_d0": {"POC": 4690.0, "VAH": 4730.0, "VAL": 4680.0},
                 "tpo_d1": {"POC": 4696.92, "VAH": 4736.72, "VAL": 4685.42},
+                "tpo_d2": {"POC": 4688.0, "VAH": 4720.0, "VAL": 4670.0},
+                "tpo_d3": {"POC": 4677.0, "VAH": 4710.0, "VAL": 4660.0},
             },
         }
 
@@ -146,7 +149,10 @@ class TestPublishStrategyMatch:
         assert snapshot["bb_m5_dn"] == 3332.12
         assert snapshot["cisd_m15"] == "BEARISH"
         assert snapshot["cisd_m5"] == "BULLISH"
+        assert snapshot["tpo_d0"] == {"POC": 4690.0, "VAH": 4730.0, "VAL": 4680.0}
         assert snapshot["tpo_d1"] == {"POC": 4696.92, "VAH": 4736.72, "VAL": 4685.42}
+        assert snapshot["tpo_d2"] == {"POC": 4688.0, "VAH": 4720.0, "VAL": 4670.0}
+        assert snapshot["tpo_d3"] == {"POC": 4677.0, "VAH": 4710.0, "VAL": 4660.0}
         assert "zigzag_state" in snapshot
 
     async def test_publish_strategy_match_derives_extra_indicator_fields_into_signal_snapshot(self):

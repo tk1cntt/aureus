@@ -124,9 +124,10 @@ def _build_signal_snapshot_from_indicator_snapshot(indicator_snapshot: Any) -> D
             if value is not None:
                 snapshot[output_key] = str(value).upper()
 
-    tpo_d1 = indicator_snapshot.get("tpo_d1")
-    if isinstance(tpo_d1, dict):
-        snapshot["tpo_d1"] = dict(tpo_d1)
+    for key in ("tpo_d0", "tpo_d1", "tpo_d2", "tpo_d3"):
+        tpo_block = indicator_snapshot.get(key)
+        if isinstance(tpo_block, dict):
+            snapshot[key] = dict(tpo_block)
 
     return snapshot
 

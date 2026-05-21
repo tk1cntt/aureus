@@ -50,7 +50,10 @@ class TPOSignal(BaseSignal):
         symbol = str(kwargs.get("symbol") or self.symbol or "").upper()
 
         payload = {
-            "tpo_d1": self._compute_d1(df, ts, symbol=symbol),
+            "tpo_d0": self._compute_daily(df, ts, days_ago=0, symbol=symbol),
+            "tpo_d1": self._compute_daily(df, ts, days_ago=1, symbol=symbol),
+            "tpo_d2": self._compute_daily(df, ts, days_ago=2, symbol=symbol),
+            "tpo_d3": self._compute_daily(df, ts, days_ago=3, symbol=symbol),
             "tpo_h1": self._compute_sliding(df, ts, tf="H1", count=6, cache=state_obj.tpo_cache, symbol=symbol),
             "tpo_m30": self._compute_sliding(df, ts, tf="M30", count=6, cache=state_obj.tpo_cache, symbol=symbol),
         }
@@ -63,9 +66,11 @@ class TPOSignal(BaseSignal):
             "t": ts,
         }
 
-    def _compute_d1(self, m1_df: pd.DataFrame, now_ts: int, symbol: str = "") -> Optional[Dict[str, Any]]:
-        day_start = now_ts - (now_ts % 86400)
-        session = m1_df[(m1_df["t"] >= day_start) & (m1_df["t"] <= now_ts)]
+    def _compute_daily(self, m1_df: pd.DataFrame, now_ts: int, days_ago: int, symbol: str = "") -> Optional[Dict[str, Any]]:
+        current_day_start = now_ts - (now_ts % 86400)
+        day_start = current_day_start - (int(days_ago) * 86400)
+        day_end = now_ts if days_ago == 0 else day_start + 86400 - 60
+        session = m1_df[(m1_df["t"] >= day_start) & (m1_df["t"] <= day_end)]
         if session is None or len(session) == 0:
             return None
 
