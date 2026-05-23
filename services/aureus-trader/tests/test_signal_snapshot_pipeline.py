@@ -88,7 +88,7 @@ async def test_signal_snapshot_boundary_pre_open_zero_post_open_one(journal_mana
     assert snapshot_args[25] == 3352.55
     assert snapshot_args[26] == 3331.12
     assert snapshot_args[32] == -1
-    assert str(snapshot_args[35]).startswith("2026-04-01")
+    assert str(snapshot_args[63]).startswith("2026-04-01")
 
 
 @pytest.mark.asyncio
@@ -622,10 +622,10 @@ async def test_signal_snapshot_mapping_supports_bullish_bearish_and_extra_column
     assert args[32] == -1                        # cisd_m15
     assert args[33] == 1                         # cisd_m30
     assert args[34] == -1                        # cisd_h1
-    assert args[38] == pytest.approx(3310.1)     # d1_open
-    assert args[39] == pytest.approx(3340.2)     # d1_high
-    assert args[40] == pytest.approx(3300.3)     # d1_low
-    assert args[41] == pytest.approx(3333.4)     # d1_close
+    assert args[45] == pytest.approx(3310.1)     # d1_open
+    assert args[46] == pytest.approx(3340.2)     # d1_high
+    assert args[47] == pytest.approx(3300.3)     # d1_low
+    assert args[48] == pytest.approx(3333.4)     # d1_close
 
 
 @pytest.mark.asyncio
