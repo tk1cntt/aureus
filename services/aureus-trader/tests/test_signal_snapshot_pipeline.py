@@ -5,7 +5,7 @@ import uuid
 import asyncpg
 import pytest
 
-from journal import _build_signal_snapshot_columns
+from journal import TradeJournalManager, _build_signal_snapshot_columns
 
 
 @pytest.mark.asyncio
@@ -417,6 +417,71 @@ async def test_tpo_d0_d3_db_e2e_journal_columns_persist_fixed_trace_id():
         await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
         await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
         await conn.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.e2e
+async def test_tpo_d0_d3_db_e2e_journal_on_order_opened_persists_full_tpo():
+    dsn = os.getenv("AUREUS_TEST_DB_DSN", "postgresql://aureus:aureus_password@localhost:5433/aureus")
+    db_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=1)
+    trace_id = f"tpo-d0-d3-on-opened-{uuid.uuid4().hex[:10]}"
+    ticket = int(uuid.uuid4().int % 1000000000)
+    tpo_payload = {
+        "tpo_d0": {"POC": 3010.1, "VAH": 3012.1, "VAL": 3008.1, "OPEN": 3009.1, "HIGH": 3013.1, "LOW": 3007.1, "CLOSE": 3011.1},
+        "tpo_d1": {"POC": 3020.2, "VAH": 3022.2, "VAL": 3018.2, "OPEN": 3019.2, "HIGH": 3023.2, "LOW": 3017.2, "CLOSE": 3021.2},
+        "tpo_d2": {"POC": 3030.3, "VAH": 3032.3, "VAL": 3028.3, "OPEN": 3029.3, "HIGH": 3033.3, "LOW": 3027.3, "CLOSE": 3031.3},
+        "tpo_d3": {"POC": 3040.4, "VAH": 3042.4, "VAL": 3038.4, "OPEN": 3039.4, "HIGH": 3043.4, "LOW": 3037.4, "CLOSE": 3041.4},
+    }
+    names = [f"d{day}_{field}" for day in range(4) for field in ("poc", "vah", "val", "open", "high", "low", "close")]
+
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_reasoning_entries WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_trades WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
+            await conn.execute(
+                """
+                INSERT INTO aureus_trade_journal (
+                    trace_id, strategy_name, strategy_id, direction, symbol, score,
+                    active_signals, context_filters, origin_timestamp, status
+                ) VALUES ($1, 'TREND_CONT_BULL', 260523, 'BUY', 'XAUUSD', 0.92, '[]'::jsonb, '{}'::jsonb, now(), 'TRIGGERED')
+                """,
+                trace_id,
+            )
+
+        manager = TradeJournalManager(db_pool)
+        updated = await manager.on_order_opened({
+            "type": "ORDER_OPENED",
+            "trace_id": trace_id,
+            "ticket": ticket,
+            "symbol": "XAUUSD",
+            "strategy_name": "TREND_CONT_BULL",
+            "open_price": 3333.33,
+            "volume": 0.1,
+            "time": "2026-05-23T00:00:00Z",
+            "signal_snapshot": tpo_payload,
+        })
+        assert updated is True
+
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"SELECT {', '.join(names)} FROM aureus_trade_signal_snapshots WHERE trace_id = $1",
+                trace_id,
+            )
+
+        assert row is not None
+        for day in range(4):
+            block = tpo_payload[f"tpo_d{day}"]
+            for field in ("poc", "vah", "val", "open", "high", "low", "close"):
+                assert row[f"d{day}_{field}"] == pytest.approx(block[field.upper()])
+    finally:
+        async with db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM aureus_trade_signal_snapshots WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_reasoning_entries WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_trades WHERE trace_id = $1", trace_id)
+            await conn.execute("DELETE FROM aureus_trade_journal WHERE trace_id = $1", trace_id)
+        await db_pool.close()
 
 
 @pytest.mark.asyncio

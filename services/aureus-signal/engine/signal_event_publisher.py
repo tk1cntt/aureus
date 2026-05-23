@@ -140,7 +140,14 @@ def _merge_signal_snapshots(base_snapshot: Any, fallback_snapshot: Any) -> Dict[
 
     merged = dict(base_snapshot)
     for key, value in fallback_snapshot.items():
-        if merged.get(key) is None and value is not None:
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            nested = dict(current)
+            for nested_key, nested_value in value.items():
+                if nested.get(nested_key) is None and nested_value is not None:
+                    nested[nested_key] = nested_value
+            merged[key] = nested
+        elif current is None and value is not None:
             merged[key] = value
     return merged
 

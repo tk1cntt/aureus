@@ -215,6 +215,44 @@ class TestPublishStrategyMatch:
         assert snapshot["ema_21"] == 9999.0
         assert snapshot["bb_m15_up"] == 4444.0
 
+    async def test_publish_strategy_match_merges_partial_tpo_d1_without_dropping_d0_d2_d3(self):
+        mock_redis = AsyncMock()
+        mock_redis.publish = AsyncMock(return_value=1)
+
+        strategy_result = {
+            "strategy": "TREND_CONT_BULL",
+            "strategy_id": 260523,
+            "t": 1700000000,
+            "origin_timestamp": 1700000000,
+            "normalized_signal_snapshot": {
+                "tpo_d1": {"POC": 4696.92, "CLOSE": 4701.5},
+            },
+            "indicator_snapshot": {
+                "tpo_d0": {"POC": 4690.0, "VAH": 4730.0, "VAL": 4680.0, "OPEN": 4688.0, "HIGH": 4732.0, "LOW": 4678.0, "CLOSE": 4700.0},
+                "tpo_d1": {"POC": 4696.92, "VAH": 4736.72, "VAL": 4685.42, "OPEN": 4690.0, "HIGH": 4740.0, "LOW": 4680.0, "CLOSE": 4702.0},
+                "tpo_d2": {"POC": 4688.0, "VAH": 4720.0, "VAL": 4670.0, "OPEN": 4680.0, "HIGH": 4722.0, "LOW": 4668.0, "CLOSE": 4698.0},
+                "tpo_d3": {"POC": 4677.0, "VAH": 4710.0, "VAL": 4660.0, "OPEN": 4670.0, "HIGH": 4712.0, "LOW": 4658.0, "CLOSE": 4688.0},
+            },
+        }
+
+        result = await publish_strategy_match(mock_redis, "XAUUSD", strategy_result)
+        assert result is True
+
+        payload = json.loads(mock_redis.publish.call_args[0][1])
+        snapshot = payload["data"]["signal_snapshot"]
+        assert snapshot["tpo_d0"]["POC"] == 4690.0
+        assert snapshot["tpo_d1"] == {
+            "POC": 4696.92,
+            "CLOSE": 4701.5,
+            "VAH": 4736.72,
+            "VAL": 4685.42,
+            "OPEN": 4690.0,
+            "HIGH": 4740.0,
+            "LOW": 4680.0,
+        }
+        assert snapshot["tpo_d2"]["POC"] == 4688.0
+        assert snapshot["tpo_d3"]["POC"] == 4677.0
+
     async def test_publish_strategy_match_with_missing_fields(self):
         mock_redis = AsyncMock()
         mock_redis.publish = AsyncMock(return_value=0)
