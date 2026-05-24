@@ -238,6 +238,20 @@ async def queue_ai_audit_task(ai_queue, validator, symbol, df, state, order):
         logger.error(f"[{symbol}] [queue_ai_audit_task] Error: {e}")
 
 
+def _restore_indicator_snapshot_context(executor_state, payload: dict) -> None:
+    indicator_snapshot = payload.get("indicator_snapshot") if isinstance(payload, dict) else None
+    if not isinstance(indicator_snapshot, dict):
+        return
+    executor_state.indicator_snapshot = indicator_snapshot
+    tpo_profile = {
+        key: indicator_snapshot.get(key)
+        for key in ("tpo_d0", "tpo_d1", "tpo_d2", "tpo_d3", "tpo_h1", "tpo_m30")
+        if isinstance(indicator_snapshot.get(key), dict)
+    }
+    if tpo_profile:
+        executor_state.tpo_profile = tpo_profile
+
+
 async def prepare_and_publish_strategy_match(
     redis_client,
     symbol: str,
@@ -567,6 +581,7 @@ async def run_strategy_executor(db_pool=None, redis_client=None):
                         executor_state.current_signal = payload.get("current_signal", {})
                         # Restore swing_points for context
                         executor_state.swing_points = payload.get("swing_points", [])
+                        _restore_indicator_snapshot_context(executor_state, payload)
                         # Restore last_candle for trade_manager._calculate_sl_tp
                         executor_state.last_candle = {
                             "t": str(ts_unix),

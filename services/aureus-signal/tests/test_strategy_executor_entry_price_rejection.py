@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from engine.strategy_executor import prepare_and_publish_strategy_match
+from engine.strategy_executor import prepare_and_publish_strategy_match, _restore_indicator_snapshot_context
 
 
 class _TradeManagerReturningNone:
@@ -92,3 +92,23 @@ async def test_valid_entry_price_still_publishes_strategy_match():
     assert result['tp_rr_ratio'] == pytest.approx(2.0)
     assert result['indicator_snapshot'] == {'atr_14': 2.5}
     publish_strategy_match.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_restore_indicator_snapshot_context_adds_tpo_profile():
+    executor_state = type('State', (), {})()
+    indicator_snapshot = {
+        'tpo_d0': {'POC': 4525.91, 'CLOSE': 4520.26},
+        'tpo_d1': {'POC': 4532.68, 'CLOSE': 4543.05},
+        'tpo_d2': {'POC': 4516.88, 'CLOSE': 4521.0},
+        'tpo_d3': None,
+    }
+
+    _restore_indicator_snapshot_context(executor_state, {'indicator_snapshot': indicator_snapshot})
+
+    assert executor_state.indicator_snapshot == indicator_snapshot
+    assert executor_state.tpo_profile == {
+        'tpo_d0': {'POC': 4525.91, 'CLOSE': 4520.26},
+        'tpo_d1': {'POC': 4532.68, 'CLOSE': 4543.05},
+        'tpo_d2': {'POC': 4516.88, 'CLOSE': 4521.0},
+    }
