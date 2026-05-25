@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-23 - Completed quick task 260523-ua9: Phân tich và tìm nguyên nhân k lưu data vào db và fix cho tôi
+last_activity: 2026-05-25 - Completed quick task 260526-8n0: Hãy kiểm tra xem signal_snapshot truyền vào đã có đầy đủ thông tin TPO snapshot chưa. Tìm chỗ nào đã truyền đc tpo_d1 thì làm các chỗ khác tương tự. Xem đã lưu vào redis và lấy lên có đủ không. Phân tích và fixđi
 progress:
   total_phases: 4
   completed_phases: 2
@@ -164,6 +164,7 @@ Last activity: 2026-05-23 - Completed quick task 260523-ua9: Phân tich và ti�
 | 260521-wma | Update 2 strategy TREND_CONT_BULL và TREND_CONT_BEAR bổ sung context_filters POC/CISD | 2026-05-21 | 672794e | Verified | [260521-wma-update-2-strategy-trend-cont-bull-va-tre](./quick/260521-wma-update-2-strategy-trend-cont-bull-va-tre/) |
 | 260522-pso | Review TREND_CONT_BULL/TREND_CONT_BEAR no-order root cause after POC/CISD filter | 2026-05-22 | (report-only) | Needs Follow-up Fix | [260522-pso-review-la-i-logic-s-ly-trend-cont-bull-v](./quick/260522-pso-review-la-i-logic-s-ly-trend-cont-bull-v/) |
 | 260523-ua9 | Phân tich và tìm nguyên nhân k lưu data vào db và fix cho tôi | 2026-05-23 | 29b05f8 | Verified | [260523-ua9-ph-n-tich-va-ti-m-nguy-n-nh-n-k-l-u-data](./quick/260523-ua9-ph-n-tich-va-ti-m-nguy-n-nh-n-k-l-u-data/) |
+| 260526-8n0 | Hãy kiểm tra xem signal_snapshot truyền vào đã có đầy đủ thông tin TPO snapshot chưa. Tìm chỗ nào đã truyền đc tpo_d1 thì làm các chỗ khác tương tự. Xem đã lưu vào redis và lấy lên có đủ không. Phân tích và fixđi | 2026-05-25 | d9ca520 | Verified | [260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n](./quick/260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
