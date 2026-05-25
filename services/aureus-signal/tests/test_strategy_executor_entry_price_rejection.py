@@ -95,6 +95,37 @@ async def test_valid_entry_price_still_publishes_strategy_match():
 
 
 @pytest.mark.asyncio
+async def test_prepare_and_publish_strategy_match_preserves_full_tpo_indicator_snapshot():
+    trade_manager = _TradeManagerReturningPrice()
+    publish_strategy_match = AsyncMock(return_value=True)
+    full_tpo = {
+        'tpo_d0': {'POC': 4525.91, 'VAH': 4538.0, 'VAL': 4510.0, 'OPEN': 4520.0, 'HIGH': 4540.0, 'LOW': 4508.0, 'CLOSE': 4520.26},
+        'tpo_d1': {'POC': 4532.68, 'VAH': 4548.0, 'VAL': 4520.0, 'OPEN': 4530.0, 'HIGH': 4550.0, 'LOW': 4518.0, 'CLOSE': 4543.05},
+        'tpo_d2': {'POC': 4516.88, 'VAH': 4530.0, 'VAL': 4500.0, 'OPEN': 4510.0, 'HIGH': 4532.0, 'LOW': 4498.0, 'CLOSE': 4521.0},
+        'tpo_d3': {'POC': 4508.0, 'VAH': 4520.0, 'VAL': 4490.0, 'OPEN': 4500.0, 'HIGH': 4522.0, 'LOW': 4488.0, 'CLOSE': 4512.0},
+    }
+    result = {'strategy': 'VALID_STRATEGY', 'side': 'BUY', 'order_plan': {'entry_method': 'CURRENT'}}
+
+    published = await prepare_and_publish_strategy_match(
+        redis_client=AsyncMock(),
+        symbol='USTEC',
+        res=result,
+        payload={'indicator_snapshot': full_tpo},
+        signals_snapshot={'trend': 'UP'},
+        executor_state={},
+        trade_manager=trade_manager,
+        recent_candles=[],
+        publish_strategy_match=publish_strategy_match,
+    )
+
+    assert published is True
+    assert result['indicator_snapshot'] == full_tpo
+    publish_strategy_match.assert_awaited_once()
+    _, _, published_result = publish_strategy_match.await_args.args[:3]
+    assert published_result['indicator_snapshot'] == full_tpo
+
+
+@pytest.mark.asyncio
 async def test_restore_indicator_snapshot_context_adds_tpo_profile():
     executor_state = type('State', (), {})()
     indicator_snapshot = {
