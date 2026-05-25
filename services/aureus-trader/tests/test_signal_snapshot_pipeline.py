@@ -362,6 +362,26 @@ async def test_signal_snapshot_e2e_db_real_persists_ema_cisd_bb_columns():
         await conn.close()
 
 
+def test_build_signal_snapshot_columns_maps_nested_tpo_d0_d3_and_flat_aliases():
+    signal_snapshot = {
+        "tpo_d0": {"POC": 1010.1, "VAH": 1012.1, "VAL": 1008.1, "OPEN": 1009.1, "HIGH": 1013.1, "LOW": 1007.1, "CLOSE": 1011.1},
+        "tpo_d1": {"POC": 1020.2, "VAH": 1022.2, "VAL": 1018.2, "OPEN": 1019.2, "HIGH": 1023.2, "LOW": 1017.2, "CLOSE": 1021.2},
+        "tpo_d2": {"POC": 1030.3, "VAH": 1032.3, "VAL": 1028.3, "OPEN": 1029.3, "HIGH": 1033.3, "LOW": 1027.3, "CLOSE": 1031.3},
+        "tpo_d3": {"POC": 1040.4, "VAH": 1042.4, "VAL": 1038.4, "OPEN": 1039.4, "HIGH": 1043.4, "LOW": 1037.4, "CLOSE": 1041.4},
+    }
+    event = {"d1_poc": 2020.2}
+
+    columns = _build_signal_snapshot_columns(signal_snapshot, event)
+
+    assert columns["d1_poc"] == pytest.approx(2020.2)
+    for day in (0, 2, 3):
+        block = signal_snapshot[f"tpo_d{day}"]
+        for field in ("poc", "vah", "val", "open", "high", "low", "close"):
+            assert columns[f"d{day}_{field}"] == pytest.approx(block[field.upper()])
+    for field in ("vah", "val", "open", "high", "low", "close"):
+        assert columns[f"d1_{field}"] == pytest.approx(signal_snapshot["tpo_d1"][field.upper()])
+
+
 @pytest.mark.asyncio
 @pytest.mark.e2e
 async def test_tpo_d0_d3_db_e2e_journal_columns_persist_fixed_trace_id():
