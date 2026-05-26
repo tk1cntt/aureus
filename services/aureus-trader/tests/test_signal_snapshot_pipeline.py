@@ -649,6 +649,48 @@ async def test_signal_snapshot_mapping_supports_bullish_bearish_and_extra_column
 
 
 @pytest.mark.asyncio
+async def test_order_opened_conflict_backfills_missing_d0_d2_d3_tpo(journal_manager, mock_db_pool):
+    mock_db_pool.set_result("fetchrow", {
+        "id": 99,
+        "strategy_name": "TREND_CONT_BULL",
+        "symbol": "BTCUSD",
+        "active_signals": [],
+        "context_filters": {},
+    })
+    mock_db_pool.set_result("fetchval", 1234)
+    mock_db_pool.set_result("execute", "UPDATE 1")
+
+    updated = await journal_manager.on_order_opened({
+        "type": "ORDER_OPENED",
+        "trace_id": "conflict-backfill-tpo",
+        "ticket": 99001,
+        "symbol": "BTCUSD",
+        "strategy_name": "TREND_CONT_BULL",
+        "open_price": 77000.0,
+        "time": "2026-05-25T06:30:05Z",
+        "signal_snapshot": {
+            "tpo_d0": {"POC": 77042.21, "VAH": 77159.21, "VAL": 76796.21, "OPEN": 76145.08, "HIGH": 77403.64, "LOW": 75995.21, "CLOSE": 76984.34},
+            "tpo_d1": {"POC": 76713.16, "VAH": 77114.16, "VAL": 76590.16, "OPEN": 76684.1, "HIGH": 77463.45, "LOW": 76076.16, "CLOSE": 76358.58},
+            "tpo_d2": {"POC": 74660.01, "VAH": 75177.01, "VAL": 74403.01, "OPEN": 75249.16, "HIGH": 75615.92, "LOW": 74151.01, "CLOSE": 75433.44},
+        },
+    })
+
+    assert updated is True
+    snapshot_query = [
+        q for q in mock_db_pool._conn.queries
+        if "INSERT INTO aureus_trade_signal_snapshots" in q[1]
+    ][0]
+    query_text = snapshot_query[1]
+    args = snapshot_query[2]
+    assert "ON CONFLICT (trade_journal_id) DO UPDATE SET" in query_text
+    assert "d0_poc = COALESCE" in query_text
+    assert "d2_poc = COALESCE" in query_text
+    assert "d3_poc = COALESCE" in query_text
+    assert args[35] == pytest.approx(77042.21)
+    assert args[49] == pytest.approx(74660.01)
+
+
+@pytest.mark.asyncio
 async def test_signal_snapshot_skips_when_payload_unmappable(journal_manager, mock_db_pool):
     order_opened_event = {
         "type": "ORDER_OPENED",

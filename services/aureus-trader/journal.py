@@ -570,7 +570,28 @@ class TradeJournalManager:
                                 $57, $58, $59, $60, $61, $62, $63,
                                 $64
                             )
-                            ON CONFLICT (trade_journal_id) DO NOTHING
+                            ON CONFLICT (trade_journal_id) DO UPDATE SET
+                                d0_poc = COALESCE(aureus_trade_signal_snapshots.d0_poc, EXCLUDED.d0_poc),
+                                d0_vah = COALESCE(aureus_trade_signal_snapshots.d0_vah, EXCLUDED.d0_vah),
+                                d0_val = COALESCE(aureus_trade_signal_snapshots.d0_val, EXCLUDED.d0_val),
+                                d0_open = COALESCE(aureus_trade_signal_snapshots.d0_open, EXCLUDED.d0_open),
+                                d0_high = COALESCE(aureus_trade_signal_snapshots.d0_high, EXCLUDED.d0_high),
+                                d0_low = COALESCE(aureus_trade_signal_snapshots.d0_low, EXCLUDED.d0_low),
+                                d0_close = COALESCE(aureus_trade_signal_snapshots.d0_close, EXCLUDED.d0_close),
+                                d2_poc = COALESCE(aureus_trade_signal_snapshots.d2_poc, EXCLUDED.d2_poc),
+                                d2_vah = COALESCE(aureus_trade_signal_snapshots.d2_vah, EXCLUDED.d2_vah),
+                                d2_val = COALESCE(aureus_trade_signal_snapshots.d2_val, EXCLUDED.d2_val),
+                                d2_open = COALESCE(aureus_trade_signal_snapshots.d2_open, EXCLUDED.d2_open),
+                                d2_high = COALESCE(aureus_trade_signal_snapshots.d2_high, EXCLUDED.d2_high),
+                                d2_low = COALESCE(aureus_trade_signal_snapshots.d2_low, EXCLUDED.d2_low),
+                                d2_close = COALESCE(aureus_trade_signal_snapshots.d2_close, EXCLUDED.d2_close),
+                                d3_poc = COALESCE(aureus_trade_signal_snapshots.d3_poc, EXCLUDED.d3_poc),
+                                d3_vah = COALESCE(aureus_trade_signal_snapshots.d3_vah, EXCLUDED.d3_vah),
+                                d3_val = COALESCE(aureus_trade_signal_snapshots.d3_val, EXCLUDED.d3_val),
+                                d3_open = COALESCE(aureus_trade_signal_snapshots.d3_open, EXCLUDED.d3_open),
+                                d3_high = COALESCE(aureus_trade_signal_snapshots.d3_high, EXCLUDED.d3_high),
+                                d3_low = COALESCE(aureus_trade_signal_snapshots.d3_low, EXCLUDED.d3_low),
+                                d3_close = COALESCE(aureus_trade_signal_snapshots.d3_close, EXCLUDED.d3_close)
                             RETURNING id
                             """,
                             trade_journal_id,
