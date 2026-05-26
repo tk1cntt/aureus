@@ -107,6 +107,7 @@ class SymbolState:
         self.strategy_progress: Dict[str, Any] = {}
         self.candle_actors: Dict[str, Any] = {} 
         self.current_session: str = "OFF_MARKET"
+        self.tpo_daily_cache: Dict[str, Any] = {}
 
         # Phase 10: Strategy lifecycle and validation ledgers (bounded, deterministic order)
         self.strategy_lifecycle_state: Dict[str, Dict[str, Any]] = {}

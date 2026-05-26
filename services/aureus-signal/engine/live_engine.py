@@ -40,6 +40,7 @@ from engine.signals.tpo_context import TPOContextBuilder
 from engine.signals.tpo_detectors import TrendPullbackDetector, VABreakoutAcceptanceDetector, VARejectionDetector
 from engine.signals.tpo_strategy import tpo_strategy_tags_from_candidates
 from engine.symbol_runtime import CandleWorkItem, PerSymbolWorkerRuntime, SymbolRuntimeHealthManager
+from engine.tpo_daily_cache import preload_tpo_daily_cache
 
 logger = get_logger(__name__)
 PIPELINE_LOG_PREFIX = "[PIPELINE]"
@@ -357,6 +358,16 @@ def resolve_symbol_processing_mode(symbol: str, health_manager: SymbolRuntimeHea
     return health_manager.get_symbol_mode(symbol)
 
 
+async def _preload_tpo_for_state(db_pool: Any, redis_client: Any, state: Any, symbol: str, now_ts: int, signals: dict) -> None:
+    tpo_signal = signals.get("tpo") if isinstance(signals, dict) else None
+    if tpo_signal is None:
+        return
+    try:
+        await preload_tpo_daily_cache(db_pool, redis_client, state, symbol, now_ts, tpo_signal)
+    except Exception as e:
+        logger.warning(f"[{symbol}] [tpo_daily_cache] preload failed, using live-window fallback: {e}")
+
+
 async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optional[any] = None):
     load_dotenv()
 
@@ -586,7 +597,8 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                     }
                     df, _ = window_manager.update(symbol, candle_data)
                     state.transient_signals = {}
-                    
+                    await _preload_tpo_for_state(db_pool, r, state, symbol, int(candle_data['t']), signals)
+
                     if df is not None and len(df) >= 5:
                         candle_t = int(candle_data['t'])
                         candle_close = float(candle_data['c'])
@@ -635,6 +647,7 @@ async def run_signal_engine(db_pool: Optional[any] = None, redis_client: Optiona
                 signals = symbol_signals[symbol]
                 if df is not None:
                     candle_t = int(df.iloc[-1]['t'])
+                    await _preload_tpo_for_state(db_pool, r, state, symbol, candle_t, signals)
                     candle_close = float(df.iloc[-1]['c'])
                     record = state.create_candle_record(candle_t, candle_close)
                     for tag, signal_calc in signals.items():

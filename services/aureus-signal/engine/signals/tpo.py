@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 EPSILON = 1e-9
@@ -48,12 +49,16 @@ class TPOSignal(BaseSignal):
             state_obj.tpo_cache = {}
 
         symbol = str(kwargs.get("symbol") or self.symbol or "").upper()
+        tpo_daily_cache = getattr(state_obj, "tpo_daily_cache", {})
+        if not isinstance(tpo_daily_cache, dict):
+            tpo_daily_cache = {}
+        current_day = datetime.fromtimestamp(ts, tz=timezone.utc).date()
 
         payload = {
             "tpo_d0": self._compute_daily(df, ts, days_ago=0, symbol=symbol),
-            "tpo_d1": self._compute_daily(df, ts, days_ago=1, symbol=symbol),
-            "tpo_d2": self._compute_daily(df, ts, days_ago=2, symbol=symbol),
-            "tpo_d3": self._compute_daily(df, ts, days_ago=3, symbol=symbol),
+            "tpo_d1": tpo_daily_cache.get((current_day - timedelta(days=1)).strftime("%Y%m%d")) or self._compute_daily(df, ts, days_ago=1, symbol=symbol),
+            "tpo_d2": tpo_daily_cache.get((current_day - timedelta(days=2)).strftime("%Y%m%d")) or self._compute_daily(df, ts, days_ago=2, symbol=symbol),
+            "tpo_d3": tpo_daily_cache.get((current_day - timedelta(days=3)).strftime("%Y%m%d")) or self._compute_daily(df, ts, days_ago=3, symbol=symbol),
             "tpo_h1": self._compute_sliding(df, ts, tf="H1", count=6, cache=state_obj.tpo_cache, symbol=symbol),
             "tpo_m30": self._compute_sliding(df, ts, tf="M30", count=6, cache=state_obj.tpo_cache, symbol=symbol),
         }
