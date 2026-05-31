@@ -20,7 +20,7 @@ progress:
 Phase: 56
 Plan: Not started
 Status: Executing Phase 55
-Last activity: 2026-05-23 - Completed quick task 260523-ua9: Phân tich và tìm nguyên nhân k lưu data vào db và fix cho tôi
+Last activity: 2026-05-31 - Completed quick task 260531-s85: Implement unittest kiểm tra logic xử lý theo như FZ_CONT_BEAR và FZ_CONT_BULL đang định nghĩa trong file services\aureus-signal\engine\strategies\seed_strategies.py. Update db để có thể chạy đc 2 strategies này
 
 ## Architecture Decision
 
@@ -167,6 +167,7 @@ Last activity: 2026-05-23 - Completed quick task 260523-ua9: Phân tich và ti�
 | 260526-8n0 | Hãy kiểm tra xem signal_snapshot truyền vào đã có đầy đủ thông tin TPO snapshot chưa. Tìm chỗ nào đã truyền đc tpo_d1 thì làm các chỗ khác tương tự. Xem đã lưu vào redis và lấy lên có đủ không. Phân tích và fixđi | 2026-05-25 | d9ca520 | Verified | [260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n](./quick/260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n/) |
 | 260528-qce | Phân tích và đưa giải tối ưu cách sử dụng ram trên Redis | 2026-05-28 | (pending commit) | Verified | [260528-qce-ph-n-t-ch-v-a-gi-i-t-i-u-c-ch-s-d-ng-ram](./quick/260528-qce-ph-n-t-ch-v-a-gi-i-t-i-u-c-ch-s-d-ng-ram/) |
 | 260531-n2h | Implement FZ_CONT_BULL/FZ_CONT_BEAR CHOCH→BOS→LIMIT logic | 2026-05-31 | 05fd2df | Verified | [260531-n2h-implement-logic-x-l-theo-nh-fz-cont-bear](./quick/260531-n2h-implement-logic-x-l-theo-nh-fz-cont-bear/) |
+| 260531-s85 | Implement unittest kiểm tra logic xử lý theo như FZ_CONT_BEAR và FZ_CONT_BULL đang định nghĩa trong file services\aureus-signal\engine\strategies\seed_strategies.py. Update db để có thể chạy đc 2 strategies này | 2026-05-31 | 8ec2431 | Verified | [260531-s85-fz-cont-tests-db-seed](./quick/260531-s85-fz-cont-tests-db-seed/) |
 ## Accumulated Context
 
 ### Roadmap Evolution
