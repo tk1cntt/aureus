@@ -841,6 +841,10 @@ class SimulatedTradeManager:
             return self._entry_pivot_limit(side, state_obj, current_price)
         elif method == "ENTRY_FVG_FROM_CHOCH_PIVOT":
             return self._entry_fvg_from_choch_pivot(side, state_obj, current_price)
+        elif method == "FIRST_HIGH_LOW_PIVOT":
+            return self._entry_first_high_low_pivot(side, state_obj, current_price)
+        elif method == "FIRST_LOW_HIGH_PIVOT":
+            return self._entry_first_low_high_pivot(side, state_obj, current_price)
 
         logger.warning(f"[orders] Unknown entry_method '{entry_method}' — order rejected")
         return None
@@ -994,3 +998,69 @@ class SimulatedTradeManager:
 
         selected = sorted(candidates, key=lambda item: item['t'])[0]
         return (selected['top'] + selected['bottom']) / 2
+
+    def _entry_first_high_low_pivot(self, side: str, state_obj: Any, fallback: float) -> Optional[float]:
+        """BUY: entry at first LOW pivot after BOS_up (low that created the BOS high)."""
+        is_buy = side == 'BUY'
+        if not is_buy:
+            logger.warning(f"[orders] FIRST_HIGH_LOW_PIVOT only supports BUY side — order rejected")
+            return None
+        # For BUY: find LL pivot that created BOS_up
+        pivot_type = 'LL'
+        pivot_is_high = False  # LL is low pivot
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            # Check if this LL corresponds to BOS_up trigger (has bos_up signal)
+            if sp.get('bos_up'):
+                try:
+                    return float(sp['price'])
+                except (TypeError, ValueError, KeyError):
+                    continue
+        # Fallback: get first valid LL if no BOS marker
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            try:
+                return float(sp['price'])
+            except (TypeError, ValueError, KeyError):
+                continue
+        logger.warning(f"[orders] FIRST_HIGH_LOW_PIVOT no valid LL pivot for side={side} — order rejected")
+        return None
+
+    def _entry_first_low_high_pivot(self, side: str, state_obj: Any, fallback: float) -> Optional[float]:
+        """SELL: entry at first HIGH pivot after BOS_down (high that created the BOS low)."""
+        is_sell = side == 'SELL'
+        if not is_sell:
+            logger.warning(f"[orders] FIRST_LOW_HIGH_PIVOT only supports SELL side — order rejected")
+            return None
+        # For SELL: find HH pivot that created BOS_down
+        pivot_type = 'HH'
+        pivot_is_high = True  # HH is high pivot
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            # Check if this HH corresponds to BOS_down trigger (has bos_down signal)
+            if sp.get('bos_down'):
+                try:
+                    return float(sp['price'])
+                except (TypeError, ValueError, KeyError):
+                    continue
+        # Fallback: get first valid HH if no BOS marker
+        for sp in reversed(getattr(state_obj, 'swing_points', [])):
+            if sp.get('broken') is True or sp.get('is_high') != pivot_is_high:
+                continue
+            if str(sp.get('type', '')).upper() != pivot_type:
+                continue
+            try:
+                return float(sp['price'])
+            except (TypeError, ValueError, KeyError):
+                continue
+        logger.warning(f"[orders] FIRST_LOW_HIGH_PIVOT no valid HH pivot for side={side} — order rejected")
+        return None
