@@ -14,6 +14,8 @@ from engine.signals.trend import TrendSignal
 from engine.signals.session import SessionSignal
 from engine.signals.choch_up import CHOCHUpSignal
 from engine.signals.choch_down import CHOCHDownSignal
+from engine.signals.bos_up import BOSUpSignal
+from engine.signals.bos_down import BOSDownSignal
 from engine.signals.sweep import SweepSignal
 from engine.signals.ema import EMASignal
 from engine.signals.atr import ATRSignal
@@ -148,6 +150,8 @@ def create_signal_set(symbol: str, symbol_config: dict = None) -> dict:
         "sweep_processor": SweepSignal(),
         "choch_up": CHOCHUpSignal(),
         "choch_down": CHOCHDownSignal(),
+        "bos_up": BOSUpSignal(),
+        "bos_down": BOSDownSignal(),
         "ema_21": EMASignal(21),
         "ema_34": EMASignal(34),
         "ema_55": EMASignal(55),

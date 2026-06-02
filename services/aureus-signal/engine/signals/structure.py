@@ -18,7 +18,9 @@ class StructureSignal(BaseSignal):
     signal_type = SignalType.EVENT
     TAG_CHOCH_UP = "choch_up"
     TAG_CHOCH_DN = "choch_down"
-    
+    TAG_BOS_UP = "bos_up"
+    TAG_BOS_DN = "bos_down"
+
     def __init__(self):
         super().__init__("Market Structure Processor (MQL5 Parity)")
 
@@ -113,7 +115,7 @@ class StructureSignal(BaseSignal):
         new_signals = []
         for i in range(nPoints):
             p = points[i]
-            if p.get('is_choch'):
+            if p.get('is_choch') or p.get('is_bos'):
                 continue
 
             if p.get('type') not in ["HH", "LL"]:
@@ -182,7 +184,7 @@ class StructureSignal(BaseSignal):
         new_signals = []
         for i in range(nPoints):
             p = points[i]
-            if p.get('is_choch'):
+            if p.get('is_choch') or p.get('is_bos'):
                 continue
 
             if p.get('type') not in ["HH", "LL"]:
@@ -302,7 +304,30 @@ class StructureSignal(BaseSignal):
                         zone_base_idx = m
 
         if zone_base_idx == -1:
-            return None
+            # --- BOS: Break of Structure without opposing extreme → continuation ---
+            points[pivot_idx]['is_bos'] = True
+            points[pivot_idx]['bos_type'] = "Up" if is_bullish else "Down"
+            points[pivot_idx]['breakout_t'] = breakout_t
+
+            tag = self.TAG_BOS_UP if is_bullish else self.TAG_BOS_DN
+            symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+            already_logged = any(
+                isinstance(s, dict) and s.get('tag') == tag and int(s.get('t', -1)) == breakout_t
+                for s in getattr(state_obj, 'signal_history', [])
+            )
+            if not already_logged:
+                logger.info(f"[t={breakout_t}] [{symbol}] [bos] BOS DETECTED: {tag} @ {pivot_price}")
+
+            return {
+                "tag": tag,
+                "t": int(t_values[k]),
+                "value": tag,
+                "data": {
+                    "price": pivot_price,
+                    "breakout_t": breakout_t,
+                    "pivot_t": int(pivot_t)
+                }
+            }
 
         points[pivot_idx]['is_choch'] = True
         points[pivot_idx]['choch_type'] = "Up" if is_bullish else "Down"
@@ -682,10 +707,33 @@ class StructureSignal(BaseSignal):
                                 zone_base_idx = m
                 
                 # User Rule: Valid CHOCH REQUIRE an opposing extreme.
-                # If no such point exists, this is a continuation, not a CHOCH.
+                # If no such point exists, this is a BOS (continuation), not a CHOCH (reversal).
                 if zone_base_idx == -1:
-                    return None
-                            
+                    # --- BOS: Break of Structure without opposing extreme → continuation ---
+                    points[pivot_idx]['is_bos'] = True
+                    points[pivot_idx]['bos_type'] = "Up" if is_bullish else "Down"
+                    points[pivot_idx]['breakout_t'] = breakout_t
+
+                    tag = self.TAG_BOS_UP if is_bullish else self.TAG_BOS_DN
+                    symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
+                    already_logged = any(
+                        isinstance(s, dict) and s.get('tag') == tag and int(s.get('t', -1)) == breakout_t
+                        for s in getattr(state_obj, 'signal_history', [])
+                    )
+                    if not already_logged:
+                        logger.info(f"[t={breakout_t}] [{symbol}] [bos] BOS DETECTED: {tag} @ {pivot_price}")
+
+                    return {
+                        "tag": tag,
+                        "t": int(candle['t']),
+                        "value": tag,
+                        "data": {
+                            "price": pivot_price,
+                            "breakout_t": breakout_t,
+                            "pivot_t": int(pivot_t)
+                        }
+                    }
+
                 # --- CHOCH: Valid structural break with opposing extreme → create OB ---
                 points[pivot_idx]['is_choch'] = True
                 points[pivot_idx]['choch_type'] = "Up" if is_bullish else "Down"
