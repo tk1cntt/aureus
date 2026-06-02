@@ -91,7 +91,7 @@ def load_symbols_config(path="symbols.json"):
 
 
 
-def _maybe_emit_tpo_strategy_tags(tpo_value: Any, df: Any, state: Any, symbol: str) -> None:
+def _maybe_emit_tpo_strategy_tags(tpo_value: Any, df: Any, state: Any, symbol: str, record: Any = None) -> None:
     if not TPO_LIVE_TAGS_ENABLED or not isinstance(tpo_value, dict) or df is None or len(df) < 2:
         return
 
@@ -112,6 +112,8 @@ def _maybe_emit_tpo_strategy_tags(tpo_value: Any, df: Any, state: Any, symbol: s
                 "source": "tpo",
                 "debug": result.get("debug", []),
             }
+            if record is not None:
+                state.map_signal_to_candle_record(record, tag=tag, value=result)
     except Exception as e:
         logger.warning(f"[{symbol}] [tpo_strategy_tags] failed: {e}")
 
@@ -167,7 +169,7 @@ def execute_signals_for_candle(signals: dict, df: Any, state: Any, symbol: str, 
                         data=res.get("data"),
                     )
                 if emitted_tag == "tpo":
-                    _maybe_emit_tpo_strategy_tags(res.get("value"), df, state, symbol)
+                    _maybe_emit_tpo_strategy_tags(res.get("value"), df, state, symbol, record=record)
         except Exception as e:
             logger.exception(f"[t={ts_unix}] [{symbol}] [execute_signals_for_candle] Signal {signal_name} calc error: {e}")
             timing[signal_name] = time.perf_counter_ns() - t_signal

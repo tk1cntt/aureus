@@ -303,6 +303,28 @@ class TemplateStrategy(BaseStrategy):
                 else:
                     details.append(f"CISD consensus OK: {required_direction} on {required_tfs}")
 
+            elif f_type == "tpo_context":
+                required_direction = f.get("required_direction", "bullish").lower()
+                allowed_bias = f.get("bias", [])
+                tpo_profile = getattr(state_obj, "tpo_profile", None)
+                if not tpo_profile:
+                    failed.append("tpo_context:no_tpo_profile")
+                    details.append("TPO context: no tpo_profile on state")
+                else:
+                    close_val = float(df.iloc[-1]["c"]) if df is not None and len(df) > 0 else None
+                    if close_val is None:
+                        failed.append("tpo_context:no_close")
+                        details.append("TPO context: no close price")
+                    else:
+                        from engine.signals.tpo_context import TPOContextBuilder
+                        ctx = TPOContextBuilder().build(tpo_profile, close=close_val)
+                        d1_bias = ctx.get("bias", {}).get("d1", "neutral")
+                        if allowed_bias and d1_bias not in allowed_bias:
+                            failed.append(f"tpo_context:bias:{d1_bias}")
+                            details.append(f"TPO context: D1 bias={d1_bias}, allowed={allowed_bias}")
+                        else:
+                            details.append(f"TPO context OK: bias={d1_bias}")
+
         return {
             "passed": len(failed) == 0,
             "failed_filters": failed,
