@@ -383,7 +383,7 @@ class StructureSignal(BaseSignal):
         tag = self.TAG_CHOCH_UP if is_bullish else self.TAG_CHOCH_DN
         logger.info(f"[t={t_values[k]}] [{symbol}] [choch] CHOCH DETECTED: {tag} @ {pivot_price}")
         return {
-            "tag": "choch",
+            "tag": tag,
             "t": int(t_values[k]),
             "value": tag,
             "data": {
@@ -790,7 +790,7 @@ class StructureSignal(BaseSignal):
                     # self._register_sweep_targets(state_obj, ob, points[pivot_idx])
                     logger.info(f"[t={candle['t']}] [{symbol}] [choch] CHOCH DETECTED: {tag} @ {pivot_price}")
                     return {
-                        "tag": "choch",
+                        "tag": tag,
                         "t": int(candle['t']), 
                         "value": tag,
                         "data": {
