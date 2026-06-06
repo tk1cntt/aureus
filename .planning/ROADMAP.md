@@ -16,7 +16,7 @@
 
 **Goal:** Xây hệ thống đánh giá hiệu quả strategy đa tiêu chí, có scoring framework chuẩn, lưu dữ liệu chuẩn hóa vào DB, hỗ trợ report nhiều chiều và gửi Telegram insight đầy đủ ngữ cảnh.
 
-**Phases:** 4 (planned)
+**Phases:** 5 (planned)
 
 | Phase | Name | Requirements | Status |
 |---|---|---|---|
@@ -24,6 +24,7 @@
 | 55 | 7/7 | Complete    | 2026-04-23 |
 | 56 | Multi-Dimensional Reporting Engine | RPT-01→05, ACC-03 | Planned |
 | 57 | Telegram Insight Delivery | TEL-EVAL-01→04, ACC-02 | Planned |
+| 58 | Fix inactive trading strategies | — | Planning |
 
 ---
 
@@ -92,3 +93,26 @@ Plans:
 2. Telegram aggregate insight theo strategy/symbol/timeframe hoạt động định kỳ.
 3. Insight có market session + volatility regime + quality/confidence flags.
 4. Insight tham chiếu được evaluation record id/version để traceability.
+
+---
+
+## Phase 58: Fix inactive trading strategies
+
+**Goal:** Verify rằng 8 strategies không bao giờ trigger (0 lệnh) có thể emit signals end-to-end trên live runtime. Mỗi strategy phải đi qua đầy đủ pipeline: detector -> signal bridge -> context filter -> sequence matching.
+**Plans:** 2 plans
+
+Plans:
+- [ ] 58-01-PLAN.md — Verify 6 TPO strategies (TPO_VA_REJECTION_BULL/BEAR, TPO_VA_BREAKOUT_BULL/BEAR, TPO_TREND_PULLBACK_BULL/BEAR) through Stage A-D pipeline via unit/integration tests.
+- [ ] 58-02-PLAN.md — Verify FZ_CONT_BULL và FZ_CONT_BEAR strategies qua choch->bos sequence matching, bos_up/bos_down emission, và LIMIT entry type.
+
+**Success Criteria:**
+1. 6 TPO strategies: detector -> candidate -> bridge -> context filter -> sequence matching verified via tests.
+2. 2 FZ_CONT strategies: bos_up/bos_down emission -> transient -> sequence matching verified via tests.
+3. All existing tests pass (no regression).
+4. Evidence: signal tag appears in Redis event stream or sequence match occurs.
+
+**Pre-fixed Issues (NOT implementing again):**
+- 260602-pvk: `_maybe_emit_tpo_strategy_tags()` already maps tags to candle record events
+- 260602-pvk: `tpo_context` handler already added in template.py
+- 260602-riq: `bos_up`/`bos_down` already implemented in structure.py
+- 260602-riq: BOSUpSignal/BOSDownSignal consumers already registered in factory
