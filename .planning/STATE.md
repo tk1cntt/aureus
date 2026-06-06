@@ -4,7 +4,7 @@ milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
 last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-05-31 - Completed quick task 260531-n2h: Implement FZ_CONT_BULL/FZ_CONT_BEAR CHOCH→BOS→LIMIT logic
+last_activity: 2026-06-06 - Phase 58 discuss-phase: captured context for Fix inactive trading strategies
 progress:
   total_phases: 4
   completed_phases: 2
@@ -181,6 +181,7 @@ Last activity: 2026-06-02 - Completed quick task 260602-riq: Thực hiện imple
 - v1.6 initialized với 4 phase mới: 54 (Strategy Scoring Framework), 55 (Evaluation Data Model & Pipeline), 56 (Multi-Dimensional Reporting Engine), 57 (Telegram Insight Delivery).
 - Milestone focus chuyển từ delivery/execution sang strategy evaluation intelligence (scoring + report + telegram insight).
 - Pending todos từ v1.5 vẫn giữ nguyên để review khi cần cross-phase carry-over.
+- Phase 58 added: Fix inactive trading strategies
 
 ### Pending Todos
 
