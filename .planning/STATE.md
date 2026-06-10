@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Strategy Evaluation & Insight Delivery
 status: executing
-last_updated: "2026-04-25T04:00:00.000Z"
-last_activity: 2026-06-06 - Phase 58 discuss-phase: captured context for Fix inactive trading strategies
+last_updated: "2026-06-10T12:26:25.803Z"
+last_activity: 2026-06-10 - Inserted phase 55.1 to restore evaluation pipeline
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 12
+  completed_plans: 11
+  percent: 33
 ---
 
 # STATE
 
 ## Current Position
 
-Phase: 56
+Phase: 55.1
 Plan: Not started
-Status: Executing Phase 55
-Last activity: 2026-06-02 - Completed quick task 260602-riq: Thực hiện implement bos_up/bos_down
+Status: Ready to execute
+Last activity: 2026-06-10 - Inserted phase 55.1 to restore evaluation pipeline
 
 ## Architecture Decision
 
@@ -173,6 +173,7 @@ Last activity: 2026-06-02 - Completed quick task 260602-riq: Thực hiện imple
 | 260602-pvk | Phân tích sâu tại sao TPO detectors không emit signals cho TPO strategies | 2026-06-02 | c2309d7 | Verified | [260602-pvk-tpo-detector-signal-debug](./quick/260602-pvk-tpo-detector-signal-debug/) |
 | 260602-qu7 | Phân tích sâu tại sao FZ_CONT_BEAR và FZ_CONT_BULL không emit signals | 2026-06-02 | ec4d8e9 | Verified | [260602-qu7-fz-cont-signal-debug](./quick/260602-qu7-fz-cont-signal-debug/) |
 | 260602-riq | Thực hiện implement bos_up/bos_down | 2026-06-02 | 9af8cb6 | Verified | [260602-riq-implement-bos-signals](./quick/260602-riq-implement-bos-signals/) |
+
 ## Accumulated Context
 
 ### Roadmap Evolution
@@ -182,6 +183,7 @@ Last activity: 2026-06-02 - Completed quick task 260602-riq: Thực hiện imple
 - Milestone focus chuyển từ delivery/execution sang strategy evaluation intelligence (scoring + report + telegram insight).
 - Pending todos từ v1.5 vẫn giữ nguyên để review khi cần cross-phase carry-over.
 - Phase 58 added: Fix inactive trading strategies
+- Phase 55.1 added (URGENT): Restore evaluation pipeline - Re-create aureus_trade_evaluations table and INSERT paths
 
 ### Pending Todos
 
