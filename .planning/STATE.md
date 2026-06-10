@@ -1,26 +1,25 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6
-milestone_name: Strategy Evaluation & Insight Delivery
-status: executing
+milestone: v1.7
+milestone_name: Planning
+status: planning
 last_updated: "2026-06-10T12:26:25.803Z"
-last_activity: 2026-06-10 - Inserted phase 55.1 to restore evaluation pipeline
+last_activity: 2026-06-10 - Closed v1.6 milestone
 progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 12
-  completed_plans: 11
-  percent: 33
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE
 
 ## Current Position
 
-Phase: 55.1
+Phase: v1.7 (Planning)
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-10 - Inserted phase 55.1 to restore evaluation pipeline
+Status: Awaiting requirements definition
 
 ## Architecture Decision
 
@@ -33,157 +32,28 @@ Last activity: 2026-06-10 - Inserted phase 55.1 to restore evaluation pipeline
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Status | Directory |
-|---|-------------|------|--------|--------|-----------|
-| 260422-qpv | MT5-only journal timestamps (entry_time/exit_time no fallback) | 2026-04-22 | 2bea405 |  | [260422-qpv-trong-aureus-trade-journal-entry-time-va](./quick/260422-qpv-trong-aureus-trade-journal-entry-time-va/) |
-| 260422-rfk | Expand signal snapshot schema (new signal columns, remove legacy columns) | 2026-04-22 | 8d46948 |  | [260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-](./quick/260422-rfk-b-sung-th-m-ca-c-signal-data-nh-b-n-d-i-/) |
-| 260422-v1s | Kiểm tra lại aureus_trade_signal_snapshots k thấy signal data map với các cột data đang có. Tất cả các signal đều null. | 2026-04-22 | e8afd3c |  | [260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh](./quick/260422-v1s-ki-m-tra-la-i-aureus-trade-signal-snapsh/) |
-| 260423-t4w | Tối ưu phần gửi data sang MT5 cho tôi. Chỉ cần gửi các field cần thiết. Tôi thấy như data dưới gửi cả signal_snapshot sang để làm gì k biết. | 2026-04-23 | ac90ec9 |  | [260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi](./quick/260423-t4w-t-i-u-ph-n-g-i-data-sang-mt5-cho-t-i-chi/) |
-| 260423-umx | Phân tích nguyên nhân và fix bug NotNullViolation timeframe trong on_order_opened (aureus_trade_signal_snapshots) | 2026-04-23 | 30e6576 |  | [260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv](./quick/260423-umx-ph-n-t-ch-nguy-n-nh-n-v-fix-bug-notnullv/) |
-| 260424-1d1 | Chuyển phần xử lý asyncio.create_task(journal.on_strategy_match(event)) ở main.py vào hàm dispatch_order trong phần if final.get("type") == "ORDER_OPENED". Do di chuyển nên cần thông tin trace_id nên tìm cách bổ sung vào cho phù hợp | 2026-04-23 | 13b8d22 |  | [260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou](./quick/260424-1d1-chuy-n-ph-n-x-ly-asyncio-create-task-jou/) |
-| 260424-a6a | Vẫn lỗi trace_id = None, trace_id được tạo ra sau khi chạy await self.journal.on_strategy_match(strategy_payload), vì vậy sau đó mới lấy được trace_id | 2026-04-24 | b17ad08 |  | [260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra](./quick/260424-a6a-v-n-l-i-trace-id-none-trace-id-c-ta-o-ra/) |
-| 260424-c55 | Fix runtime warning missing trace_id in on_order_opened sau khi on_strategy_match đã tạo trace_id | 2026-04-24 | 0c90e36 |  | [260424-c55-fix-runtime-warning-missing-trace-id-in-](./quick/260424-c55-fix-runtime-warning-missing-trace-id-in-/) |
-| 260424-l15 | Extend upstream signal snapshot mapping để persist đầy đủ ema_*/bb_*/cisd_* xuống trade snapshots | 2026-04-24 | (pending commit) |  | [260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb](./quick/260424-l15-fix-n-t-ph-n-mapping-c-c-c-t-ema-cisd-bb/) |
-| 260424-o8f | Fix ORDER_CLOSED Telegram strategy fallback sai semantic khi thiếu journal context | 2026-04-24 | (pending commit) |  | [260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t](./quick/260424-o8f-khi-m-t-order-close-bao-h-c-ng-c-th-ng-t/) |
-| 260424-qkt | Mapping lại dữ liệu CISD còn thiếu trong _build_signal_snapshot_columns + bổ sung atr/vol_sma_20/session/candle_color mapping | 2026-04-24 | (pending commit) |  | [260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron](./quick/260424-qkt-mapping-la-i-d-li-u-cisd-co-n-thi-u-tron/) |
-| 260424-r6b | Bổ sung data thiếu cho _build_signal_snapshot_from_indicator_snapshot (atr/vol_sma_20/session/candle_color_*) | 2026-04-24 | (pending commit) |  | [260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s](./quick/260424-r6b-b-sung-th-m-data-co-n-thi-u-ha-m-build-s/) |
-| 260424-sbg | Phân tích nguyên nhân timeout dispatch order (ACK timeout, Result timeout, NACK DUPLICATE) và tạo report | 2026-04-24 | (pending commit) |  | [260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n](./quick/260424-sbg-ph-n-ti-ch-nguy-n-nh-n-timeout-cu-a-lu-n/) |
-| 260425-055 | Tối ưu tính toán TPO (D1 today-only, H1/M30 sliding+cache) và đưa TPO vào Indicator Snapshot của SIGNAL ALERT Telegram | 2026-04-25 | fcfc187 |  | [260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv](./quick/260425-055-t-i-mu-n-t-i-u-la-i-ca-ch-ti-nh-tpo-serv/) |
-| 260425-1a6 | Xóa 4 cột signal_snapshot/cisd_direction/ema21/ema55 trong aureus_trade_signal_snapshots và source code liên quan | 2026-04-25 | a72abcb |  | [260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr](./quick/260425-1a6-xo-a-4-column-na-y-trong-ba-ng-aureus-tr/) |
-| 260425-aln | Thêm classify TPO shape D/B/p/b + confidence (%) và update SIGNAL ALERT Telegram | 2026-04-25 | 52bd672 |  | [260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-](./quick/260425-aln-ok-vi-t-cho-t-i-h-m-classify-v-i-t-l-nh-/) |
-| 260425-bnh | Phân tích thuật toán TPO hiện tại và đề xuất tối ưu cache/incremental | 2026-04-25 | 2e90c5e |  | [260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo](./quick/260425-bnh-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-tpo/) |
-| 260425-bs6 | Cải thiện TPO single-pass profile build và full-block cache cho closed buckets | 2026-04-25 | ddcd8ea |  | [260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ](./quick/260425-bs6-th-c-hi-n-c-i-thi-n-tpo-signal-theo-summ/) |
-| 260425-c5f | Phân tích journal.py và đề xuất tối ưu kiến trúc lifecycle persistence | 2026-04-25 | bd9f36a |  | [260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser](./quick/260425-c5f-ph-n-t-ch-nh-gi-thu-t-to-n-t-nh-to-n-ser/) |
-| 260425-ch4 | Tối ưu journal.py transaction/round-trip và ORDER_CLOSED async logging | 2026-04-25 | 5ea1fa8 |  | [260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-](./quick/260425-ch4-th-c-hi-n-t-i-u-journal-py-theo-summary-/) |
-| 260425-cyn | Tạo tài liệu design hệ thống strategy trigger data flow MT5/Telegram | 2026-04-25 | 842dcb7 |  | [260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-](./quick/260425-cyn-ta-o-cho-t-i-ta-i-li-u-design-h-th-ng-m-/) |
-| 260425-dep | Fix ORDER_OPENED journal UndefinedColumnError timeframe | 2026-04-25 | d27f2fa |  | [260425-dep-fix-bug-journal-on-order-opened-undefine](./quick/260425-dep-fix-bug-journal-on-order-opened-undefine/) |
-| 260425-duy | Remove aureus_trade_evaluations table and related code | 2026-04-25 | fde8984 |  | [260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s](./quick/260425-duy-xo-a-ba-ng-aureus-trade-evaluations-va-s/) |
-| 260425-ekl | Plan TPO signal implementation from tpo_indi | 2026-04-25 | 5a92034 |  | [260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-](./quick/260425-ekl-l-n-k-hoa-ch-tri-n-khai-signal-tpo-theo-/) |
-| 260425-evw | Nghiên cứu TPO implementation plan với tư vấn kiến trúc độc lập 4 bước và cập nhật tài liệu yêu cầu | 2026-04-25 | 02cd3a4 |  | [260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t](./quick/260425-evw-nghi-n-c-u-tpo-implementation-plan-v-i-t/) |
-| 260425-fcx | Implement TPOContextBuilder foundation | 2026-04-25 | d18f5d6 | Verified | [260425-fcx-implement-tpocontextbuilder-foundation-f](./quick/260425-fcx-implement-tpocontextbuilder-foundation-f/) |
-| 260425-foy | Implement TPO history store | 2026-04-25 | c5e7e5e | Verified | [260425-foy-implement-tpo-history-store-from-tpo-pla](./quick/260425-foy-implement-tpo-history-store-from-tpo-pla/) |
-| 260425-gib | Implement first TPO detector VARejectionDetector | 2026-04-25 | 7f8aa85 | Verified | [260425-gib-implement-first-tpo-detector-varejection](./quick/260425-gib-implement-first-tpo-detector-varejection/) |
-| 260425-i1g | Implement remaining deterministic TPO detectors | 2026-04-25 | 77f25cd | Verified | [260425-i1g-implement-remaining-deterministic-tpo-de](./quick/260425-i1g-implement-remaining-deterministic-tpo-de/) |
-| 260425-ic5 | Implement TPO strategy tag bridge and seed strategy templates | 2026-04-25 | 40b4d09 | Verified | [260425-ic5-implement-tpo-strategy-tag-bridge-and-se](./quick/260425-ic5-implement-tpo-strategy-tag-bridge-and-se/) |
-| 260425-il0 | Add deterministic TPO replay/backtest harness | 2026-04-25 | 952b912 | Verified | [260425-il0-add-deterministic-replay-backtest-harnes](./quick/260425-il0-add-deterministic-replay-backtest-harnes/) |
-| 260425-jre | Phân tích services\aureus-signal\engine\signals\trend.py để tìm cách tối ưu cách phát hiện trend tốt hơn. Với ema 200 thì bị delay quá châm. Đề xuất các phương án khả thi với các signal đang có. Có thể như POC Shift hợp lý hơn hoặc các phương phán khác. Chỉ đưa ra đề xuất và phân tích SWOT, K implement | 2026-04-25 | 3245396 |  | [260425-jre-ph-n-ti-ch-services-aureus-signal-engine](./quick/260425-jre-ph-n-ti-ch-services-aureus-signal-engine/) |
-| 260425-ka4 | Phân tích .planning\quick\260425-jre-ph-n-ti-ch-services-aureus-signal-engine\260425-jre-REPORT.md. tôi muốn bạn đóng vai trò là một chuyên gia tư vấn kiến trúc hệ thống độc lập. Hãy thực hiện theo đúng quy trình 4 bước sau đây: Bước 1 Neutral Listing, Bước 2 Attribute Mapping, Bước 3 Contextual Recommendation, Bước 4 Adversarial Mode. Sau đó đưa ra suggest lựa chọn tốt nhất. Mọi thay đổi được cập nhật ngay vào tài liệu yêu cầu để làm cơ sở thực thì và kiểm thử sau này. | 2026-04-25 | (pending commit) |  | [260425-ka4-ph-n-ti-ch-planning-quick-260425-jre-ph-](./quick/260425-ka4-ph-n-ti-ch-planning-quick-260425-jre-ph-/) |
-| 260425-kj9 | Thực hiện update trend theo như phân tích ở .planning\quick\260425-ka4-ph-n-ti-ch-planning-quick-260425-jre-ph-\260425-ka4-ARCHITECTURE-ADVISORY.md | 2026-04-25 | 84af094 | Verified | [260425-kj9-th-c-hi-n-update-trend-theo-nh-ph-n-ti-c](./quick/260425-kj9-th-c-hi-n-update-trend-theo-nh-ph-n-ti-c/) |
-| 260425-kwd | Phân tích hàm _classify_shape, tầm quan trọng của nó trong hệ thống TPO; đề xuất 3-4 phương pháp cải thiện classify shape; chỉ report, chưa implement | 2026-04-25 | 8b1b282 |  | [260425-kwd-ph-n-t-ch-h-m-classify-shape-t-m-quan-tr](./quick/260425-kwd-ph-n-t-ch-h-m-classify-shape-t-m-quan-tr/) |
-| 260425-lqo | Tư vấn kiến trúc độc lập 4 bước cho cải thiện TPO shape classification dựa trên report 260425-kwd | 2026-04-25 | (pending commit) |  | [260425-lqo-d-a-va-o-report-na-y-planning-quick-2604](./quick/260425-lqo-d-a-va-o-report-na-y-planning-quick-2604/) |
-| 260425-m1y | Implement calibrated TPO shape classifier core theo requirements 260425-lqo | 2026-04-25 | 8e97d09 | Needs Review | [260425-m1y-implement-calibrated-tpo-shape-classifie](./quick/260425-m1y-implement-calibrated-tpo-shape-classifie/) |
-| 260425-mfv | Integrate calibrated TPO shape metadata into indicator snapshot, Telegram, and replay baseline | 2026-04-25 | 7c01219 | Verified | [260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o](./quick/260425-mfv-t-ch-h-p-calibrated-tpo-shape-output-v-o/) |
-| 260425-n8f | Add INVALID_PRICE entry/ask/bid diagnostics to AureusProvider ORDER_FAILED | 2026-04-25 | a4065d3 |  | [260425-n8f-update-file-mql5-aureusprovider-mq5-khi-](./quick/260425-n8f-update-file-mql5-aureusprovider-mq5-khi-/) |
-| 260425-nub | Fix trend calc LOW categorical conversion error | 2026-04-25 | b669aa7 | Verified | [260425-nub-fix-l-i-trend-calc-error-could-not-conve](./quick/260425-nub-fix-l-i-trend-calc-error-could-not-conve/) |
-| 260425-pg8 | Compare current source with 8b1b282 for signal stall root cause | 2026-04-25 | 4230d61 | Completed | [260425-pg8-ph-n-ti-ch-source-code-hi-n-ta-i-v-i-sou](./quick/260425-pg8-ph-n-ti-ch-source-code-hi-n-ta-i-v-i-sou/) |
-| 260425-ruw | đánh giá kiến trúc độc lập phần TPO vừa sửa theo quy trình 4 bước | 2026-04-25 | (pending commit) | Completed | [260425-ruw-nh-gi-ki-n-tr-c-c-l-p-ph-n-tpo-v-a-s-a-t](./quick/260425-ruw-nh-gi-ki-n-tr-c-c-l-p-ph-n-tpo-v-a-s-a-t/) |
-| 260425-t9v | phân tích tpo_project-master để cải thiện classify shape và trend distr cho TPO signal | 2026-04-25 | (pending commit) | Completed | [260425-t9v-ph-n-t-ch-tpo-project-master-c-i-thi-n-c](./quick/260425-t9v-ph-n-t-ch-tpo-project-master-c-i-thi-n-c/) |
-| 260425-tpc | đánh giá độc lập report TPO shape distribution theo quy trình 4 bước | 2026-04-25 | (pending commit) | Completed | [260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio](./quick/260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio/) |
-| 260425-u4u | Thực hiện theo đề xuất .planning/quick/260425-tpc-nh-gi-c-l-p-report-tpo-shape-distributio/260425-tpc-ARCHITECTURE-ADVISORY.md | 2026-04-25 | a1235ed | Completed | [260425-u4u-th-c-hi-n-theo-xu-t-planning-quick-26042](./quick/260425-u4u-th-c-hi-n-theo-xu-t-planning-quick-26042/) |
-| 260425-vqn | Update file mql5\AureusProvider.mq5, chỉ nhận order từ gateway gửi sang với các symbol được khai báo ở danh sách InpSymbols | 2026-04-25 | 2fadb8e | Completed | [260425-vqn-update-file-mql5-aureusprovider-mq5-chi-](./quick/260425-vqn-update-file-mql5-aureusprovider-mq5-chi-/) |
-| 260426-ayf | Update cách tính htf_trend trong services\aureus-signal\engine\signals\trend.py áp dụng các phương pháp score đang có trong services\aureus-signal\engine\signals\trend.py để nó nhạy hơn với thị trường. K dùng ema_200 nữa. Đưa ra phương án tốt nhất | 2026-04-26 | 948c4d9 | Completed | [260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi](./quick/260426-ayf-update-ca-ch-ti-nh-htf-trend-trong-servi/) |
-| 260427-v5g | Implement các phần TODO và các phần chưa hoàn thiện ở services\aureus-signal\engine\orders.py | 2026-04-27 | 87f546e | Needs Review | [260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-](./quick/260427-v5g-implement-c-c-ph-n-todo-v-c-c-ph-n-ch-a-/) |
-| 260427-wky | Fix strategy executor None entry_price crash after rejected order entry | 2026-04-27 | 09f5cb4 | Completed | [260427-wky-fix-strategy-executor-none-entry-price-c](./quick/260427-wky-fix-strategy-executor-none-entry-price-c/) |
-| 260427-wwv | Validate and fix TREND_CONT_LIMIT_BULL and TREND_CONT_LIMIT_BEAR strategy seed declarations | 2026-04-27 | f332187 | Verified | [260427-wwv-validate-and-fix-trend-cont-limit-bull-a](./quick/260427-wwv-validate-and-fix-trend-cont-limit-bull-a/) |
-| 260428-9kd | TREND_CONT_BULL và TREND_CONT_LIMIT_BULL cùng đk vào lệnh hỉ khác điểm vào nhưng mà chỉ thấy TREND_CONT_BULL có trigger. Hãy kiểm tra lại giúp /tôi xem có vấn đề gì ở đây | 2026-04-27 | 9698f14 | Completed | [260428-9kd-trend-cont-bull-va-trend-cont-limit-bull](./quick/260428-9kd-trend-cont-bull-va-trend-cont-limit-bull/) |
-| 260429-897 | Các lệnh limit khi vào lệnh k có ticket number. Khi nó khớp lệnh nó mới tạo ticket number. Nhưng k update lại đc vào db nên k có tham chiếu tới nó. Chứ k phải là chưa có kết quả. Hãy nghiên cứu giải pháp xử lý vấn đề này | 2026-04-28 | fd5d43f | Completed | [260429-897-ca-c-l-nh-limit-khi-va-o-l-nh-k-co-ticke](./quick/260429-897-ca-c-l-nh-limit-khi-va-o-l-nh-k-co-ticke/) |
-| 260429-8th | Implement limit order lifecycle linkage: pending_order_id, ORDER_PENDING_PLACED, ORDER_FILLED, journal DB update, and DB E2E verification | 2026-04-28 | 2a79c31 | Needs Review | [260429-8th-implement-limit-order-lifecycle-linkage-](./quick/260429-8th-implement-limit-order-lifecycle-linkage-/) |
-| 260430-oa4 | Copy DoDCA from CISD_Slope_EA_v6.39_Final into AureusProvider_v2 with provider-safe dependencies | 2026-04-30 | 09778cf | Verified | [260430-oa4-copy-h-m-dodca-t-mql5-cisd-slope-ea-v6-3](./quick/260430-oa4-copy-h-m-dodca-t-mql5-cisd-slope-ea-v6-3/) |
-| 260430-ouw | Add CheckSignalsAndDraw_Stateful CISD DCA gate logic to AureusProvider_v2 | 2026-04-30 | d0b0288 | Verified | [260430-ouw-b-sung-th-m-logic-th-c-hi-n-dodca-ha-m-c](./quick/260430-ouw-b-sung-th-m-logic-th-c-hi-n-dodca-ha-m-c/) |
-| 260430-q4z | Reject duplicate strategy orders per symbol in AureusProvider_v2 | 2026-04-30 | 29a903e | Verified | [260430-q4z-update-ha-m-executeopenorder-mql5-aureus](./quick/260430-q4z-update-ha-m-executeopenorder-mql5-aureus/) |
-| 260430-qmk | Update DCA scope by strategy and symbol in AureusProvider_v2 | 2026-04-30 | 3b12a40 | Needs Review | [260430-qmk-update-checkdcaentryconditionfromcisd-dc](./quick/260430-qmk-update-checkdcaentryconditionfromcisd-dc/) |
-| 260430-rak | Support managing and DCA for all InpSymbols in AureusProvider_v2 | 2026-04-30 | 328891d | Verified | [260430-rak-support-managing-and-dca-for-all-symbols](./quick/260430-rak-support-managing-and-dca-for-all-symbols/) |
-| 260430-roa | Separate BUY and SELL entry/DCA management in AureusProvider_v2 | 2026-04-30 | 48811f3 | Verified | [260430-roa-update-executeopenorder-entry-and-dodca-](./quick/260430-roa-update-executeopenorder-entry-and-dodca-/) |
-| 260430-s08 | Delete pending orders in CloseAllPositions script | 2026-04-30 | 882668e |  | [260430-s08-update-mql5-closeallpositions-mq5-to-als](./quick/260430-s08-update-mql5-closeallpositions-mq5-to-als/) |
-| 260430-sm5 | Base trên ManagePositionProfitBreakEvent() của mql5\CISD_Slope_EA_v6.39_Final.mq5, Bổ sung hàm quản lý tương tự vào mql5\AureusProvider_v2.mq5 để quản lý lệnh theo danh sách InpSymbols | 2026-04-30 | 9020d00 |  | [260430-sm5-base-tr-n-managepositionprofitbreakevent](./quick/260430-sm5-base-tr-n-managepositionprofitbreakevent/) |
-| 260430-tb3 | Update phần xử lý ManagePositionProfitBreakEvent() ở mql5\AureusProvider_v2.mq5: group theo symbol + magic + direction; earliest open time, total profit, weighted price tính riêng từng group | 2026-04-30 | 4c4e646 |  | [260430-tb3-update-ph-n-x-l-managepositionprofitbrea](./quick/260430-tb3-update-ph-n-x-l-managepositionprofitbrea/) |
-| 260430-tqm | Analyze order dispatch flow after build_order_command and dispatcher.enqueue_order to MT5, concurrency, retry blocking risk | 2026-04-30 | (report-only) |  | [260430-tqm-analyze-order-dispatch-flow-after-build-](./quick/260430-tqm-analyze-order-dispatch-flow-after-build-/) |
-| 260430-u7c | Analyze and propose optimized MT5 order dispatch architecture for 1-2s latency and non-blocking per-order handling | 2026-04-30 | (report-only) |  | [260430-u7c-analyze-and-propose-optimized-mt5-order-](./quick/260430-u7c-analyze-and-propose-optimized-mt5-order-/) |
-| 260430-uij | Implement optimized MT5 order dispatch roadmap: observability, provider-local unsupported-symbol ignore for broadcast multi-MT5, bounded lane scheduler, ACK/result state machine, reconcile timeout, gateway/MT5 optimization if metrics show bottleneck | 2026-04-30 | 8acd1c1 | Verified | [260430-uij-implement-optimized-mt5-order-dispatch-r](./quick/260430-uij-implement-optimized-mt5-order-dispatch-r/) |
-| 260501-720 | Fix MT5 ProcessIncomingCommands to handle multiple concatenated order JSON messages per socket read | 2026-04-30 | 66824ef | Completed | [260501-720-fix-mt5-processincomingcommands-to-handl](./quick/260501-720-fix-mt5-processincomingcommands-to-handl/) |
-| 260501-eka | Implement history-based cooldown in AureusProvider_v2 scoped by symbol magic direction | 2026-05-01 | e2c49ee | Verified | [260501-eka-implement-history-based-cooldown-in-aure](./quick/260501-eka-implement-history-based-cooldown-in-aure/) |
-| 260501-i1p | Triển khai strategy-aware position management trong AureusProvider_v2 | 2026-05-01 | d3f52e9 | Verified | [260501-i1p-tri-n-khai-strategy-aware-position-manag](./quick/260501-i1p-tri-n-khai-strategy-aware-position-manag/) |
-| 260501-knj | Refactor strategy-aware position management with anti-lack coverage | 2026-05-01 | d5d3bd3 | Verified | [260501-knj-refactor-strategy-aware-position-managem](./quick/260501-knj-refactor-strategy-aware-position-managem/) |
-| 260501-ock | Preserve legacy/default-old management for unmapped profile magic | 2026-05-01 | 9daeb2b | Verified | [260501-ock-ph-i-gi-nguy-n-logic-c-v-i-case-profile-](./quick/260501-ock-ph-i-gi-nguy-n-logic-c-v-i-case-profile-/) |
-| 260502-vw9 | clone project này về và phân tích tìm hiểu cách implement Reasoning Bank https://github.com/raftersvk/FenixAI_tradingBot. Nghiên cứu giải pháp tích hợp Reasoning Bank vào Aureus | 2026-05-02 | abe226d | Verified | [260502-vw9-clone-project-n-y-v-v-ph-n-t-ch-t-m-hi-u](./quick/260502-vw9-clone-project-n-y-v-v-ph-n-t-ch-t-m-hi-u/) |
-| 260502-wur | Thực hiện implement theo plan ở .planning/quick/260502-vw9-clone-project-n-y-v-v-ph-n-t-ch-t-m-hi-u/260502-vw9-REASONING-BANK-REPORT.md | 2026-05-02 | b7e3427 | Verified | [260502-wur-th-c-hi-n-implement-theo-plan-planning-q](./quick/260502-wur-th-c-hi-n-implement-theo-plan-planning-q/) |
-| 260503-a2k | Bổ sung Reasoning Bank embeddings với model local 8005, pgvector, semantic search, và backfill | 2026-05-03 | 7505e12 | Verified | [260503-a2k-b-sung-t-nh-n-ng-reasoning-bank-embeddin](./quick/260503-a2k-b-sung-t-nh-n-ng-reasoning-bank-embeddin/) |
-| 260503-b25 | Bổ sung Reasoning Bank vào strategy Telegram, strategy-scoped, không filter execute order | 2026-05-03 | 4f3ee59 | Verified | [260503-b25-h-t-i-mu-n-b-sung-ph-n-reasoning-bank-v-](./quick/260503-b25-h-t-i-mu-n-b-sung-ph-n-reasoning-bank-v-/) |
-| 260503-bvr | Kiểm tra journal/signal snapshot data và lập kế hoạch tối ưu Reasoning Bank reuse | 2026-05-03 | cac4600 | Verified | [260503-bvr-ki-m-tra-2-b-ng-aureus-trade-journal-v-a](./quick/260503-bvr-ki-m-tra-2-b-ng-aureus-trade-journal-v-a/) |
-| 260503-cc6 | Implement Reasoning Bank data reuse from journal and signal snapshots | 2026-05-03 | 9e6de2f | Verified | [260503-cc6-implement-theo-plan-planning-quick-26050](./quick/260503-cc6-implement-theo-plan-planning-quick-26050/) |
-| 260503-cx7 | Reasoning Bank async Redis worker for non-blocking MT5 flow | 2026-05-03 | 5e97765 | Verified | [260503-cx7-t-i-u-reasoning-bank-async-redis-worker-](./quick/260503-cx7-t-i-u-reasoning-bank-async-redis-worker-/) |
-| 260503-edn | Report actual Reasoning Bank text field producers | 2026-05-03 | 3f0901c | Completed | [260503-edn-ph-n-t-ch-th-c-t-data-hi-n-t-i-x-c-nh-re](./quick/260503-edn-ph-n-t-ch-th-c-t-data-hi-n-t-i-x-c-nh-re/) |
-| 260503-g9l | Tạo reasoning_text sau khi aureus_trade_journal và aureus_trade_signal_snapshots đã lưu xong | 2026-05-03 | 5ad6a40 | Verified | [260503-g9l-t-o-reasoning-text-sau-khi-aureus-trade-](./quick/260503-g9l-t-o-reasoning-text-sau-khi-aureus-trade-/) |
-| 260503-kb8 | Tạo test E2E từ trigger đến aureus_reasoning_entries | 2026-05-03 | 2f0f6a1 | Verified | [260503-kb8-t-o-test-e2e-t-khi-b-t-u-trigger-n-khi-l](./quick/260503-kb8-t-o-test-e2e-t-khi-b-t-u-trigger-n-khi-l/) |
-| 260503-ltx | Stop repeated MT5 close attempts when market closed | 2026-05-03 | 9731162 | Needs Review | [260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n](./quick/260503-ltx-khi-th-tr-ng-ng-c-a-th-kh-ng-close-c-l-n/) |
-| 260503-mjm | Pre-check market availability before MT5 close and stop spam logs | 2026-05-03 | 7a66fd1 | Needs Review | [260503-mjm-market-closed-guard-v-n-spam-log-hold-pr](./quick/260503-mjm-market-closed-guard-v-n-spam-log-hold-pr/) |
-| 260503-n24 | Symbol-wide market-close guard stops all processing quietly | 2026-05-03 | 71f756c | Needs Review | [260503-n24-update-khi-n-o-g-p-l-i-market-close-c-a-](./quick/260503-n24-update-khi-n-o-g-p-l-i-market-close-c-a-/) |
-| 260503-neg | Suppress repeated HOLD decision logs | 2026-05-03 | c4e20f3 | Needs Review | [260503-neg-fix-spam-managepositiondecision-hold-pro](./quick/260503-neg-fix-spam-managepositiondecision-hold-pro/) |
-| 260503-nqu | Fix Reasoning FK-safe insert lifecycle | 2026-05-03 | 8be87b8 | Verified | [260503-nqu-fixbug-journal-reasoning-entry-insert-fa](./quick/260503-nqu-fixbug-journal-reasoning-entry-insert-fa/) |
-| 260503-o5w | Explain and suppress breakout protect HOLD spam | 2026-05-03 | 7cabd74 | Needs Review | [260503-o5w-ki-m-tra-ngh-a-log-managepositiondecisio](./quick/260503-o5w-ki-m-tra-ngh-a-log-managepositiondecisio/) |
-| 260503-pae | Fix PIVOT_POINT SL pivot sorting TODO | 2026-05-03 | b3bd8f2 | Verified | [260503-pae-th-c-hi-n-fix-todo-services-aureus-signa](./quick/260503-pae-th-c-hi-n-fix-todo-services-aureus-signa/) |
-| 260503-sai | Fix Reasoning FK lifecycle and reasoning_text DB persistence | 2026-05-03 | 2a9d2e7 | Verified | [260503-sai-ph-n-ti-ch-chi-ti-t-nguy-n-nh-n-l-i-reas](./quick/260503-sai-ph-n-ti-ch-chi-ti-t-nguy-n-nh-n-l-i-reas/) |
-| 260503-sxx | Fix Reasoning FK-blocking insert with parent upsert | 2026-05-03 | f1177a0 | Verified | [260503-sxx-fix-aureus-reasoning-entries-fk-blocking](./quick/260503-sxx-fix-aureus-reasoning-entries-fk-blocking/) |
-| 260503-tiw | Fix remaining Reasoning parent trade placeholder enrichment | 2026-05-03 | 33c2b50 | Verified | [260503-tiw-fix-remaining-reasoning-parent-trade-pla](./quick/260503-tiw-fix-remaining-reasoning-parent-trade-pla/) |
-| 260503-ul1 | Fix TPO shape classifier rules | 2026-05-03 | e082e0b | Verified | [260503-ul1-s-a-classify-shape-cu-a-tpo-py-nh-n-d-ng](./quick/260503-ul1-s-a-classify-shape-cu-a-tpo-py-nh-n-d-ng/) |
-| 260503-w57 | Threshold TPO shape classifier and disable B shape | 2026-05-03 | 17b7ade | Verified | [260503-w57-update-classify-shape-ch-x-c-nh-n-shape-](./quick/260503-w57-update-classify-shape-ch-x-c-nh-n-shape-/) |
-| 260504-pyn | Remove active_signals from Reasoning Bank persistence | 2026-05-04 | 55a5196 | Verified | [260504-pyn-remove-active-signals-from-reasoning-tex](./quick/260504-pyn-remove-active-signals-from-reasoning-tex/) |
-| 260504-rhc | Fix Telegram close order pips and RR metrics | 2026-05-04 | 61271b2 | Verified | [260504-rhc-fix-telegram-order-closed-metrics-to-use](./quick/260504-rhc-fix-telegram-order-closed-metrics-to-use/) |
-| 260506-qy2 | Pivot SL time-order selection | 2026-05-06 | c1e2e72 | Verified | [260506-qy2-pivot-sl-time-order](./quick/260506-qy2-pivot-sl-time-order/) |
-| 260506-rkn | Pivot SL distance limits | 2026-05-06 | 5b6743c | Verified | [260506-rkn-pivot-sl-distance-limits](./quick/260506-rkn-pivot-sl-distance-limits/) |
-| 260506-u8k | Exit reason normalize | 2026-05-06 | 2e71631 | Verified | [260506-u8k-exit-reason-normalize](./quick/260506-u8k-exit-reason-normalize/) |
-| 260506-wft | Bảng aureus_trade_signal_snapshots chưa lưu đc thông tin session. Hãy bổ sung thêm, cột session đang là null | 2026-05-06 | aa48d43 | Verified | [260506-wft-ba-ng-aureus-trade-signal-snapshots-ch-a](./quick/260506-wft-ba-ng-aureus-trade-signal-snapshots-ch-a/) |
-| 260507-8i3 | Lưu thêm thông tin POC VAH VAL của D1 vào aureus_trade_signal_snapshots | 2026-05-06 | 59fcfe8 | Verified | [260507-8i3-persist-d1-tpo-snapshot](./quick/260507-8i3-persist-d1-tpo-snapshot/) |
-| 260507-q2n | So sánh 5 trade TREND_CONT_BULL ngày hôm nay xem các đk vào lệnh ở bảng journal snapshot rồi đưa ra đánh giá dựa trên các thông tin signal được lưu trong bảng đó rồi rút KN | 2026-05-07 | (pending commit) | Completed | [260507-q2n-trend-cont-bull-review](./quick/260507-q2n-trend-cont-bull-review/) |
-| 260507-qqh | Lưu thêm thông tin O H L C của D1 tại thời điểm vào lệnh vào aureus_trade_signal_snapshots | 2026-05-07 | (pending commit) | Verified | [260507-qqh-persist-d1-ohlc-snapshot](./quick/260507-qqh-persist-d1-ohlc-snapshot/) |
-| 260507-rrs | Kiểm tra xem tại sao dữ liệu POC VAL VAH của D1 chưa được lưu vào bảng snapshots. Dữ liệu đầu vào đã có hay chưa | 2026-05-07 | (pending commit) | Verified | [260507-rrs-d1-tpo-snapshot-check](./quick/260507-rrs-d1-tpo-snapshot-check/) |
-| 260507-s1s | Thực hiện fix lỗi theo như report đi | 2026-05-07 | (pending commit) | Verified | [260507-s1s-fix-d1-tpo-snapshot](./quick/260507-s1s-fix-d1-tpo-snapshot/) |
-| 260507-tau | Kiểm tra và fix pending order fill notification/update DB linkage | 2026-05-07 | c43467d | Verified | [260507-tau-pending-fill-update](./quick/260507-tau-pending-fill-update/) |
-| 260507-u2b | Phân tích nguyên nhân lỗi INVALID_STOPS retcode 10016 BTCUSD market SELL AureusProvider_v2 | 2026-05-07 | eb3ee9d | Verified | [260507-u2b-invalid-stops-analysis](./quick/260507-u2b-invalid-stops-analysis/) |
-| 260507-udw | Fix invalid stops by rejecting non-numeric SL TP before MT5 dispatch | 2026-05-07 | 5849e26 | Verified | [260507-udw-invalid-stops-guard](./quick/260507-udw-invalid-stops-guard/) |
-| 260507-vmj | Phân tích chi tiết lỗi ACK_LOST_DUPLICATE_RECOVERY trong trader dispatcher | 2026-05-07 | 664b18d | Verified | [260507-vmj-ack-lost-duplicate-analysis](./quick/260507-vmj-ack-lost-duplicate-analysis/) |
-| 260508-8tn | Tích hợp OpenAlgo vào AureusProvider_v2 và build theo Build_Rules | 2026-05-07 | d5118a7 | Verified | [260508-8tn-openalgo-provider-integration](./quick/260508-8tn-openalgo-provider-integration/) |
-| 260508-9ab | Chuyển OpenAlgo thành log-only sau native MT5 ORDER_OPENED | 2026-05-08 | b3ee6fe | Verified | [260508-9ab-openalgo-log-only](./quick/260508-9ab-openalgo-log-only/) |
-| 260508-9if | Gửi order đã mở sang OpenAlgo bằng PlaceOrder sau native MT5 ORDER_OPENED | 2026-05-08 | 5bff637 | Verified | [260508-9if-k-pha-i-log-b-ng-print-ma-g-i-l-nh-mt5-s](./quick/260508-9if-k-pha-i-log-b-ng-print-ma-g-i-l-nh-mt5-s/) |
-| 260509-02x | Update PIVOT_POINT SL guard chỉ áp dụng cho XAU USTEC BTC | 2026-05-08 | (pending commit) | Verified | [260509-02x-update-la-i-ph-n-x-ly-sl-v-i-povit-point](./quick/260509-02x-update-la-i-ph-n-x-ly-sl-v-i-povit-point/) |
-| 260512-9xw | Tạo 2 strategy clone từ TREND_CONT_BULL và TREND_CONT_BEAR. Vào lệnh limit tại FVG đầu tiên được tìm thấy tính từ điểm pivot point HH hoặc LL tương ứng. Khi không có FVG thì k vào lệnh. Tóm lại strategy là vào lệnh khi giá xảy ra CHOCH và phải tạo FVG | 2026-05-12 | 02b559f | Verified | [260512-9xw-ta-o-2-strategy-clone-t-trend-cont-bull-](./quick/260512-9xw-ta-o-2-strategy-clone-t-trend-cont-bull-/) |
-| 260512-ojj | Khi đặt lệnh limit thì id của lệnh limit là một số nhưng khi lệnh limit đó khớp thì id của nó sẽ là id khác. Phải có cơ chế mapping thì mới update thông tin vào bảng journal chính xác được. Cơ chế hiện tại như nào | 2026-05-12 | (report-only) | Verified | [260512-ojj-khi-t-l-nh-limit-th-id-c-a-l-nh-limit-l-](./quick/260512-ojj-khi-t-l-nh-limit-th-id-c-a-l-nh-limit-l-/) |
-| 260512-q15 | Thực hiện plan lưu trace_id/cmd_id cho MT5 pending limit order, persist mapping pending_order_id -> trace_id/cmd_id, gửi ORDER_FILLED có mapping, và backend journal fallback update bằng pending_order_id/cmd_id khi thiếu trace_id | 2026-05-12 | 5ccf0eb | Needs Review | [260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m](./quick/260512-q15-th-c-hi-n-plan-l-u-trace-id-cmd-id-cho-m/) |
-| 260513-8z8 | Phân tích lại mql5\AureusProvider_v2.mq5 xem tại sao khớp lệnh pending order rồi mà lại k gửi thông tin về cho gateway | 2026-05-12 | (report-only) | Verified | [260513-8z8-ph-n-ti-ch-la-i-mql5-aureusprovider-v2-m](./quick/260513-8z8-ph-n-ti-ch-la-i-mql5-aureusprovider-v2-m/) |
-| 260513-9x3 | Tự review lại plan pending order fill với vai trò chuyên gia tư vấn kiến trúc độc lập theo quy trình 4 bước: neutral listing, attribute mapping, contextual recommendation, adversarial mode; cập nhật tài liệu yêu cầu làm cơ sở thực thi và kiểm thử | 2026-05-13 | (report-only) | Verified | [260513-9x3-t-review-l-i-plan-pending-order-fill-v-i](./quick/260513-9x3-t-review-l-i-plan-pending-order-fill-v-i/) |
-| 260513-ccy | Thực hiện theo advisory plan 260513-9x3: thêm observability tối thiểu cho pending placement và pending fill gates trong AureusProvider_v2, giữ market path nguyên, phục vụ kiểm thử pending ORDER_FILLED | 2026-05-13 | cb42dee | Needs Review | [260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-](./quick/260513-ccy-th-c-hi-n-theo-advisory-plan-260513-9x3-/) |
-| 260513-s4k | Kiểm tra lại log aureus-gateway-dev và phân tích nguyên nhân Invalid JSON và fix | 2026-05-13 | 5897851 | Verified | [260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph](./quick/260513-s4k-ki-m-tra-l-i-log-aureus-gateway-dev-v-ph/) |
-| 260517-sf2 | Phân tích ProcessLegacyPositionsByType stale profitable single close behavior | 2026-05-17 | (pending commit) | Verified | [260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby](./quick/260517-sf2-ph-n-ti-ch-ha-m-processlegacypositionsby/) |
-| 260517-tne | Implement safe stale single handling trong ProcessLegacyPositionsByType theo report 260517-sf2. Dùng mặc định: net_profit >= InpBEProfitTarget thì HOLD/không close; 0 < net_profit < InpBEProfitTarget thì MovePositionsSL về breakeven nếu SL chưa bảo vệ, không close market; giữ logic âm hiện tại. Build/verify MQL5 theo mql5\Build_Rules.md | 2026-05-17 | 77b088b | Verified | [260517-tne-implement-safe-stale-single-handling-tro](./quick/260517-tne-implement-safe-stale-single-handling-tro/) |
-| 260518-91x | Lên plan tối ưu các phần cần thiết và thực hiện cho tôi. Tối ưu việc HOLD/move SL theo rule mới cho các strategy | 2026-05-17 | 27ad8ec | Verified | [260518-91x-breakout-sl-safety](./quick/260518-91x-breakout-sl-safety/) |
-| 260518-9yd | Tối ưu các tồn đọng cần thiết trong move SL thuộc ProcessPositionsByType: per-ticket no-downgrade guard trong MovePositionsSL, stop/freeze precheck nếu phù hợp, cost/breakeven safety nếu cần; giữ surgical, build MQL5 theo mql5\Build_Rules.md | 2026-05-18 | eb164e8 | Verified | [260518-9yd-move-sl-safety](./quick/260518-9yd-move-sl-safety/) |
-| 260519-w3p | Phân tích lại file mql5\AureusProvider_v2.mq5 và log của git và review xem đã sửa những gì ở file mql5\AureusProvider_v2.mq5 gây ra lỗi này rồi fix đi | 2026-05-19 | add3910 | Needs Review | [260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider](./quick/260519-w3p-ph-n-ti-ch-la-i-file-mql5-aureusprovider/) |
-| 260520-9kx | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-19 | 4fe9793 | Needs Review | [260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-9kx-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
-| 260520-wy4 | Phân tích lại log của git và review xem đã sửa những gì mà gây ra lỗi này rồi fix đi. Trước vẫn chạy bình thường nên cần phải xem lỗi là gì, không đoán bừa và fallback linh tinh | 2026-05-20 | 75a7ec6 | Needs Review | [260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x](./quick/260520-wy4-ph-n-ti-ch-la-i-log-cu-a-git-va-review-x/) |
-| 260521-u20 | Update bổ sung thêm các TPO của D0 D1 D2 D3 lần lượt là TPO của hôm nay, hôm qua và các ngày trước đó. Lưu thông tin TPO vào bảng trade snapshot giống như đang lưu hiện tại. | 2026-05-21 | 026290c | Verified | [260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-](./quick/260521-u20-update-b-sung-th-m-c-c-tpo-c-a-d0-d1-d2-/) |
-| 260521-wma | Update 2 strategy TREND_CONT_BULL và TREND_CONT_BEAR bổ sung context_filters POC/CISD | 2026-05-21 | 672794e | Verified | [260521-wma-update-2-strategy-trend-cont-bull-va-tre](./quick/260521-wma-update-2-strategy-trend-cont-bull-va-tre/) |
-| 260522-pso | Review TREND_CONT_BULL/TREND_CONT_BEAR no-order root cause after POC/CISD filter | 2026-05-22 | (report-only) | Needs Follow-up Fix | [260522-pso-review-la-i-logic-s-ly-trend-cont-bull-v](./quick/260522-pso-review-la-i-logic-s-ly-trend-cont-bull-v/) |
-| 260523-ua9 | Phân tich và tìm nguyên nhân k lưu data vào db và fix cho tôi | 2026-05-23 | 29b05f8 | Verified | [260523-ua9-ph-n-tich-va-ti-m-nguy-n-nh-n-k-l-u-data](./quick/260523-ua9-ph-n-tich-va-ti-m-nguy-n-nh-n-k-l-u-data/) |
-| 260526-8n0 | Hãy kiểm tra xem signal_snapshot truyền vào đã có đầy đủ thông tin TPO snapshot chưa. Tìm chỗ nào đã truyền đc tpo_d1 thì làm các chỗ khác tương tự. Xem đã lưu vào redis và lấy lên có đủ không. Phân tích và fixđi | 2026-05-25 | d9ca520 | Verified | [260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n](./quick/260526-8n0-ha-y-ki-m-tra-xem-signal-snapshot-truy-n/) |
-| 260528-qce | Phân tích và đưa giải tối ưu cách sử dụng ram trên Redis | 2026-05-28 | (pending commit) | Verified | [260528-qce-ph-n-t-ch-v-a-gi-i-t-i-u-c-ch-s-d-ng-ram](./quick/260528-qce-ph-n-t-ch-v-a-gi-i-t-i-u-c-ch-s-d-ng-ram/) |
-| 260531-n2h | Implement FZ_CONT_BULL/FZ_CONT_BEAR CHOCH→BOS→LIMIT logic | 2026-05-31 | 05fd2df | Verified | [260531-n2h-implement-logic-x-l-theo-nh-fz-cont-bear](./quick/260531-n2h-implement-logic-x-l-theo-nh-fz-cont-bear/) |
-| 260531-s85 | Implement unittest kiểm tra logic xử lý theo như FZ_CONT_BEAR và FZ_CONT_BULL đang định nghĩa trong file services\aureus-signal\engine\strategies\seed_strategies.py. Update db để có thể chạy đc 2 strategies này | 2026-05-31 | 8ec2431 | Verified | [260531-s85-fz-cont-tests-db-seed](./quick/260531-s85-fz-cont-tests-db-seed/) |
-| 260531-u10 | Review logic xử lý theo như FZ_CONT_BEAR và FZ_CONT_BULL đang định nghĩa trong file services\aureus-signal\engine\strategies\seed_strategies.py. Có thể sửa lại cho phù hợp hơn nếu logic không đúng | 2026-05-31 | e97c930 | Verified | [260531-u10-fz-cont-logic-review](./quick/260531-u10-fz-cont-logic-review/) |
-| 260602-0d8 | Kiểm tra xem các strategy liên quan tới TPO trong tháng vừa rồi có lệnh như thế nào và tỷ lệ winrate ra sao | 2026-06-02 | 4221d08 | Verified | [260602-0d8-tpo-strategy-performance-review](./quick/260602-0d8-tpo-strategy-performance-review/) |
-| 260602-pvk | Phân tích sâu tại sao TPO detectors không emit signals cho TPO strategies | 2026-06-02 | c2309d7 | Verified | [260602-pvk-tpo-detector-signal-debug](./quick/260602-pvk-tpo-detector-signal-debug/) |
-| 260602-qu7 | Phân tích sâu tại sao FZ_CONT_BEAR và FZ_CONT_BULL không emit signals | 2026-06-02 | ec4d8e9 | Verified | [260602-qu7-fz-cont-signal-debug](./quick/260602-qu7-fz-cont-signal-debug/) |
-| 260602-riq | Thực hiện implement bos_up/bos_down | 2026-06-02 | 9af8cb6 | Verified | [260602-riq-implement-bos-signals](./quick/260602-riq-implement-bos-signals/) |
+| # | Description | Date | Commit | Status |
+|---|-------------|------|--------|--------|
+*(Quick tasks preserved from v1.6 - see `.planning/quick/` for full history)*
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- v1.5 milestone (Phase 26-53) đã shipped 2026-04-21 và chuyển sang archived milestone.
-- v1.6 initialized với 4 phase mới: 54 (Strategy Scoring Framework), 55 (Evaluation Data Model & Pipeline), 56 (Multi-Dimensional Reporting Engine), 57 (Telegram Insight Delivery).
-- Milestone focus chuyển từ delivery/execution sang strategy evaluation intelligence (scoring + report + telegram insight).
-- Pending todos từ v1.5 vẫn giữ nguyên để review khi cần cross-phase carry-over.
-- Phase 58 added: Fix inactive trading strategies
-- Phase 55.1 added (URGENT): Restore evaluation pipeline - Re-create aureus_trade_evaluations table and INSERT paths
+- v1.6 milestone (Phase 54-58) shipped 2026-06-10 và chuyển sang archived milestone.
+- Deferred to v1.7: Phase 55.1 (Restore evaluation pipeline), Phase 56 (Reporting Engine), Phase 57 (Telegram Insight)
+- Milestone v1.7 initialized - awaiting requirements definition
+
+### Milestone v1.6 Summary
+
+**Shipped:** 2026-06-10
+**Completed phases:** Phase 54 (Scoring), Phase 55 (Evaluation Pipeline), Phase 58 (Strategy Fixes)
+**Deferred:** Phase 55.1, 56, 57
+
+**Key achievements:**
+- Strategy scoring framework với immutable versioning
+- Evaluation data model với journal-linked schema
+- TPO và FZ_CONT strategy pipeline fixes
 
 ### Pending Todos
 

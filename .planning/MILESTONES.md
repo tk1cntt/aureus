@@ -1,5 +1,31 @@
 # Milestones
 
+## v1.6 Strategy Evaluation & Insight Delivery (Shipped: 2026-06-10)
+
+**Phases completed:** 5 phases, 11 plans
+**Tasks completed:** Multiple tasks across phases
+
+**Key accomplishments:**
+
+1. Two-stage scoring core (gate + weighted-sum) với immutable version snapshot
+2. Evaluation data model với journal-linked schema và DB-level guardrails
+3. Signal snapshot hybrid storage (JSONB + typed columns) cho analytics
+4. 6 TPO strategies verified end-to-end qua detector → bridge → filter → sequence pipeline
+5. 2 FZ_CONT strategies fixed với choch→bos sequence matching và bos_up/bos_down emission
+
+**Deferred requirements (v1.7):**
+- Phase 55.1: Restore evaluation pipeline
+- Phase 56: Multi-Dimensional Reporting Engine  
+- Phase 57: Telegram Insight Delivery
+- SCOR-01→04, RPT-01→05, TEL-EVAL-01→04
+
+**Known gaps at close:**
+- Evaluation pipeline table/INSERT paths cần restore (Phase 55.1)
+- Reporting engine chưa bắt đầu
+- Telegram insight delivery chưa bắt đầu
+
+---
+
 ## v1.5 Signal Delivery & Trade Management (Shipped: 2026-04-21)
 
 **Phases completed:** 30 phases, 53 plans, 70 tasks

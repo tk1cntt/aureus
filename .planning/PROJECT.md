@@ -9,33 +9,30 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 - Leverage Nautilus execution infrastructure while minimizing custom execution complexity.
 - Preserve clear milestone auditability (plans, summaries, and known gaps).
 
-## Current Milestone: v1.6 Strategy Evaluation & Insight Delivery
+## Current Milestone: v1.7 (Planning)
 
-**Goal:** Nâng cấp hệ thống để đánh giá strategy đa tiêu chí (không chỉ lợi nhuận), lưu đầy đủ dữ liệu ngữ cảnh vào DB, xuất report nhiều chiều và gửi Telegram insight chính xác.
-
-**Target features:**
-- Xây scoring framework đánh giá strategy theo profit, signal quality, timing, market session và volatility regime.
-- Chấm điểm ở cả hai mức: per-trade và aggregate theo strategy/symbol/timeframe.
-- Chuẩn hóa schema + pipeline lưu evaluation criteria vào DB để truy vấn và thống kê.
-- Tạo report engine lọc/so sánh theo nhiều tiêu chí (strategy, symbol, timeframe, session, volatility).
-- Gửi Telegram summary/insight dựa trên dữ liệu đánh giá đã chuẩn hóa.
+**Goal:** Define next milestone scope with deferred requirements from v1.6
 
 ## Current State
-**Latest shipped:** v1.5 Signal Delivery & Trade Management (Shipped 2026-04-21)
-- Included Phase 26 to 53.
-- Milestone archived into `.planning/milestones/v1.5-ROADMAP.md` and `.planning/milestones/v1.5-REQUIREMENTS.md`.
-- Signal → order execution runtime đã được chuẩn hóa và đóng vòng verification artifacts.
-- Nyquist validation backfill cho v1.5 đã hoàn tất ở milestone closure.
+**Latest shipped:** v1.6 Strategy Evaluation & Insight Delivery (Shipped 2026-06-10)
+- Phase 54-58 completed
+- Milestone archived into `.planning/milestones/v1.6-ROADMAP.md` and `.planning/milestones/v1.6-REQUIREMENTS.md`
 
-**Current milestone status:** v1.6 Strategy Evaluation & Insight Delivery (Planning)
-- Scope active: Phase 54 → 57.
-- Trọng tâm: scoring framework đa tiêu chí, evaluation data model/pipeline, reporting engine, Telegram insight.
-- Chưa có phase nào của v1.6 được execute tại thời điểm cập nhật này.
+**Completed in v1.6:**
+- Strategy scoring framework (two-stage gate + weighted-sum)
+- Evaluation data model + pipeline (journal-linked schema)
+- TPO and FZ_CONT strategy fixes (8 strategies verified)
+
+**Deferred to v1.7:**
+- Phase 55.1: Restore evaluation pipeline
+- Phase 56: Multi-Dimensional Reporting Engine
+- Phase 57: Telegram Insight Delivery
 
 **Existing infra (live):**
 - `aureus-signal` — signal engine with provider abstraction, strategy evaluation, CircuitBreaker
 - `aureus-gateway` — TCP listener nhận market data từ MT5
 - `AureusProvider.mq5` — MT5 EA streaming market data (ticks + candles) qua TCP
+- `AureusProvider_v2.mq5` — MT5 EA với strategy-aware position management, DCA, OpenAlgo integration
 - `aureus-dashboard` — React + FastAPI web dashboard
 - `aureus-nautilus-node` — AureusMarketDataClient (Redis→Bar), AureusExecutionClient (orders→Nautilus)
 - `aureus-nautilus-bridge` — order routing + execution reconciliation
@@ -43,22 +40,21 @@ A planning control document for Aureus milestone evolution. It captures shipped 
 
 ## Requirements
 ### Validated
-- ✓ v1.3 requirement archive exists: `.planning/milestones/v1.3-REQUIREMENTS.md`
 - ✓ v1.4 requirement archive exists: `.planning/milestones/v1.4-REQUIREMENTS.md`
-- ✓ Define provider abstraction contract and maintain backward-compatible runtime fallback to Redis. *(v1.4)*
-- ✓ Implement TradingAgents adapter mapping/cache/error handling and test shadow-mode evaluation capability. *(v1.4)*
-- ✓ CircuitBreaker and telemetry offloading implementation *(v1.4)*
+- ✓ v1.5 requirement archive exists: `.planning/milestones/v1.5-REQUIREMENTS.md`
+- ✓ v1.6 requirement archive exists: `.planning/milestones/v1.6-REQUIREMENTS.md`
+- ✓ Strategy scoring framework with immutable versioning (v1.6 Phase 54)
+- ✓ Evaluation data model + signal snapshot hybrid storage (v1.6 Phase 55)
+- ✓ TPO and FZ_CONT strategy pipeline fixes (v1.6 Phase 58)
 
 ### Active
-- [ ] Build strategy scoring framework đa tiêu chí (SCOR-01→04).
-- [ ] Chuẩn hóa evaluation data model + pipeline persist/recompute (EVAL-01→04).
-- [ ] Xây report engine đa chiều cho per-trade + aggregate analytics (RPT-01→05).
-- [ ] Hoàn thiện Telegram insight delivery có context/traceability (TEL-EVAL-01→04).
-- [ ] Đạt acceptance bắt buộc của v1.6 (ACC-01→03).
+- [ ] Restore evaluation pipeline (Phase 55.1)
+- [ ] Multi-dimensional reporting engine (RPT-01→05)
+- [ ] Telegram insight delivery (TEL-EVAL-01→04)
 
 ### Out of Scope
 - Direct cutover to TradingAgents as production primary before shadow validation gates pass.
-- Expanding strategy logic or execution semantics unrelated to signal delivery and trade management.
+- Expanding strategy logic or execution semantics unrelated to evaluation/reporting.
 - Mobile app hoặc native notification ngoài Telegram.
 
 ## Archived Milestones
@@ -84,4 +80,4 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-_Last updated: 2026-04-21 after v1.6 milestone rebaseline_
+_Last updated: 2026-06-10 after v1.6 milestone closure_
