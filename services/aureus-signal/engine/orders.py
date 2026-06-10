@@ -662,6 +662,12 @@ class SimulatedTradeManager:
         # Accept both 'type' and 'mode' keys for backward compatibility
         sl_mode = sl_cfg.get('type', 'FIXED_PIPS')
 
+        # Aliases: SECOND_HIGH_LOW_PIVOT / SECOND_LOW_HIGH_PIVOT → PIVOT_POINT with pivot_index=2
+        if sl_mode in ('SECOND_HIGH_LOW_PIVOT', 'SECOND_LOW_HIGH_PIVOT'):
+            sl_cfg = dict(sl_cfg)
+            sl_cfg.setdefault('pivot_index', 2)
+            sl_mode = 'PIVOT_POINT'
+
         if sl_mode == 'FIXED_PIPS':
             # Priority: strategy config value > symbols.json sl > default 100
             raw_value = sl_cfg.get('value')
