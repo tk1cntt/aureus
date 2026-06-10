@@ -308,6 +308,10 @@ class StructureSignal(BaseSignal):
             points[pivot_idx]['is_bos'] = True
             points[pivot_idx]['bos_type'] = "Up" if is_bullish else "Down"
             points[pivot_idx]['breakout_t'] = breakout_t
+            if is_bullish:
+                points[pivot_idx]['bos_up'] = True
+            else:
+                points[pivot_idx]['bos_down'] = True
 
             tag = self.TAG_BOS_UP if is_bullish else self.TAG_BOS_DN
             symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
@@ -713,6 +717,10 @@ class StructureSignal(BaseSignal):
                     points[pivot_idx]['is_bos'] = True
                     points[pivot_idx]['bos_type'] = "Up" if is_bullish else "Down"
                     points[pivot_idx]['breakout_t'] = breakout_t
+                    if is_bullish:
+                        points[pivot_idx]['bos_up'] = True
+                    else:
+                        points[pivot_idx]['bos_down'] = True
 
                     tag = self.TAG_BOS_UP if is_bullish else self.TAG_BOS_DN
                     symbol = getattr(state_obj, 'symbol', 'UNKNOWN')
