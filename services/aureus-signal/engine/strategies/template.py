@@ -336,7 +336,21 @@ class TemplateStrategy(BaseStrategy):
                         from engine.signals.tpo_context import TPOContextBuilder
                         ctx = TPOContextBuilder().build(tpo_profile, close=close_val)
                         d1_bias = ctx.get("bias", {}).get("d1", "neutral")
-                        if allowed_bias and d1_bias not in allowed_bias:
+                        timeframes = ctx.get("timeframes") or {}
+
+                        # Fallback: if H1/M30 TPO data missing but D1 exists, use D1-only bias
+                        h1_ok = timeframes.get("H1") is not None
+                        m30_ok = timeframes.get("M30") is not None
+                        d1_ok = timeframes.get("D1") is not None
+
+                        if not h1_ok and not m30_ok and d1_ok and allowed_bias:
+                            # D1-only fallback: pass if D1 bias matches allowed_bias
+                            if d1_bias in allowed_bias:
+                                details.append(f"TPO context D1-only OK: bias={d1_bias} (H1/M30 unavailable)")
+                            else:
+                                failed.append(f"tpo_context:bias:{d1_bias}")
+                                details.append(f"TPO context D1-only: bias={d1_bias}, allowed={allowed_bias} (H1/M30 unavailable)")
+                        elif allowed_bias and d1_bias not in allowed_bias:
                             failed.append(f"tpo_context:bias:{d1_bias}")
                             details.append(f"TPO context: D1 bias={d1_bias}, allowed={allowed_bias}")
                         else:
