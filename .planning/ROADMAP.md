@@ -35,10 +35,12 @@
 **Plans:** 2 plans
 
 Plans:
+
 - [ ] 54-01-PLAN.md — Xây two-stage scoring core (gate + weighted-sum), score versioning immutable và breakdown contract có missing-data policy.
 - [ ] 54-02-PLAN.md — Wiring scoring vào strategy executor để tạo per-trade + aggregate output theo strategy/symbol/timeframe và khóa e2e verification.
 
 **Success Criteria:**
+
 1. Có công thức scoring đa tiêu chí rõ ràng (profit, signal quality, timing, volatility/session context).
 2. Có hỗ trợ trọng số theo version để tái lập kết quả.
 3. Tính được cả per-trade score và aggregate score.
@@ -55,6 +57,7 @@ Plans:
 > Mở rộng từ 3 lên 6 plans để tách rõ runtime-parity gate (EVAL-RUNTIME-01→04) và storage policy gate SIGNAL-SNAPSHOT-01, tránh false-positive completion khi chỉ pass unit/migration.
 
 Plans:
+
 - [x] 55-01-PLAN.md — Chốt evaluation schema journal-linked và guardrails DB-level (unique/FK/check) cho dữ liệu scoring.
 - [x] 55-02-PLAN.md — Wiring ingestion/compute/persist vào trigger ORDER_OPENED để ghi evaluation records đầy đủ và traceable.
 - [x] 55-03-PLAN.md — Xây backfill/recompute append-version theo score_version, giữ history và idempotent rerun.
@@ -63,6 +66,7 @@ Plans:
 - [x] 55-06-PLAN.md — Tối ưu signal snapshot hybrid storage (full raw JSONB + canonical typed hot columns + retention/archive) và DB E2E proof.
 
 **Success Criteria:**
+
 1. Schema DB chuẩn hóa cho evaluation records được áp dụng.
 2. Pipeline compute/persist tạo đầy đủ evaluation record theo từng trade.
 3. Có backfill/recompute theo score version, không mất lịch sử cũ.
@@ -70,12 +74,24 @@ Plans:
 
 ---
 
+### Phase 55.1: Restore evaluation pipeline: Re-create aureus_trade_evaluations table and INSERT paths (INSERTED)
+
+**Goal:** Khoi phuc aureus_trade_evaluations table va INSERT paths da bi xoa boi quick task 260425-duy. Phase 55 da verify thanh cong nhung table va code da bi revert.
+**Requirements**: EVAL-01, EVAL-02, EVAL-03, EVAL-04, EVAL-RUNTIME-01, EVAL-RUNTIME-02, EVAL-RUNTIME-03, EVAL-RUNTIME-04
+**Depends on:** Phase 55
+**Plans:** 1 plan
+
+Plans:
+
+- [ ] 55.1-01-PLAN.md — Khoi phuc bang evaluation, INSERT path trong journal.py, recompute script, integration tests, runtime evidence gate
+
 ## Phase 56: Multi-Dimensional Reporting Engine
 
 **Requirements:** RPT-01, RPT-02, RPT-03, RPT-04, RPT-05, ACC-03  
 **Goal:** Cung cấp report engine vừa drill-down per-trade vừa aggregate đa chiều để hỗ trợ quyết định.
 
 **Success Criteria:**
+
 1. Report per-trade hiển thị score breakdown + context đầy đủ.
 2. Report aggregate theo strategy/symbol/timeframe.
 3. Lọc được theo market session và volatility regime.
@@ -89,6 +105,7 @@ Plans:
 **Goal:** Gửi Telegram insight đánh giá chính xác và đủ ngữ cảnh dựa trên dữ liệu chuẩn hóa trong DB.
 
 **Success Criteria:**
+
 1. Telegram per-trade insight có score tổng + breakdown tiêu chí chính.
 2. Telegram aggregate insight theo strategy/symbol/timeframe hoạt động định kỳ.
 3. Insight có market session + volatility regime + quality/confidence flags.
@@ -102,16 +119,19 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
+
 - [ ] 58-01-PLAN.md — Verify 6 TPO strategies (TPO_VA_REJECTION_BULL/BEAR, TPO_VA_BREAKOUT_BULL/BEAR, TPO_TREND_PULLBACK_BULL/BEAR) through Stage A-D pipeline via unit/integration tests.
 - [ ] 58-02-PLAN.md — Verify FZ_CONT_BULL và FZ_CONT_BEAR strategies qua choch->bos sequence matching, bos_up/bos_down emission, và LIMIT entry type.
 
 **Success Criteria:**
+
 1. 6 TPO strategies: detector -> candidate -> bridge -> context filter -> sequence matching verified via tests.
 2. 2 FZ_CONT strategies: bos_up/bos_down emission -> transient -> sequence matching verified via tests.
 3. All existing tests pass (no regression).
 4. Evidence: signal tag appears in Redis event stream or sequence match occurs.
 
 **Pre-fixed Issues (NOT implementing again):**
+
 - 260602-pvk: `_maybe_emit_tpo_strategy_tags()` already maps tags to candle record events
 - 260602-pvk: `tpo_context` handler already added in template.py
 - 260602-riq: `bos_up`/`bos_down` already implemented in structure.py
