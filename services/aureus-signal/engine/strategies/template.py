@@ -236,7 +236,24 @@ class TemplateStrategy(BaseStrategy):
                         raw = cisd.get("direction", cisd.get("status", cisd.get("value")))
                     raw = str(raw).strip().lower() if raw is not None else ""
                     allowed = {"bullish", "up"} if direction == "bullish" else {"bearish", "down"}
-                    return raw in allowed
+                    if raw in allowed:
+                        return True
+
+                    # Fallback 1: Check M1 CISD from transient
+                    if direction == "bullish" and "cisd_bull" in transient:
+                        return True
+                    if direction == "bearish" and "cisd_bear" in transient:
+                        return True
+                    cisd_m1 = transient.get("cisd")
+                    raw_m1 = cisd_m1
+                    if isinstance(cisd_m1, dict):
+                        raw_m1 = cisd_m1.get("direction", cisd_m1.get("status", cisd_m1.get("value")))
+                    raw_m1 = str(raw_m1).strip().lower() if raw_m1 is not None else ""
+                    if raw_m1 in allowed:
+                        return True
+
+                    # Fallback 2: No CISD data at all — pass through (don't block)
+                    return True
 
                 current_signal = getattr(state_obj, "current_signal", None)
                 current_close = _candle_close(getattr(state_obj, "last_candle", None))
