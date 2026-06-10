@@ -4,7 +4,7 @@ milestone: v1.7
 milestone_name: Planning
 status: planning
 last_updated: "2026-06-10T12:26:25.803Z"
-last_activity: 2026-06-10 - Closed v1.6 milestone
+last_activity: 2026-06-10 - Quick task 260610-rut: Fixbug FZ_CONT, TREND_CONT, TPO strategies (SL/BOS/CISD/TPO pipeline)
 progress:
   total_phases: 0
   completed_phases: 0
