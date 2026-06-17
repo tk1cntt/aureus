@@ -32,9 +32,10 @@ Status: Awaiting requirements definition
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Status |
-|---|-------------|------|--------|--------|
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
 *(Quick tasks preserved from v1.6 - see `.planning/quick/` for full history)*
+| 260617-aya | Kiểm tra gateway hiện tại xem tại sao kết nối đến k gửi data qua đc. Giả lập gửi dữ liệu để phân tích và xử lý lỗi nếu có | 2026-06-17 | | Complete | [260617-aya-ki-m-tra-gateway-hi-n-t-i-xem-t-i-sao-k-](./quick/260617-aya-ki-m-tra-gateway-hi-n-t-i-xem-t-i-sao-k-/) |
 
 ## Accumulated Context
 
