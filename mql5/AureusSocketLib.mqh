@@ -25,6 +25,7 @@ private:
    int      m_sendTimeoutMs;     // Send timeout
    string   m_sendBuffer;       // Accumulated buffer for batch sends
    int      m_sendCount;        // Messages sent since connect
+   string   m_receiveBuffer;    // Buffer for incomplete messages (TCP fragmentation)
 
    bool     DoConnect();
    void     DoDisconnect();
@@ -45,6 +46,7 @@ public:
       m_sendTimeoutMs     = 1000;
       m_sendBuffer        = "";
       m_sendCount         = 0;
+      m_receiveBuffer     = "";
    }
 
    // Destructor
@@ -138,6 +140,7 @@ bool AureusSocket::Connect()
    {
       m_connected = true;
       m_sendCount = 0;
+      m_receiveBuffer = "";  // Clear stale receive buffer on reconnect
 
       // If we were disconnected, log the gap duration
       if(m_disconnectedSince > 0)
@@ -296,35 +299,72 @@ int AureusSocket::CheckReadable()
 }
 
 //+------------------------------------------------------------------+
-//| Receive data from socket (Read exact pending size)                |
+//| Receive data from socket with message buffering                    |
+//| Handles TCP fragmentation and connection errors gracefully         |
 //+------------------------------------------------------------------+
 string AureusSocket::Receive()
 {
-   int pending = CheckReadable();
-   if(pending <= 0) return "";
-   
-   uchar data[];
-   ArrayResize(data, pending); 
-   
-   // Read exactly what is available
-   int received = ::SocketRead(m_socket, data, pending, 500); 
-   
-   if(received <= 0)
-   {
-      int err = GetLastError();
-      if(err != 0 && err != 5270 && err != 5271) { 
-         PrintFormat("[AureusSocket] Receive error: %d (requested: %d)", err, pending);
-         m_connected = false;
-         if(m_disconnectedSince == 0) m_disconnectedSince = TimeCurrent();
-      }
+   if(!m_connected || m_socket == INVALID_HANDLE)
       return "";
+
+   // Try to read available data (use larger buffer for fragmented messages)
+   int pending = CheckReadable();
+   if(pending > 0)
+   {
+      uchar data[];
+      int bufSize = MathMax(pending, 4096);  // Read up to 4KB to handle fragmentation
+      ArrayResize(data, bufSize);
+
+      int received = ::SocketRead(m_socket, data, bufSize, 1000);
+
+      if(received > 0)
+      {
+         string chunk = CharArrayToString(data, 0, received, CP_UTF8);
+         m_receiveBuffer += chunk;
+      }
+      else if(received <= 0)
+      {
+         int err = GetLastError();
+         // 5270 = timeout, 5271 = no data, 5273 = EOF/connection closed
+         if(err == 5273)
+         {
+            // Remote side closed connection
+            PrintFormat("[AureusSocket] Connection closed by remote (EOF)");
+            m_connected = false;
+            if(m_disconnectedSince == 0)
+               m_disconnectedSince = TimeCurrent();
+            m_receiveBuffer = "";  // Clear buffer on disconnect
+            return "";
+         }
+         else if(err != 0 && err != 5270 && err != 5271)
+         {
+            PrintFormat("[AureusSocket] Receive error: %d (requested: %d)", err, pending);
+            m_connected = false;
+            if(m_disconnectedSince == 0)
+               m_disconnectedSince = TimeCurrent();
+            m_receiveBuffer = "";
+            return "";
+         }
+         // For 5270/5271, just return accumulated buffer if any
+      }
    }
-   
-   string result = CharArrayToString(data, 0, received, CP_UTF8);
-   PrintFormat("[AureusSocket] RX (%d bytes): %s", received, result);
-   
+
+   // Return accumulated buffer (may contain complete messages from previous reads)
+   if(StringLen(m_receiveBuffer) == 0)
+      return "";
+
+   string result = m_receiveBuffer;
+   m_receiveBuffer = "";
+
+   // Log received data
+   int resultLen = StringLen(result);
+   if(resultLen <= 200)
+      PrintFormat("[AureusSocket] RX (%d bytes): %s", resultLen, result);
+   else
+      PrintFormat("[AureusSocket] RX (%d bytes): %s...", resultLen, StringSubstr(result, 0, 200));
+
    if(StringFind(result, "REQUEST_BACKFILL") >= 0)
       PrintFormat("[AureusSocket] Found COMMAND in packet: %s", result);
-      
+
    return result;
 }
